@@ -50,6 +50,8 @@ class Prediction(Base):
     eia_forecast = Column(JSON)
     shap_values = Column(JSON)
     decision = Column(JSON)
+    actual_return = Column(Float, nullable=True)
+    outcome_correct = Column(Boolean, nullable=True)
     model_version_id = Column(Integer, ForeignKey("model_versions.id"), nullable=True)
     feature_snapshot_id = Column(Integer, ForeignKey("feature_snapshots.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

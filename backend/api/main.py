@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from api.routes import models, reports, training, users
 from api.routes.health import router as health_router
 from core.config_paths import CFTC_RAW_DIR, DATA_DIR, FEATURES_DIR, LOGS_DIR, MODELS_DIR, RAW_DIR
 from core.logging import get_logger
@@ -26,8 +27,12 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="oil-signalyst", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="oil-signalyst", version="0.2.1", lifespan=lifespan)
     app.include_router(health_router)
+    app.include_router(reports.router)
+    app.include_router(models.router)
+    app.include_router(training.router)
+    app.include_router(users.router)
     return app
 
 
