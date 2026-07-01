@@ -13,6 +13,7 @@ from core.models.model_registry import ModelRegistry
 from core.models.regime import predict_regime
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
+from core.postprocess.drift_monitor import compute_and_store_psi
 from core.postprocess.outcome_backfill import backfill_outcomes
 from core.postprocess.shap_explainer import explain_prediction
 from db.crud import get_feature_snapshot_by_date, get_prediction_by_date
@@ -51,6 +52,9 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
                 text("UPDATE system_logs SET status='success', duration_ms=:d WHERE id=:id"),
                 {"d": duration_ms, "id": log_id},
             )
+
+        if snapshot_id is not None:
+            await compute_and_store_psi(snapshot_id)
 
         await _ensure_prediction(
             target_date,
