@@ -1,8 +1,9 @@
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error
-from sklearn.pipeline import Pipeline
+from tabpfn_client import TabPFNRegressor
+
+from core.models.common import as_named_row
+from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
 
 def direction_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -10,20 +11,8 @@ def direction_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def build_eia_model(train_x, train_y, val_x, val_y):
-    model = Pipeline(
-        [
-            ("imputer", SimpleImputer(strategy="median")),
-            (
-                "model",
-                RandomForestRegressor(
-                    n_estimators=300,
-                    max_depth=6,
-                    min_samples_leaf=10,
-                    random_state=42,
-                ),
-            ),
-        ]
-    )
+    ensure_tabpfn_authenticated()
+    model = TabPFNRegressor()
     model.fit(train_x, train_y)
     train_pred = model.predict(train_x)
     val_pred = model.predict(val_x)
@@ -44,8 +33,10 @@ def build_eia_model(train_x, train_y, val_x, val_y):
 
 
 def predict_eia(artifact: dict, features, recent_inventory=None) -> dict:
+    ensure_tabpfn_authenticated()
     model = artifact["model"]
-    point = float(model.predict(features.reshape(1, -1))[0])
+    x = as_named_row(features, artifact["feature_list"])
+    point = float(model.predict(x)[0])
     consensus = 0.0
     if recent_inventory is not None and len(recent_inventory.dropna()) >= 5:
         consensus = float(recent_inventory.dropna().diff().tail(4).mean())

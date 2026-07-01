@@ -161,7 +161,7 @@ async def _ensure_prediction(
         str(target_date),
     )
     eia_forecast = predict_eia(eia_artifact, vector, recent_inventory)
-    return_dist = predict_returns(returns_artifact, vector)
+    return_dist = predict_returns(returns_artifact, vector, regime_probs)
     recent_wti = registry.fetch("wti", str(target_date - timedelta(days=7)), str(target_date))
     current_price = float(recent_wti.dropna().iloc[-1])
     decision = generate_decision(regime_probs, return_dist, current_price)

@@ -12,7 +12,7 @@ from core.logging import get_logger
 from core.models.eia import build_eia_model
 from core.models.labels import build_eia_labels, build_regime_labels, build_return_bucket_labels
 from core.models.model_registry import ModelRegistry
-from core.models.regime import build_regime_model
+from core.models.regime import build_regime_model, predict_regime_batch
 from core.models.returns import build_returns_model
 from db.database import get_db
 from db.models import ModelVersion
@@ -92,9 +92,15 @@ async def run_full_training(triggered_by_user_id: int | None = None) -> dict:
     }
 
     results = {}
-    for model_type, builder in builders.items():
+    regime_model = None
+    for model_type in ("regime", "eia", "returns"):
+        builder = builders[model_type]
         x_train, y_train = _align(train_x, labels[model_type][0])
         x_val, y_val = _align(val_x, labels[model_type][1])
+
+        if model_type == "returns":
+            x_train = pd.concat([x_train, predict_regime_batch(regime_model, x_train)], axis=1)
+            x_val = pd.concat([x_val, predict_regime_batch(regime_model, x_val)], axis=1)
 
         with mlflow.start_run(run_name=f"{model_type}_{version}") as run:
             mlflow.log_params(
@@ -109,6 +115,8 @@ async def run_full_training(triggered_by_user_id: int | None = None) -> dict:
                 }
             )
             model, metrics_train, metrics_val = builder(x_train, y_train, x_val, y_val)
+            if model_type == "regime":
+                regime_model = model
             _log_metrics_flat(metrics_train, prefix="train.")
             _log_metrics_flat(metrics_val, prefix="val.")
             mlflow.log_dict(metrics_train, "metrics_train.json")

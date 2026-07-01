@@ -1,11 +1,18 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import api.routes.training as training_routes
 from api.main import app
 
 
 @pytest.mark.asyncio
-async def test_training_start_returns_202():
+async def test_training_start_returns_202(monkeypatch):
+    async def fake_run_full_training(triggered_by_user_id=None):
+        del triggered_by_user_id
+        return {}
+
+    monkeypatch.setattr(training_routes, "run_full_training", fake_run_full_training)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/train/start", headers={"X-User-Id": "1"})
     assert response.status_code in (202, 404)
