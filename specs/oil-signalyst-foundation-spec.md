@@ -1,6 +1,6 @@
 # oil-signalyst — Foundation Phase Spec
 
-**Version:** 0.5 — FINAL  
+**Version:** 0.6 — FINAL
 **Phase:** 1 — Foundation  
 **Last updated:** 2026-07-01  
 **Changelog:**  
@@ -8,6 +8,7 @@
 - v0.3: Bug fixes (missing import, health date cast, depends_on condition, session logic); added crud.py, alembic.ini, gitkeep files; removed duplicate checklist; fixed config path resolution  
 - v0.4: Added `users` table; `DataFetchCache`; `data/models/` directory; `api/dependencies.py`; fixed `spec_net_pct` window param; added `core/cache.py`  
 - v0.5 FINAL: Phase 2–4 forward compatibility — added `feature_snapshot_id` FK to Prediction; added `user_id` FK to SystemLog; fixed `asyncio.get_event_loop()` deprecation in runner.py; added Parquet write in jobs.py; added `FEATURES_DIR` / `MODELS_DIR` to config_paths.py; fixed `return_dist` key naming (pure underscores)
+- v0.6 FINAL: Fixed async Alembic setup; normalized repo-root paths; replaced Docker curl healthcheck; fixed weekly feature window units; clarified integration tests require API keys; corrected minor consistency issues
 
 ---
 
@@ -188,7 +189,8 @@ FRED_API_KEY=your_fred_key_here
 ANTHROPIC_API_KEY=your_anthropic_key_here
 
 # Database
-DB_URL=sqlite+aiosqlite:///./data/oilmarket.db
+# Optional. If omitted, the app uses data/oilmarket.db under the resolved repo/app root.
+# DB_URL=sqlite+aiosqlite:////absolute/path/to/oilmarket.db
 
 # Environment
 ENV=local                        # local | staging | production
@@ -204,7 +206,7 @@ PIPELINE_CRON_MINUTE=0
 
 ```python
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from core.config_paths import DEFAULT_DB_URL, ENV_FILE
 
 class Settings(BaseSettings):
     # API keys
@@ -213,7 +215,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""        # Not needed in Phase 1
 
     # Database
-    db_url: str = "sqlite+aiosqlite:///./data/oilmarket.db"
+    db_url: str = DEFAULT_DB_URL
 
     # Environment
     env: str = "local"
@@ -225,7 +227,7 @@ class Settings(BaseSettings):
     pipeline_cron_minute: int = 0
 
     class Config:
-        env_file = ".env"
+        env_file = ENV_FILE
         env_file_encoding = "utf-8"
 
 # Singleton
@@ -276,7 +278,7 @@ services:
       - .env
     command: uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -319,7 +321,7 @@ services:
 
 ### 6.1 ORM models (`db/models.py`)
 
-Five tables. All use `Integer` primary keys for SQLite compatibility (UUID would require additional handling).
+Six tables. All use `Integer` primary keys for SQLite compatibility (UUID would require additional handling).
 
 ```python
 from sqlalchemy import (
@@ -359,7 +361,7 @@ class User(Base):
     alert_slack_channel      = Column(String(100))
 
     # Instrument preferences
-    instruments              = Column(JSON, default=["CL=F"])
+    instruments              = Column(JSON, default=lambda: ["CL=F"])
     horizon_days             = Column(Integer, default=20)
     exposure_barrels         = Column(Integer, default=100000)
 
@@ -490,12 +492,27 @@ class SystemLog(Base):
 
 ```python
 # alembic/env.py — key section
+from asyncio import run
 from db.models import Base
 from core.config import settings
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config.set_main_option("sqlalchemy.url", settings.db_url)
 target_metadata = Base.metadata
+
+def run_migrations_online() -> None:
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+    run(run_async_migrations(connectable))
 ```
+
+Use Alembic's async migration pattern because `settings.db_url` uses the
+`sqlite+aiosqlite` async driver. Do not pass an async URL to the default sync
+Alembic template.
 
 ```bash
 # First migration (run once after writing models)
@@ -821,12 +838,11 @@ import io
 import zipfile
 import requests
 import pandas as pd
-from pathlib import Path
 from tenacity import retry, stop_after_attempt, wait_exponential
+from core.config_paths import CFTC_RAW_DIR
 from .base import BaseSource
 
 CFTC_URL = "https://www.cftc.gov/files/dea/history/fut_disagg_txt_{year}.zip"
-CACHE_DIR = Path("data/raw/cftc")
 
 # Columns we care about from the disaggregated report
 CFTC_COLUMNS = {
@@ -840,7 +856,7 @@ CFTC_COLUMNS = {
 
 class CFTCSource(BaseSource):
     def __init__(self):
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        CFTC_RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     def fetch(self, cfg: dict, start: str, end: str) -> pd.Series:
         start_year = pd.to_datetime(start).year
@@ -861,7 +877,7 @@ class CFTCSource(BaseSource):
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=4, max=60))
     def _fetch_year(self, year: int) -> pd.DataFrame:
-        cache_path = CACHE_DIR / f"fut_disagg_{year}.parquet"
+        cache_path = CFTC_RAW_DIR / f"fut_disagg_{year}.parquet"
 
         # Return cached file if it exists and year is complete
         if cache_path.exists() and year < pd.Timestamp.now().year:
@@ -1009,8 +1025,9 @@ features:
 import yaml
 import hashlib
 import pandas as pd
-import numpy as np
+from pathlib import Path
 from core.data.registry import DataRegistry
+from core.config_paths import FEATURES_YAML
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -1018,7 +1035,7 @@ logger = get_logger(__name__)
 class FeatureEngine:
     def __init__(
         self,
-        feature_config: str = "config/features.yaml",
+        feature_config: str | Path = FEATURES_YAML,
         registry: DataRegistry | None = None,
     ):
         with open(feature_config) as f:
@@ -1053,7 +1070,7 @@ class FeatureEngine:
             return raw[feat["source"]]
 
         elif t == "pct_change":
-            return raw[feat["source"]].pct_change(feat["window"])
+            return raw[feat["source"]].pct_change(self._window_days(feat, feat["source"]))
 
         elif t == "rolling_std":
             s = raw[feat["source"]].pct_change().rolling(feat["window"]).std()
@@ -1082,14 +1099,15 @@ class FeatureEngine:
             total  = (long_ + short_).replace(0, float("nan"))
             ratio  = net / total
             window = feat.get("window", 104)   # configurable, default 104 weeks
-            return ratio.rolling(window).rank(pct=True)
+            window_days = self._window_days(feat, feat["source_a"])
+            return ratio.rolling(window_days).rank(pct=True)
 
         elif t == "net_position_chg":
             long_  = raw[feat["source_a"]]
             short_ = raw[feat["source_b"]]
             net    = long_ - short_
             window = feat.get("window", 1)     # configurable, default 1 week
-            return net.diff(window)
+            return net.diff(self._window_days(feat, feat["source_a"]))
 
         elif t == "ratio_diff":
             return raw[feat["source_a"]] - raw[feat["source_b"]]
@@ -1101,6 +1119,18 @@ class FeatureEngine:
     def _hash_config(path: str) -> str:
         with open(path) as f:
             return hashlib.md5(f.read().encode()).hexdigest()[:8]
+
+    def _window_days(self, feat: dict, source_name: str) -> int:
+        """
+        Convert YAML window units to daily-index steps.
+        Weekly source windows are specified in weeks because those features are
+        reasoned about at release cadence, then represented on a daily index.
+        """
+        window = feat.get("window", 1)
+        source_cfg = self.registry.config.get(source_name, {})
+        if source_cfg.get("freq") == "W":
+            return window * 7
+        return window
 ```
 
 ---
@@ -1276,9 +1306,8 @@ if __name__ == "__main__":
 ### 10.2 Daily pipeline job (`scheduler/jobs.py`)
 
 ```python
-import asyncio
 from datetime import date, datetime
-from pathlib import Path
+from datetime import timedelta
 from sqlalchemy import text
 import pandas as pd
 from db.database import get_db
@@ -1324,7 +1353,7 @@ async def run_daily_pipeline(target_date: date | None = None):
     try:
         # ── Fetch data (last 2 years for rolling feature windows) ──
         end   = str(target_date)
-        start = str(target_date.replace(year=target_date.year - 2))
+        start = str(target_date - timedelta(days=730))
 
         registry   = DataRegistry()
         engine     = FeatureEngine(registry=registry)
@@ -1595,13 +1624,20 @@ All config file paths use `pathlib` relative to the repo root, so the code works
 from pathlib import Path
 
 # Works from any working directory:
-# - Docker: WORKDIR=/app, config at /app/config (mounted volume)
-# - Local:  cwd=backend/, config at ../config/ resolved to repo root
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+# - Docker: backend package is copied to /app, config is mounted at /app/config
+# - Local:  package lives at repo/backend, config is at repo/config
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_LOCAL_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = _BACKEND_ROOT if (_BACKEND_ROOT / "config").exists() else _LOCAL_REPO_ROOT
+
 CONFIG_DIR  = _REPO_ROOT / "config"
 DATA_DIR    = _REPO_ROOT / "data"
+RAW_DIR      = DATA_DIR / "raw"
+CFTC_RAW_DIR = RAW_DIR / "cftc"
 FEATURES_DIR = DATA_DIR / "features"
 MODELS_DIR   = DATA_DIR / "models"
+ENV_FILE     = _REPO_ROOT / ".env"
+DEFAULT_DB_URL = f"sqlite+aiosqlite:///{DATA_DIR / 'oilmarket.db'}"
 
 DATA_SOURCES_YAML = CONFIG_DIR / "data_sources.yaml"
 FEATURES_YAML     = CONFIG_DIR / "features.yaml"
@@ -1696,7 +1732,7 @@ def get_logger(name: str) -> logging.Logger:
 
 ---
 
-## 12. Exception Hierarchy (`core/exceptions.py`)
+## 13. Exception Hierarchy (`core/exceptions.py`)
 
 ```python
 class OilSignalystError(Exception):
@@ -1724,7 +1760,7 @@ class PipelineError(OilSignalystError):
 
 ---
 
-## 13. Tests
+## 14. Tests
 
 ### Scope for Phase 1
 
@@ -1751,6 +1787,10 @@ def test_registry_fetch_all_returns_dataframe():
     assert len(df) > 0
 ```
 
+These are real integration tests. They require network access plus valid
+`EIA_API_KEY` and `FRED_API_KEY` values in `.env`; they are intentionally not
+mocked in Phase 1.
+
 ```python
 # tests/test_features.py
 
@@ -1762,7 +1802,8 @@ def test_feature_engine_no_future_leakage():
     """
     from features.engine import FeatureEngine
     engine = FeatureEngine()
-    df = engine.build("2024-01-01", "2024-06-30")
+    df = engine.build("2023-01-01", "2024-06-30")
+    df = df["2024-01-01":"2024-06-30"]
     assert "crude_inv_dev" in df.columns
     assert df["crude_inv_dev"].notna().mean() > 0.8
 
@@ -1770,7 +1811,9 @@ def test_feature_engine_returns_no_nan_rows():
     """Dropped NaN rows: no fully-empty rows in output."""
     from features.engine import FeatureEngine
     engine = FeatureEngine()
-    df = engine.build("2024-01-01", "2024-06-30")
+    df = engine.build("2023-01-01", "2024-06-30")
+    df = df["2024-01-01":"2024-06-30"]
+    assert len(df) > 0
     assert df.isnull().all(axis=1).sum() == 0
 ```
 
@@ -1797,12 +1840,10 @@ async def test_health_includes_database_check():
 
 ---
 
-## 14. `.gitignore`
+## 15. `.gitignore`
 
 ```
 .env
-data/
-logs/
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -1811,6 +1852,24 @@ backend/.venv/
 *.db
 *.joblib
 *.parquet
+
+# Runtime directories: ignore generated contents, keep placeholders
+data/*
+!data/.gitkeep
+!data/raw/
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/cftc/
+data/raw/cftc/*
+!data/raw/cftc/.gitkeep
+!data/features/
+data/features/*
+!data/features/.gitkeep
+!data/models/
+data/models/*
+!data/models/.gitkeep
+logs/*
+!logs/.gitkeep
 ```
 
 ---
@@ -1820,7 +1879,7 @@ backend/.venv/
 | # | Question / Issue | Decision |
 |---|-----------------|----------|
 | Q1 | M1–M6 futures curve data | Free proxies: WTI z-score (252d) + Brent-WTI spread. Real contract data deferred to Phase 2 if budget allows. |
-| Q2 | Regime labels | Historical labels provided (2010–2026, 16 transition points). Phase 2 validates with HMM. |
+| Q2 | Regime labels | Historical labels provided (2010–2026, 16 transition points). Phase 2 validates with GMM alignment. |
 | Q3 | CFTC COT adapter | Annual ZIP download, local Parquet cache, no API key required. |
 | Q4 | EIA holiday handling | Dynamic detection via `workalendar`: Wednesday release, shifts to Thursday on US federal holidays. |
 | Q5 | User config storage | `user_config.yaml` replaced by `users` database table. Config is CRUD'd via API (`GET/PUT /api/users/me`). Single-user local mode defaults to `X-User-Id: 1`. |
@@ -1872,9 +1931,9 @@ def build_regime_series(start: str, end: str) -> pd.Series:
     return transitions.reindex(idx, method="ffill")
 ```
 
-**Validation approach for Phase 2:** Run a 2-state and 4-state Gaussian HMM on
-`[wti_ret, rvol_20d, brent_wti_spread]`. Compare discovered hidden states against
-manual labels. Adjust transition boundaries where HMM disagrees by more than 2 weeks.
+**Validation approach for Phase 2:** Run a 4-component Gaussian Mixture Model on
+`[ret_20d, rvol_20d, brent_wti_spread]`. Compare discovered clusters against
+manual labels. Review GMM features or transition boundaries if agreement is below 70%.
 
 ---
 
