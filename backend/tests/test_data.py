@@ -1,6 +1,25 @@
 import pytest
 
 
+def test_eia_weekly_values_start_on_release_date():
+    import pandas as pd
+
+    from core.data.registry import DataRegistry
+
+    registry = DataRegistry.__new__(DataRegistry)
+    series = pd.Series(
+        [100.0, 110.0],
+        index=pd.to_datetime(["2024-06-07", "2024-06-14"]),
+    )
+
+    aligned = registry._align(series, {"type": "eia", "freq": "W", "lag_days": 0})
+
+    assert aligned.loc["2024-06-12"] == 100.0
+    assert aligned.loc["2024-06-14"] == 100.0
+    assert aligned.loc["2024-06-18"] == 100.0
+    assert aligned.loc["2024-06-20"] == 110.0
+
+
 def _require_api_keys() -> None:
     from core.config import settings
 

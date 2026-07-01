@@ -37,7 +37,7 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
 
     try:
         FEATURES_DIR.mkdir(parents=True, exist_ok=True)
-        end = str(target_date)
+        end = str(target_date + timedelta(days=1))
         start = str(target_date - timedelta(days=730))
 
         registry = DataRegistry()

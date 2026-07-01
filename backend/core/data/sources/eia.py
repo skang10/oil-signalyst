@@ -3,13 +3,13 @@ from datetime import date, timedelta
 import pandas as pd
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
-from workalendar.usa.federal import UnitedStates
+from workalendar.usa import FederalReserveSystem
 
 from core.config import settings
 from core.data.sources.base import BaseSource
 
 EIA_BASE = "https://api.eia.gov/v2/seriesid"
-_US_CAL = UnitedStates()
+_US_CAL = FederalReserveSystem()
 
 
 def get_eia_release_date(reference_date: date) -> date:

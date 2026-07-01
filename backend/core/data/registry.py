@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -54,21 +55,31 @@ class DataRegistry:
         return pd.DataFrame(frames)
 
     def _align(self, series: pd.Series, cfg: dict) -> pd.Series:
+        if cfg.get("freq") == "W" and cfg.get("type") == "eia":
+            return self._align_eia(series, cfg)
+
         daily = series.resample("D").last().ffill()
 
         lag = cfg.get("lag_days", 0)
         if lag > 0:
             daily = daily.shift(lag)
 
-        if cfg.get("freq") == "W" and cfg.get("type") == "eia":
-            availability = pd.Series(daily.index, index=daily.index).map(
-                lambda ts: ts.date() >= get_eia_release_date(ts.date())
-            )
-            daily.loc[~availability] = None
-            daily = daily.ffill()
-        elif cfg.get("freq") == "W":
+        if cfg.get("freq") == "W":
             release_day = cfg.get("release_day", 2)
             daily.loc[daily.index.dayofweek < release_day] = None
             daily = daily.ffill()
 
+        return daily
+
+    def _align_eia(self, series: pd.Series, cfg: dict) -> pd.Series:
+        released = series.copy()
+        released.index = pd.to_datetime(
+            [get_eia_release_date(period.date() + timedelta(days=6)) for period in released.index]
+        ).astype("datetime64[ns]")
+        released = released.sort_index()
+
+        daily = released.resample("D").last().ffill()
+        lag = cfg.get("lag_days", 0)
+        if lag > 0:
+            daily = daily.shift(lag)
         return daily
