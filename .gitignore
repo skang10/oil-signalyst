@@ -23,5 +23,8 @@ data/features/*
 !data/models/
 data/models/*
 !data/models/.gitkeep
+!data/mlruns/
+data/mlruns/*
+!data/mlruns/.gitkeep
 logs/*
 !logs/.gitkeep

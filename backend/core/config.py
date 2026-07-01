@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     eia_api_key: str = ""
     fred_api_key: str = ""
     anthropic_api_key: str = ""
+    tabpfn_api_key: str = ""
     db_url: str = DEFAULT_DB_URL
     env: str = "local"
     log_level: str = "INFO"

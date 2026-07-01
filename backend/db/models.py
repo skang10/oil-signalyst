@@ -84,6 +84,7 @@ class ModelVersion(Base):
     feature_list = Column(JSON)
     is_active = Column(Boolean, default=False, nullable=False)
     deployed_at = Column(DateTime)
+    mlflow_run_id = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     predictions = relationship("Prediction", back_populates="model_version")

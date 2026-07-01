@@ -10,6 +10,7 @@ RAW_DIR = DATA_DIR / "raw"
 CFTC_RAW_DIR = RAW_DIR / "cftc"
 FEATURES_DIR = DATA_DIR / "features"
 MODELS_DIR = DATA_DIR / "models"
+MLRUNS_DIR = DATA_DIR / "mlruns"
 LOGS_DIR = _REPO_ROOT / "logs"
 ENV_FILE = _REPO_ROOT / ".env"
 

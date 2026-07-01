@@ -3,7 +3,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
+from core.logging import get_logger
 from core.models.common import classifier_metrics
+
+logger = get_logger(__name__)
 
 REGIME_CLASSES = ["R1", "R2", "R3", "R4"]
 
@@ -20,6 +23,8 @@ def decode_regime_probs(classes: np.ndarray, probs: np.ndarray) -> dict:
 
 
 def build_regime_model(train_x, train_y, val_x, val_y):
+    from core.models.regime_validation import validate_regime_labels
+
     model = Pipeline(
         [
             ("imputer", SimpleImputer(strategy="median")),
@@ -43,6 +48,13 @@ def build_regime_model(train_x, train_y, val_x, val_y):
     metrics_train["class_counts"] = {
         str(k): int(v) for k, v in train_y.value_counts().sort_index().items()
     }
+    gmm_validation = validate_regime_labels(train_x, train_y, val_x, val_y)
+    metrics_train["gmm_validation"] = gmm_validation
+    if gmm_validation.get("review_trigger"):
+        logger.warning(
+            "GMM regime label agreement below review threshold",
+            extra={"agreement_val": gmm_validation.get("agreement_val")},
+        )
     return model, metrics_train, metrics_val
 
 
