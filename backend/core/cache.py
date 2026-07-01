@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 
@@ -11,7 +11,7 @@ class DataFetchCache:
         entry = self._store.get(key)
         if entry is None:
             return None
-        if datetime.utcnow() > entry["expires"]:
+        if datetime.now(UTC) > entry["expires"]:
             del self._store[key]
             return None
         return entry["value"]
@@ -19,7 +19,7 @@ class DataFetchCache:
     def set(self, key: str, value: Any) -> None:
         self._store[key] = {
             "value": value,
-            "expires": datetime.utcnow() + self._ttl,
+            "expires": datetime.now(UTC) + self._ttl,
         }
 
     def delete(self, key: str) -> None:

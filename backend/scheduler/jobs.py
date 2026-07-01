@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 async def run_daily_pipeline(target_date: date | None = None) -> None:
     target_date = target_date or date.today()
-    start_time = datetime.utcnow()
+    start_time = datetime.now(UTC)
 
     async with get_db() as db:
         existing = await get_feature_snapshot_by_date(db, target_date)
@@ -52,7 +52,7 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
         feature_dict = {
             key: _to_json_scalar(value) for key, value in today_features.iloc[0].to_dict().items()
         }
-        duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        duration_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
 
         parquet_path = FEATURES_DIR / f"features_{target_date.year}.parquet"
         if parquet_path.exists():
@@ -85,7 +85,7 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
             },
         )
     except Exception as exc:
-        duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        duration_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
         async with get_db() as db:
             await db.execute(
                 text(

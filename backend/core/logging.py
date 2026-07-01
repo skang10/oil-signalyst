@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.config import settings
 
@@ -15,7 +15,7 @@ class JSONFormatter(logging.Formatter):
         }
         return json.dumps(
             {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "level": record.levelname,
                 "module": record.module,
                 "message": record.getMessage(),
