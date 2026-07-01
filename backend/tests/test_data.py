@@ -53,3 +53,13 @@ def test_registry_fetch_all_returns_dataframe():
     assert "crude_inventory" in df.columns
     assert "dxy" in df.columns
     assert len(df) > 0
+
+
+def test_cftc_source_returns_series():
+    from core.data.registry import DataRegistry
+
+    registry = DataRegistry()
+    result = registry.fetch("cot_wti_spec_long", "2025-01-01", "2025-02-01")
+
+    assert len(result) > 0
+    assert result.name == "M_Money_Positions_Long_All"

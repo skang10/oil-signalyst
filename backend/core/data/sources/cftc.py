@@ -12,10 +12,10 @@ CFTC_URL = "https://www.cftc.gov/files/dea/history/fut_disagg_txt_{year}.zip"
 CFTC_COLUMNS = {
     "Market_and_Exchange_Names": "market_name",
     "As_of_Date_In_Form_YYMMDD": "date",
-    "NonComm_Positions_Long_All": "NonComm_Positions_Long_All",
-    "NonComm_Positions_Short_All": "NonComm_Positions_Short_All",
-    "Comm_Positions_Long_All": "Comm_Positions_Long_All",
-    "Comm_Positions_Short_All": "Comm_Positions_Short_All",
+    "M_Money_Positions_Long_All": "M_Money_Positions_Long_All",
+    "M_Money_Positions_Short_All": "M_Money_Positions_Short_All",
+    "Prod_Merc_Positions_Long_All": "Prod_Merc_Positions_Long_All",
+    "Prod_Merc_Positions_Short_All": "Prod_Merc_Positions_Short_All",
 }
 
 

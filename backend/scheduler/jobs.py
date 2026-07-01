@@ -44,23 +44,21 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
         engine = FeatureEngine(registry=registry)
         features_df = engine.build(start, end)
 
-        mask = features_df.index.normalize() == pd.Timestamp(target_date)
-        today_features = features_df[mask]
-        if today_features.empty:
-            raise ValueError(f"No features available for {target_date}")
+        feature_date, selected_features = _select_feature_row(features_df, target_date)
 
         feature_dict = {
-            key: _to_json_scalar(value) for key, value in today_features.iloc[0].to_dict().items()
+            key: _to_json_scalar(value)
+            for key, value in selected_features.iloc[0].to_dict().items()
         }
         duration_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
 
-        parquet_path = FEATURES_DIR / f"features_{target_date.year}.parquet"
+        parquet_path = FEATURES_DIR / f"features_{feature_date.year}.parquet"
         if parquet_path.exists():
             existing_df = pd.read_parquet(parquet_path)
-            existing_df = existing_df[existing_df.index.normalize() != pd.Timestamp(target_date)]
-            updated_df = pd.concat([existing_df, today_features])
+            existing_df = existing_df[existing_df.index.normalize() != feature_date]
+            updated_df = pd.concat([existing_df, selected_features])
         else:
-            updated_df = today_features
+            updated_df = selected_features
         updated_df.sort_index().to_parquet(parquet_path)
 
         async with get_db() as db:
@@ -80,6 +78,7 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
             "Pipeline complete",
             extra={
                 "date": str(target_date),
+                "feature_date": str(feature_date.date()),
                 "features": len(feature_dict),
                 "duration_ms": duration_ms,
             },
@@ -105,3 +104,21 @@ def _to_json_scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
+
+
+def _select_feature_row(
+    features_df: pd.DataFrame,
+    target_date: date,
+) -> tuple[pd.Timestamp, pd.DataFrame]:
+    if features_df.empty:
+        raise ValueError(f"No features available on or before {target_date}")
+
+    target = pd.Timestamp(target_date)
+    normalized = features_df.index.normalize()
+    eligible = features_df[normalized <= target]
+    if eligible.empty:
+        raise ValueError(f"No features available on or before {target_date}")
+
+    feature_timestamp = eligible.index.max()
+    feature_date = feature_timestamp.normalize()
+    return feature_date, features_df.loc[[feature_timestamp]]

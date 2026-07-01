@@ -1,5 +1,6 @@
 from datetime import date
 
+import pandas as pd
 import pytest
 
 
@@ -48,3 +49,31 @@ async def test_daily_pipeline_fetches_through_day_after_target(monkeypatch):
         await jobs.run_daily_pipeline(date(2024, 6, 28))
 
     assert captured["end"] == "2024-06-29"
+
+
+def test_select_feature_row_prefers_target_date():
+    from scheduler.jobs import _select_feature_row
+
+    df = pd.DataFrame(
+        {"ret_5d": [0.1, 0.2]},
+        index=pd.to_datetime(["2024-06-27", "2024-06-28"]),
+    )
+
+    feature_date, row = _select_feature_row(df, date(2024, 6, 28))
+
+    assert feature_date == pd.Timestamp("2024-06-28")
+    assert row.iloc[0]["ret_5d"] == 0.2
+
+
+def test_select_feature_row_falls_back_to_latest_available_date():
+    from scheduler.jobs import _select_feature_row
+
+    df = pd.DataFrame(
+        {"ret_5d": [0.1, 0.2]},
+        index=pd.to_datetime(["2024-06-27", "2024-06-28"]),
+    )
+
+    feature_date, row = _select_feature_row(df, date(2024, 6, 29))
+
+    assert feature_date == pd.Timestamp("2024-06-28")
+    assert row.iloc[0]["ret_5d"] == 0.2
