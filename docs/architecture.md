@@ -1,6 +1,6 @@
 # Architecture
 
-## Phase 1 Overview
+## System Overview
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,7 @@ flowchart LR
     CFTC --> RawCache[data/raw/cftc/]
 ```
 
-Phase 1 provides the foundation: API health checks, database schema, real data-source adapters, feature construction, scheduled daily pipeline, and local persistence.
+The current system provides API health checks, database schema, real data-source adapters, feature construction, scheduled daily pipeline, and local persistence.
 
 ## Runtime Containers
 
@@ -171,20 +171,3 @@ erDiagram
         string status
     }
 ```
-
-## Phase 2 Extension Points
-
-```mermaid
-flowchart LR
-    FeatureSnapshots[(feature_snapshots)] --> Training[Model training]
-    Parquet[data/features/*.parquet] --> Training
-    Training --> Models[data/models/*.joblib]
-    Training --> ModelVersions[(model_versions)]
-
-    Models --> Inference[Daily inference]
-    FeatureSnapshots --> Inference
-    Inference --> Predictions[(predictions)]
-    Predictions --> Reports[Report API]
-```
-
-Phase 2 adds model training, inference, report routes, and user config APIs without changing the Phase 1 data-source and feature-engine contracts.
