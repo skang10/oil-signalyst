@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from api.dependencies import CurrentUser, DbSession
 from core.postprocess.report_assembler import assemble_daily_report
+from core.postprocess.stress_test import run_stress_test
 from db.crud import get_recent_predictions
 from db.models import FeatureSnapshot, Prediction
 
@@ -33,6 +34,12 @@ async def get_daily_report(role: str, db: DbSession, user: CurrentUser) -> dict:
     snapshot = await _get_snapshot(db, prediction)
     full = await assemble_daily_report(prediction, snapshot)
     return _filter_by_role(full, role)
+
+
+@router.get("/stress")
+async def get_stress_test(user: CurrentUser) -> dict:
+    del user
+    return await run_stress_test()
 
 
 @router.get("/history")
