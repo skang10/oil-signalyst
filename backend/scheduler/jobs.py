@@ -16,7 +16,7 @@ from core.postprocess.decision_engine import generate_decision
 from core.postprocess.drift_monitor import compute_and_store_psi
 from core.postprocess.outcome_backfill import backfill_outcomes
 from core.postprocess.shap_explainer import explain_prediction
-from db.crud import get_feature_snapshot_by_date, get_prediction_by_date
+from db.crud import get_feature_snapshot_by_date, get_or_create_default_user, get_prediction_by_date
 from db.database import get_db
 from db.models import FeatureSnapshot, Prediction, SystemLog
 from features.engine import FeatureEngine
@@ -169,7 +169,17 @@ async def _ensure_prediction(
     return_dist = predict_returns(returns_artifact, vector, regime_probs)
     recent_wti = registry.fetch("wti", str(target_date - timedelta(days=7)), str(target_date))
     current_price = float(recent_wti.dropna().iloc[-1])
-    decision = generate_decision(regime_probs, return_dist, current_price)
+    async with get_db() as db:
+        user = await get_or_create_default_user(db)
+        exposure_barrels = user.exposure_barrels
+        regime_confidence_threshold = user.alert_regime_threshold
+    decision = generate_decision(
+        regime_probs,
+        return_dist,
+        current_price,
+        exposure_barrels=exposure_barrels,
+        regime_confidence_threshold=regime_confidence_threshold,
+    )
     shap_values = explain_prediction(regime_artifact, vector)
 
     async with get_db() as db:
