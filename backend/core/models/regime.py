@@ -40,7 +40,9 @@ def build_regime_model(train_x, train_y, val_x, val_y):
     model.fit(train_x, y_train)
     metrics_train = classifier_metrics(model, train_x, y_train, len(REGIME_CLASSES))
     metrics_val = classifier_metrics(model, val_x, y_val, len(REGIME_CLASSES))
-    metrics_train["class_counts"] = dict(train_y.value_counts().sort_index())
+    metrics_train["class_counts"] = {
+        str(k): int(v) for k, v in train_y.value_counts().sort_index().items()
+    }
     return model, metrics_train, metrics_val
 
 
