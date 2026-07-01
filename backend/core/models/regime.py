@@ -3,6 +3,7 @@ import pandas as pd
 from tabpfn_client import TabPFNClassifier
 
 from core.logging import get_logger
+from core.models.calibration import calibrate_if_better
 from core.models.common import as_named_row, classifier_metrics
 from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
@@ -33,6 +34,7 @@ def build_regime_model(train_x, train_y, val_x, val_y):
     model.fit(train_x, y_train)
     metrics_train = classifier_metrics(model, train_x, y_train, len(REGIME_CLASSES))
     metrics_val = classifier_metrics(model, val_x, y_val, len(REGIME_CLASSES))
+    model, metrics_val = calibrate_if_better(model, val_x, y_val, len(REGIME_CLASSES), metrics_val)
     metrics_train["class_counts"] = {
         str(k): int(v) for k, v in train_y.value_counts().sort_index().items()
     }

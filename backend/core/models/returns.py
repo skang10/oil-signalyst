@@ -1,6 +1,7 @@
 import numpy as np
 from tabpfn_client import TabPFNClassifier
 
+from core.models.calibration import calibrate_if_better
 from core.models.common import as_named_row, classifier_metrics
 from core.models.labels import RETURN_BIN_LABELS
 from core.models.regime import REGIME_CLASSES
@@ -24,6 +25,8 @@ def build_returns_model(train_x, train_y, val_x, val_y):
     model.fit(train_x, train_y)
     metrics_train = classifier_metrics(model, train_x, train_y, len(RETURN_BIN_LABELS))
     metrics_val = classifier_metrics(model, val_x, val_y, len(RETURN_BIN_LABELS))
+    n_classes = len(RETURN_BIN_LABELS)
+    model, metrics_val = calibrate_if_better(model, val_x, val_y, n_classes, metrics_val)
     counts = {
         RETURN_BIN_LABELS[int(k)]: int(v)
         for k, v in train_y.value_counts().sort_index().items()
