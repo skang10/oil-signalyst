@@ -14,6 +14,7 @@ from core.models.regime import predict_regime
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
 from core.postprocess.outcome_backfill import backfill_outcomes
+from core.postprocess.shap_explainer import explain_prediction
 from db.crud import get_feature_snapshot_by_date, get_prediction_by_date
 from db.database import get_db
 from db.models import FeatureSnapshot, Prediction, SystemLog
@@ -165,6 +166,7 @@ async def _ensure_prediction(
     recent_wti = registry.fetch("wti", str(target_date - timedelta(days=7)), str(target_date))
     current_price = float(recent_wti.dropna().iloc[-1])
     decision = generate_decision(regime_probs, return_dist, current_price)
+    shap_values = explain_prediction(regime_artifact, vector)
 
     async with get_db() as db:
         db.add(
@@ -174,6 +176,7 @@ async def _ensure_prediction(
                 return_dist=return_dist,
                 eia_forecast=eia_forecast,
                 decision=decision,
+                shap_values=shap_values,
                 model_version_id=await ModelRegistry.get_active_version_id("regime"),
                 feature_snapshot_id=snapshot_id,
             )

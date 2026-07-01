@@ -26,6 +26,7 @@ VAL_START = "2024-01-01"
 VAL_END = "2024-12-31"
 
 MLFLOW_EXPERIMENT = "oil-signalyst"
+SHAP_BACKGROUND_SIZE = 30
 
 
 def _init_mlflow() -> None:
@@ -122,6 +123,11 @@ async def run_full_training(triggered_by_user_id: int | None = None) -> dict:
             mlflow.log_dict(metrics_train, "metrics_train.json")
             mlflow.log_dict(metrics_val, "metrics_val.json")
 
+            extra_artifact = (
+                {"shap_background": x_train.tail(SHAP_BACKGROUND_SIZE)}
+                if model_type == "regime"
+                else None
+            )
             results[model_type] = await _save_model(
                 model_type=model_type,
                 version=version,
@@ -130,6 +136,7 @@ async def run_full_training(triggered_by_user_id: int | None = None) -> dict:
                 metrics_train=metrics_train,
                 metrics_val=metrics_val,
                 mlflow_run_id=run.info.run_id,
+                extra_artifact=extra_artifact,
             )
             mlflow.log_artifact(results[model_type]["file_path"])
 
@@ -144,6 +151,7 @@ async def _save_model(
     metrics_train: dict,
     metrics_val: dict,
     mlflow_run_id: str | None = None,
+    extra_artifact: dict | None = None,
 ) -> dict:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     file_path = MODELS_DIR / f"{model_type}_{version}.joblib"
@@ -152,6 +160,7 @@ async def _save_model(
         "feature_list": feature_list,
         "model_type": model_type,
         "version": version,
+        **(extra_artifact or {}),
     }
     joblib.dump(artifact, file_path)
 
