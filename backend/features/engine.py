@@ -80,6 +80,13 @@ class FeatureEngine:
         with open(path) as file:
             return hashlib.md5(file.read().encode()).hexdigest()[:8]
 
+    def required_lookback_days(self) -> int:
+        max_days = 0
+        for feature in self.features:
+            source_name = feature.get("source") or feature.get("source_a")
+            max_days = max(max_days, self._window_days(feature, source_name))
+        return max_days
+
     def _window_days(self, feature: dict, source_name: str) -> int:
         window = feature.get("window", 1)
         source_cfg = self.registry.config.get(source_name, {})

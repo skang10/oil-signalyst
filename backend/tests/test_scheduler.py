@@ -16,6 +16,9 @@ async def test_daily_pipeline_fetches_through_day_after_target(monkeypatch):
         def __init__(self, registry):
             self.registry = registry
 
+        def required_lookback_days(self):
+            return 728
+
         def build(self, start, end):
             captured["start"] = start
             captured["end"] = end

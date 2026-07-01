@@ -21,6 +21,8 @@ from features.engine import FeatureEngine
 
 logger = get_logger(__name__)
 
+FEATURE_WARMUP_BUFFER_DAYS = 90
+
 
 async def run_daily_pipeline(target_date: date | None = None) -> None:
     target_date = target_date or date.today()
@@ -93,9 +95,10 @@ async def _ensure_feature_snapshot(
             return pd.Timestamp(target_date), row, existing.features, existing.id
 
     FEATURES_DIR.mkdir(parents=True, exist_ok=True)
-    end = str(target_date + timedelta(days=1))
-    start = str(target_date - timedelta(days=730))
     engine = FeatureEngine(registry=registry)
+    end = str(target_date + timedelta(days=1))
+    lookback_days = engine.required_lookback_days() + FEATURE_WARMUP_BUFFER_DAYS
+    start = str(target_date - timedelta(days=lookback_days))
     features_df = engine.build(start, end)
     feature_date, selected_features = _select_feature_row(features_df, target_date)
     feature_dict = {

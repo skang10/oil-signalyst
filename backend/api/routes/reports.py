@@ -2,6 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import desc, select
+from sqlalchemy.orm import selectinload
 
 from api.dependencies import CurrentUser, DbSession
 from core.postprocess.report_assembler import assemble_daily_report
@@ -20,6 +21,7 @@ async def get_daily_report(role: str, db: DbSession, user: CurrentUser) -> dict:
 
     row = await db.execute(
         select(Prediction)
+        .options(selectinload(Prediction.model_version))
         .where(Prediction.date == date.today())
         .order_by(desc(Prediction.created_at))
         .limit(1)
@@ -48,6 +50,7 @@ async def get_prediction_detail(prediction_date: date, db: DbSession, user: Curr
     del user
     row = await db.execute(
         select(Prediction)
+        .options(selectinload(Prediction.model_version))
         .where(Prediction.date == prediction_date)
         .order_by(desc(Prediction.created_at))
         .limit(1)
