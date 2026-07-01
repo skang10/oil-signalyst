@@ -1,0 +1,71 @@
+features:
+  - name: curve_slope_zscore
+    source: wti
+    transform: zscore
+    window: 252
+
+  - name: brent_wti_spread
+    source_a: brent
+    source_b: wti
+    transform: ratio_diff
+
+  - name: crude_inv_dev
+    source: crude_inventory
+    transform: seasonal_dev
+    seasons: 52
+
+  - name: crude_inv_chg_4w
+    source: crude_inventory
+    transform: pct_change
+    window: 4
+
+  - name: ovx
+    source: ovx
+    transform: raw
+
+  - name: rvol_20d
+    source: wti
+    transform: rolling_std
+    window: 20
+    annualize: true
+
+  - name: ret_5d
+    source: wti
+    transform: pct_change
+    window: 5
+
+  - name: ret_20d
+    source: wti
+    transform: pct_change
+    window: 20
+
+  - name: ret_60d
+    source: wti
+    transform: pct_change
+    window: 60
+
+  - name: spec_net_pct
+    source_a: cot_wti_spec_long
+    source_b: cot_wti_spec_short
+    transform: net_position_pct
+    window: 104
+
+  - name: spec_net_chg
+    source_a: cot_wti_spec_long
+    source_b: cot_wti_spec_short
+    transform: net_position_chg
+    window: 1
+
+  - name: dxy_ret_20d
+    source: dxy
+    transform: pct_change
+    window: 20
+
+  - name: copper_ret_20d
+    source: copper
+    transform: pct_change
+    window: 20
+
+  - name: vix
+    source: vix
+    transform: raw

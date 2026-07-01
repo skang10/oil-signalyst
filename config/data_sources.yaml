@@ -1,0 +1,92 @@
+sources:
+  wti:
+    type: yahoo
+    ticker: "CL=F"
+    field: Close
+    freq: D
+    lag_days: 0
+
+  brent:
+    type: yahoo
+    ticker: "BZ=F"
+    field: Close
+    freq: D
+    lag_days: 0
+
+  ovx:
+    type: yahoo
+    ticker: "^OVX"
+    field: Close
+    freq: D
+    lag_days: 0
+
+  crude_inventory:
+    type: eia
+    series_id: "PET.WCRSTUS1.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  cushing_inventory:
+    type: eia
+    series_id: "PET.WCUOK1.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  gasoline_inventory:
+    type: eia
+    series_id: "PET.WGTSTUS1.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  distillate_inventory:
+    type: eia
+    series_id: "PET.WDISTUS1.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  dxy:
+    type: fred
+    series_id: "DTWEXBGS"
+    freq: D
+    lag_days: 1
+
+  vix:
+    type: yahoo
+    ticker: "^VIX"
+    field: Close
+    freq: D
+    lag_days: 0
+
+  copper:
+    type: yahoo
+    ticker: "HG=F"
+    field: Close
+    freq: D
+    lag_days: 0
+
+  natural_gas:
+    type: yahoo
+    ticker: "NG=F"
+    field: Close
+    freq: D
+    lag_days: 0
+
+  cot_wti_spec_long:
+    type: cftc
+    market_name: "CRUDE OIL, LIGHT SWEET"
+    field: "NonComm_Positions_Long_All"
+    freq: W
+    release_day: 4
+    lag_days: 0
+
+  cot_wti_spec_short:
+    type: cftc
+    market_name: "CRUDE OIL, LIGHT SWEET"
+    field: "NonComm_Positions_Short_All"
+    freq: W
+    release_day: 4
+    lag_days: 0
