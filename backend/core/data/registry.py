@@ -45,9 +45,15 @@ class DataRegistry:
         logger.info("Fetched source", extra={"source_name": name, "rows": len(aligned)})
         return aligned
 
-    def fetch_all(self, start: str, end: str) -> pd.DataFrame:
+    def fetch_all(
+        self,
+        start: str,
+        end: str,
+        source_names: list[str] | None = None,
+    ) -> pd.DataFrame:
         frames: dict[str, pd.Series] = {}
-        for name in self.config:
+        names = source_names or list(self.config)
+        for name in names:
             try:
                 frames[name] = self.fetch(name, start, end)
             except Exception as exc:

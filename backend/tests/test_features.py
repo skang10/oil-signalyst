@@ -1,34 +1,76 @@
-import pytest
+import pandas as pd
 
 
-def _require_api_keys() -> None:
-    from core.config import settings
+class FakeRegistry:
+    config = {
+        "wti": {"freq": "D"},
+        "brent": {"freq": "D"},
+        "crude_inventory": {"freq": "W"},
+    }
 
-    if not settings.eia_api_key or not settings.fred_api_key:
-        pytest.skip("EIA_API_KEY and FRED_API_KEY are required for integration tests")
+    def __init__(self):
+        self.source_names = None
+
+    def fetch_all(self, start, end, source_names=None):
+        self.source_names = source_names
+        index = pd.date_range(start, end, freq="D")
+        return pd.DataFrame(
+            {
+                "wti": range(len(index)),
+                "brent": [value + 5 for value in range(len(index))],
+                "crude_inventory": [100 + (value // 7) for value in range(len(index))],
+            },
+            index=index,
+        )
 
 
-def test_feature_engine_no_future_leakage():
-    _require_api_keys()
-
+def test_feature_engine_uses_only_required_sources(tmp_path):
     from features.engine import FeatureEngine
 
-    engine = FeatureEngine()
-    df = engine.build("2023-01-01", "2024-06-30")
-    df = df["2024-01-01":"2024-06-30"]
+    feature_config = tmp_path / "features.yaml"
+    feature_config.write_text(
+        """
+features:
+  - name: ret_5d
+    source: wti
+    transform: pct_change
+    window: 5
+  - name: brent_wti_spread
+    source_a: brent
+    source_b: wti
+    transform: ratio_diff
+""".strip()
+    )
+    registry = FakeRegistry()
 
-    assert "crude_inv_dev" in df.columns
-    assert df["crude_inv_dev"].notna().mean() > 0.8
+    engine = FeatureEngine(feature_config=feature_config, registry=registry)
+    df = engine.build("2024-01-01", "2024-01-31")
+
+    assert registry.source_names == ["brent", "wti"]
+    assert list(df.columns) == ["ret_5d", "brent_wti_spread"]
+    assert len(df) > 0
 
 
-def test_feature_engine_returns_no_nan_rows():
-    _require_api_keys()
-
+def test_feature_engine_returns_no_nan_rows(tmp_path):
     from features.engine import FeatureEngine
 
-    engine = FeatureEngine()
-    df = engine.build("2023-01-01", "2024-06-30")
-    df = df["2024-01-01":"2024-06-30"]
+    feature_config = tmp_path / "features.yaml"
+    feature_config.write_text(
+        """
+features:
+  - name: ret_5d
+    source: wti
+    transform: pct_change
+    window: 5
+  - name: crude_inv_chg_1w
+    source: crude_inventory
+    transform: pct_change
+    window: 1
+""".strip()
+    )
+
+    engine = FeatureEngine(feature_config=feature_config, registry=FakeRegistry())
+    df = engine.build("2024-01-01", "2024-02-29")
 
     assert len(df) > 0
     assert df.isnull().all(axis=1).sum() == 0

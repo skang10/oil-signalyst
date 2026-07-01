@@ -23,7 +23,7 @@ class FeatureEngine:
         self.feature_version = self._hash_config(feature_config)
 
     def build(self, start: str, end: str) -> pd.DataFrame:
-        raw = self.registry.fetch_all(start, end)
+        raw = self.registry.fetch_all(start, end, source_names=self._required_sources())
         result: dict[str, pd.Series] = {}
         for feature in self.features:
             try:
@@ -86,3 +86,11 @@ class FeatureEngine:
         if source_cfg.get("freq") == "W":
             return window * 7
         return window
+
+    def _required_sources(self) -> list[str]:
+        source_names: set[str] = set()
+        for feature in self.features:
+            for key in ("source", "source_a", "source_b"):
+                if key in feature:
+                    source_names.add(feature[key])
+        return sorted(source_names)

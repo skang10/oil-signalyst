@@ -43,8 +43,13 @@ def test_registry_fetch_all_returns_dataframe():
     from core.data.registry import DataRegistry
 
     registry = DataRegistry()
-    df = registry.fetch_all("2024-06-01", "2024-06-30")
+    df = registry.fetch_all(
+        "2024-06-01",
+        "2024-06-30",
+        source_names=["wti", "crude_inventory", "dxy"],
+    )
 
     assert "wti" in df.columns
     assert "crude_inventory" in df.columns
+    assert "dxy" in df.columns
     assert len(df) > 0
