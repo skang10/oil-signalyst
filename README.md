@@ -2,6 +2,8 @@
 
 Foundation scaffold for the oil-signalyst backend.
 
+See [Architecture](docs/architecture.md) for the system design and data flow.
+
 ## Local development
 
 ```bash
