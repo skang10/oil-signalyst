@@ -105,6 +105,20 @@ class SignalEvaluation(Base):
     evaluated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class TrainJob(Base):
+    __tablename__ = "train_jobs"
+
+    id = Column(String(8), primary_key=True)
+    status = Column(String(20), nullable=False, default="queued")
+    model_types = Column(JSON, default=list)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    result = Column(JSON, nullable=True)
+    log_lines = Column(JSON, default=list)
+    triggered_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class SystemLog(Base):
     __tablename__ = "system_logs"
 

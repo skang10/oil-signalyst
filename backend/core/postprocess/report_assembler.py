@@ -1,13 +1,14 @@
 import yaml
 
 from core.config_paths import FEATURES_YAML
+from core.models.regime import dominant_regime
 from core.postprocess.regime_stats import estimate_switch_probability, get_regime_duration
 from db.models import FeatureSnapshot, Prediction
 
 
 async def assemble_daily_report(prediction: Prediction, snapshot: FeatureSnapshot | None) -> dict:
     regime_probs = prediction.regime_probs or {}
-    dominant = max(regime_probs, key=regime_probs.get) if regime_probs else "R3"
+    dominant = dominant_regime(regime_probs) or "R3"
     duration = await get_regime_duration(dominant)
     switch_prob = await estimate_switch_probability(dominant)
     features = snapshot.features if snapshot else {}

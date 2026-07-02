@@ -5,6 +5,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
 
 from api.dependencies import CurrentUser, DbSession
+from core.models.regime import dominant_regime
 from core.postprocess.report_assembler import assemble_daily_report
 from core.postprocess.stress_test import run_stress_test
 from db.crud import get_recent_predictions
@@ -111,7 +112,7 @@ def _history_row(prediction: Prediction) -> dict:
     regime_probs = prediction.regime_probs or {}
     return {
         "date": str(prediction.date),
-        "dominant_regime": max(regime_probs, key=regime_probs.get) if regime_probs else None,
+        "dominant_regime": dominant_regime(regime_probs),
         "return_dist": prediction.return_dist,
         "eia_forecast": prediction.eia_forecast.get("crude") if prediction.eia_forecast else None,
         "actual_return": prediction.actual_return,

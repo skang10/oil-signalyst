@@ -8,7 +8,7 @@ from core.exceptions import ModelNotFoundError
 from core.logging import get_logger
 from core.models.labels import return_bucket_for_value
 from core.models.model_registry import ModelRegistry
-from core.models.regime import predict_regime
+from core.models.regime import dominant_regime, predict_regime
 from core.models.regime_labels import build_regime_series
 from core.models.returns import predict_returns
 
@@ -103,7 +103,7 @@ async def run_stress_test() -> dict:
             scenarios.append({"name": name, "date": str(scenario_date), "error": str(exc)})
             continue
 
-        dominant_regime_predicted = max(regime_probs, key=regime_probs.get)
+        dominant_regime_predicted = dominant_regime(regime_probs)
         actual_regime_series = build_regime_series(str(scenario_date), str(scenario_date))
         dominant_regime_actual = (
             actual_regime_series.iloc[0] if not actual_regime_series.empty else None

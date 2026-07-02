@@ -1,3 +1,5 @@
+from core.models.regime import dominant_regime
+
 RETURN_MIDPOINTS = {"lt_minus10": -0.15, "neg_10_0": -0.05, "pos_0_10": 0.05, "gt_10": 0.15}
 
 
@@ -38,7 +40,7 @@ def generate_decision(
     expected_ret = sum(
         return_dist.get(bucket, 0.0) * midpoint for bucket, midpoint in RETURN_MIDPOINTS.items()
     )
-    dominant = max(regime_probs, key=regime_probs.get) if regime_probs else "R3"
+    dominant = dominant_regime(regime_probs) or "R3"
     confidence = regime_probs.get(dominant, 0.0)
 
     confident_enough = confidence >= regime_confidence_threshold

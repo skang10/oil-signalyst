@@ -24,6 +24,15 @@ def decode_regime_probs(classes: np.ndarray, probs: np.ndarray) -> dict:
     return result
 
 
+def dominant_regime(regime_probs: dict | None) -> str | None:
+    """The regime with the highest probability, derived at read time from a
+    Prediction's regime_probs JSON. There is no stored dominant_regime column
+    - this is the single canonical place that derivation logic lives."""
+    if not regime_probs:
+        return None
+    return max(regime_probs, key=regime_probs.get)
+
+
 def build_regime_model(train_x, train_y, val_x, val_y):
     from core.models.regime_validation import validate_regime_labels
 
