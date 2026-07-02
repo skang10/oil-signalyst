@@ -1,0 +1,41 @@
+import { useEffect, useState } from 'react';
+import { useRole } from '@/context/RoleContext';
+import { ROLE_PERMISSIONS, type DashTab } from '@/types/roles';
+import { useModelStatus } from '@/hooks/useModelStatus';
+import AlertBanner from '@/components/shared/AlertBanner';
+import DashTabBar from './DashTabBar';
+
+export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState<DashTab>('overview');
+  const { role } = useRole();
+  const { data: modelStatus } = useModelStatus();
+
+  useEffect(() => {
+    if (role === 'trader' || role === 'risk') {
+      setActiveTab((prev) => (ROLE_PERMISSIONS.dimmedDashTabs.includes(prev) ? 'overview' : prev));
+    }
+    // Only bounce on role change - dimmed tabs must stay manually clickable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
+
+  const alertModel = modelStatus?.models.find((m) => m.psi_alert);
+
+  return (
+    <div className="flex flex-col h-full">
+      <DashTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="flex-1 overflow-y-auto p-[18px]">
+        {alertModel && (
+          <AlertBanner>
+            {alertModel.type[0].toUpperCase() + alertModel.type.slice(1)} model PSI{' '}
+            {alertModel.metrics.psi.toFixed(2)} exceeds alert threshold. Retraining recommended.
+          </AlertBanner>
+        )}
+        {activeTab === 'overview' && <div className="text-text-muted text-[12px]">Overview tab — CP2</div>}
+        {activeTab === 'eia' && <div className="text-text-muted text-[12px]">EIA Forecast tab — CP3</div>}
+        {activeTab === 'regime' && <div className="text-text-muted text-[12px]">Regime tab — CP3</div>}
+        {activeTab === 'returns' && <div className="text-text-muted text-[12px]">Return Dist. tab — CP3</div>}
+        {activeTab === 'charts' && <div className="text-text-muted text-[12px]">Market Data tab — CP4</div>}
+      </div>
+    </div>
+  );
+}

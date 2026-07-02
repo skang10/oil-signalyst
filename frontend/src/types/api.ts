@@ -1,0 +1,196 @@
+import type { Role } from './roles';
+
+export interface DailyReport {
+  date: string;
+  role: Role;
+  wti_price: number;
+  wti_change_pct: number;
+
+  trader?: {
+    signal: 'LONG' | 'SHORT' | 'FLAT';
+    kelly_position: number;
+    stop_loss_price: number;
+    stop_loss_pct: number;
+    expected_return: number;
+    price_5d_history: number[];
+    brent_wti_spread: number;
+    cot_net_percentile: number;
+    ovx: number;
+  };
+
+  risk?: {
+    var_95: number;
+    cvar_95: number;
+    current_exposure_mbbls: number;
+    hedge_ratio: number;
+    recommended_hedge_ratio: number;
+    r3_historical_max_drawdown: number;
+  };
+
+  eia: {
+    forecast_mb: number;
+    interval_80_low: number;
+    interval_80_high: number;
+    consensus_mb: number;
+    surprise_mb: number;
+    breakdown: {
+      crude: number;
+      gasoline: number;
+      distillate: number;
+      cushing: number;
+    };
+    shap_drivers: { name: string; contribution_mb: number }[];
+    historical_direction_accuracy: number;
+    historical_mae: number;
+    consensus_mae: number;
+  };
+
+  regime: {
+    probabilities: Record<'R1' | 'R2' | 'R3' | 'R4', number>;
+    dominant: 'R1' | 'R2' | 'R3' | 'R4';
+    duration_weeks: number;
+    historical_avg_duration: number;
+    switch_probability_4w: number;
+    support_signals: {
+      name: string;
+      value: string;
+      direction: 'bullish' | 'bearish' | 'neutral';
+    }[];
+    switch_trigger: string;
+  };
+
+  returns: {
+    condition_description: string;
+    buckets: {
+      label: string;
+      pct: number;
+      color: 'danger' | 'warning' | 'success' | 'accent';
+    }[];
+    expected_return: number;
+    median_return: number;
+    var_95: number;
+    skewness: number;
+    price_range_low: number;
+    price_range_high: number;
+    downside_prob: number;
+    tail_prob: number;
+    upside_prob: number;
+  };
+}
+
+export interface ModelStatus {
+  models: {
+    type: 'regime' | 'eia' | 'returns';
+    version: string;
+    deployed_at: string;
+    mlflow_run_id: string;
+    metrics: {
+      primary: number;
+      psi: number;
+    };
+    psi_alert: boolean;
+  }[];
+  data_sources: {
+    name: string;
+    status: 'ok' | 'delayed' | 'error';
+    lag_hours: number | null;
+    last_updated: string;
+  }[];
+  feature_coverage_7d: number;
+}
+
+export interface TrainJob {
+  job_id: string;
+  status: 'queued' | 'running' | 'complete' | 'failed';
+  model_types: string[];
+  started_at: string | null;
+  completed_at: string | null;
+  result?: {
+    old_metrics: Record<string, number>;
+    new_metrics: Record<string, number>;
+    improvement_pct: number;
+  };
+}
+
+export interface TrainParams {
+  model_types: string[];
+  cutoff_date: string;
+  cv_folds: number;
+  gap_days: number;
+}
+
+export interface HistoryPrediction {
+  date: string;
+  wti_price: number;
+  regime_dominant: 'R1' | 'R2' | 'R3' | 'R4';
+  signal: 'LONG' | 'SHORT' | 'FLAT';
+  expected_return: number;
+  actual_return: number | null;
+}
+
+export interface HistoryResponse {
+  predictions: HistoryPrediction[];
+  rolling_accuracy: number;
+}
+
+export interface HistoryDetail {
+  date: string;
+  summary: {
+    wti_price: number;
+    signal: 'LONG' | 'SHORT' | 'FLAT';
+    kelly_position: number;
+    expected_return: number;
+  };
+  regime: DailyReport['regime'];
+  features: { name: string; value: number | string }[];
+  outcome: {
+    actual_return: number | null;
+    predicted_return: number;
+    hit: boolean | null;
+  };
+}
+
+/**
+ * SignalCandidate / SignalEvaluation are not typed anywhere in spec §9 (the
+ * spec only defines DailyReport/ModelStatus/TrainJob) - authored fresh here,
+ * modeled on oil-signalyst-signals-page.html's embedded `signals` object.
+ */
+export interface SignalCandidate {
+  name: string;
+  label: string;
+  ic5: number;
+  ic20: number;
+  decay: number;
+  coverage: number;
+  status: 'candidate' | 'active' | 'ignored';
+  recommendation: 'add' | 'watch' | 'reject';
+}
+
+export interface SignalsResponse {
+  active: {
+    name: string;
+    source: string;
+    frequency: string;
+    category: 'Futures Curve' | 'Inventory' | 'Positioning' | 'Volatility' | 'Macro';
+  }[];
+  candidates: SignalCandidate[];
+}
+
+export interface SignalEvaluation {
+  name: string;
+  label: string;
+  ic5: number;
+  ic10: number;
+  ic20: number;
+  decay: number;
+  coverage: number;
+  status: 'candidate' | 'active' | 'ignored';
+  recommendation: 'add' | 'watch' | 'reject';
+  price: number[];
+  signal: number[];
+  dates: string[];
+  ic5_series: number[];
+  ic10_series: number[];
+  ic20_series: number[];
+  oos_years: { year: number; train_ic: number; oos_ic: number }[];
+}

@@ -28,3 +28,5 @@ data/mlruns/*
 !data/mlruns/.gitkeep
 logs/*
 !logs/.gitkeep
+
+.playwright-mcp/
