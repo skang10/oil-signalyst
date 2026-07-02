@@ -2,15 +2,15 @@
 
 > This file is the system-level overview. For the full backend module
 > breakdown, ML training pipeline, API surface, and persistence model, see
-> [`docs/architecture-backend.md`](architecture-backend.md). There is no
-> frontend yet (`frontend/` is a placeholder) - once one exists it should get
-> its own `docs/architecture-frontend.md` rather than growing this file.
+> [`docs/architecture-backend.md`](architecture-backend.md). For the React
+> SPA's structure, routing, and data-fetching conventions, see
+> [`docs/architecture-frontend.md`](architecture-frontend.md).
 
 ## System Overview
 
 ```mermaid
 flowchart LR
-    User[Local user / API client] --> API[FastAPI service]
+    Browser[Browser<br/>Vite dev server :5173] --> API[FastAPI service :8000]
     Scheduler[APScheduler service] --> Pipeline[Daily pipeline job]
     Scheduler --> SignalScan[Weekly signal scan]
 
@@ -43,8 +43,10 @@ flowchart LR
 The system provides a scheduled daily ingestion + inference pipeline, a
 three-model ML stack (regime classification, EIA forecasting, conditional
 return distribution) trained via a hosted TabPFN API, drift/explainability
-monitoring, and a role-aware reporting + signal-research API surface. See
-`docs/architecture-backend.md` for the full detail.
+monitoring, a role-aware reporting + signal-research API surface, and a
+React SPA that consumes it directly (no mock layer - CORS allow-lists the
+Vite dev origin). See `docs/architecture-backend.md` and
+`docs/architecture-frontend.md` for the full detail on each side.
 
 ## Runtime Containers
 
@@ -67,12 +69,24 @@ flowchart TB
     Scheduler --> LogsVolume
 ```
 
+The frontend is not yet containerized - it runs separately via `npm run
+dev` (Vite dev server, port 5173) against the `api` container/process at
+`http://localhost:8000`.
+
 ## Backend Modules
 
 Full module breakdown (API routes, `core/models/` training+inference,
 `core/postprocess/` decision/monitoring layer, `features/`, `db/`,
 `scheduler/`) lives in
 [`docs/architecture-backend.md`](architecture-backend.md#module-map).
+
+## Frontend
+
+React 18 + Vite SPA: role-gated dashboard, history, signal research, and a
+DS Workbench (data/model monitoring, training control). Consumes the
+backend's API surface directly - no mock layer. Full module breakdown,
+routing, and data-fetching conventions live in
+[`docs/architecture-frontend.md`](architecture-frontend.md#module-map).
 
 ## Daily Pipeline
 

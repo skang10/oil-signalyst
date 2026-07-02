@@ -15,8 +15,8 @@ backend/
 │       ├── health.py        # GET /health
 │       ├── reports.py       # GET /api/reports/daily/{role}, /history, /history/{date}, /stress
 │       ├── models.py        # GET /api/models/status, POST /api/models/{type}/deploy
-│       ├── training.py      # POST/GET /api/train/* (TrainJob-backed, SSE log stream)
-│       ├── signals.py       # GET /api/signals/candidates, /active, /evaluate/{name}
+│       ├── training.py      # POST/GET /api/train/* (TrainJob-backed, SSE log stream, model_types/cutoff_date)
+│       ├── signals.py       # GET /api/signals (combined), /candidates, /active, /evaluate/{name}
 │       └── users.py         # GET/PUT /api/users/me[/config]
 │
 ├── core/
@@ -31,7 +31,7 @@ backend/
 │   │   └── sources/         # yahoo.py, eia.py, fred.py, cftc.py adapters
 │   │
 │   ├── models/               # Training + inference for the 3 production models
-│   │   ├── trainer.py        # run_full_training[_with_log](), load_features(), MLflow setup
+│   │   ├── trainer.py        # run_full_training[_with_log](model_types, cutoff_date), load_features(), MLflow setup
 │   │   ├── regime.py          # TabPFNClassifier wrapper, dominant_regime(), predict_regime[_batch]()
 │   │   ├── eia.py             # TabPFNRegressor wrapper, predict_eia()
 │   │   ├── returns.py         # TabPFNClassifier wrapper, regime-probability feature augmentation
@@ -45,13 +45,14 @@ backend/
 │   │
 │   ├── postprocess/           # Everything downstream of a raw model prediction
 │   │   ├── decision_engine.py # direction/position sizing, CVaR, Kelly, hedge sizing
-│   │   ├── report_assembler.py# Builds the full daily report dict from a Prediction row
-│   │   ├── regime_stats.py    # Regime duration + empirical switch-probability estimate
+│   │   ├── report_assembler.py# assemble_daily_report() (raw) -> nest_daily_report() (frontend's nested
+│   │   │                      # DailyReport contract); build_history_response()/build_history_detail()
+│   │   ├── regime_stats.py    # Regime duration + empirical switch-probability + historical avg duration
 │   │   ├── drift_monitor.py   # PSI (population stability index) per feature
 │   │   ├── shap_explainer.py  # KernelExplainer-based feature attribution (regime model)
 │   │   ├── stress_test.py     # Re-inference over 3 historical crisis scenarios
-│   │   ├── signal_charts.py   # Price/IC chart series for the Signal Evaluate view
-│   │   ├── data_monitor.py    # Feature coverage + per-source freshness status
+│   │   ├── signal_charts.py   # Price/IC chart series (5d/10d/20d) for the Signal Evaluate view
+│   │   ├── data_monitor.py    # Feature coverage + per-source freshness + per-feature missing-rate bars
 │   │   └── outcome_backfill.py# Fills Prediction.actual_return once realized returns exist
 │   │
 │   └── signal_scanner.py     # Candidate signal IC testing with Bonferroni correction
@@ -131,23 +132,26 @@ sequenceDiagram
 
 Each of the three models is trained and **auto-activated immediately** - there is no staged "candidate, not yet live" state. `POST /api/models/{type}/deploy` exists for rollback (re-promoting an older completed job's version), not as a required gate before a freshly trained model goes live.
 
+`model_types` lets a caller retrain a subset (e.g. just `returns`); if `returns` is selected without `regime`, `run_full_training()` falls back to the currently deployed regime model (via `ModelRegistry.get_active("regime")`) to compute the regime-probability features the returns model needs. `cutoff_date` shifts the train/val split boundary for a what-if backtest (train up to cutoff, validate on everything since); a cutoff too close to "today" leaves forward-looking labels (eia/returns need trailing days of future data) with zero validation rows, so this is guarded with a fast, explicit `ValueError` rather than a cryptic downstream TabPFN failure.
+
 ## API Surface
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | DB connectivity, user count, snapshot freshness |
-| GET | `/api/reports/daily/{role}` | Role-filtered daily report (`trader`\|`risk`\|`researcher`\|`ds`) |
-| GET | `/api/reports/history` | Recent prediction history (default 30 days) |
-| GET | `/api/reports/history/{date}` | Full report + realized outcome for one date |
+| GET | `/api/reports/daily/{role}` | Full nested `DailyReport` (`trader`/`risk`/`eia`/`regime`/`returns` blocks) for the most recent available prediction - same superset shape for every role, `role` only tags which URL/view fetched it |
+| GET | `/api/reports/history` | `{predictions, rolling_accuracy}` - recent prediction log + real directional-accuracy/Brier stats computed against realized outcomes (default 30 days) |
+| GET | `/api/reports/history/{date}` | `HistoryDetail`: summary/regime/features/outcome for one date |
 | GET | `/api/reports/stress` | Re-inference over 3 historical crisis scenarios |
-| GET | `/api/models/status` | `{models, data_sources, feature_coverage_7d}` - PSI alerts, per-source freshness |
+| GET | `/api/models/status` | `{models, data_sources, feature_coverage_7d, feature_missing_rates, feature_psi}` - PSI alerts, per-source freshness, per-feature bars |
 | POST | `/api/models/{type}/deploy` | Rollback: re-promote an older job's trained version |
-| POST | `/api/train/start` | Kick off a background training run, returns `job_id` |
-| GET | `/api/train/status/{job_id}` | Structured job state + old/new metrics comparison |
+| POST | `/api/train/start` | Body: `{model_types, cutoff_date, cv_folds, gap_days}` (all optional). Kicks off a background training run over the selected models, returns `job_id`. `cv_folds`/`gap_days` are accepted but not yet implemented - see Known Architectural Simplifications |
+| GET | `/api/train/status/{job_id}` | Structured job state + flat `{model_type}_{metric}` old/new metrics comparison |
 | GET | `/api/train/log/{job_id}` | SSE stream of training progress, closes on complete/failed |
-| GET | `/api/signals/candidates` | Latest evaluation per candidate signal (IC, coverage, status) |
+| GET | `/api/signals` | `{active, candidates}` combined - the shape the Signals page actually consumes |
+| GET | `/api/signals/candidates` | Latest evaluation per candidate signal, reshaped to `{name, label, ic5, ic20, decay, coverage, status, recommendation}` |
 | GET | `/api/signals/active` | Production feature list enriched with source/frequency/category |
-| GET | `/api/signals/evaluate/{name}` | Price/IC chart series + stats for one candidate signal |
+| GET | `/api/signals/evaluate/{name}` | Full `SignalEvaluation`: label, ic5/ic10/ic20, parallel price/signal/date series, rolling IC series, year-by-year OOS |
 | GET/PUT | `/api/users/me[/config]` | Current user profile and alert-threshold configuration |
 
 All routes except `/health` require an `X-User-Id` header (defaults to user 1 if omitted).
@@ -233,7 +237,7 @@ erDiagram
 | Dependency | Role | Notes |
 |---|---|---|
 | Yahoo Finance (yfinance) | WTI, Brent, OVX, VIX, copper, natural gas | Daily |
-| EIA API | Crude/Cushing/gasoline/distillate inventory | Weekly, release-day-aware alignment |
+| EIA API | Crude/Cushing/gasoline/distillate inventory | Weekly, release-day-aware alignment. Raw series (`PET.WCRSTUS1.W` etc.) reports in thousand barrels; `build_eia_labels()`/`predict_eia()` divide by 1000 so the model trains/predicts/reports in million barrels end to end (Daily Report `eia.forecast_mb`, Model Monitor's EIA MAE) |
 | FRED | DXY | Daily |
 | CFTC | COT positioning (managed money long/short) | Weekly ZIP files |
 | **Hosted TabPFN API** (`tabpfn-client`) | Training + inference for all 3 production models | Chosen over local CPU inference to avoid TabPFN's ~1000-row CPU sample ceiling; makes daily inference itself dependent on this external API's availability. Auth via `TABPFN_API_KEY`. |
@@ -249,3 +253,6 @@ These are deliberate, documented tradeoffs - not gaps to "fix" without re-evalua
 - **PSI is one global value reused across all 3 models**, not genuinely per-model-type, since all three models draw on the same active feature set.
 - **Per-source data freshness is a single shared signal**, not independent per-source timestamps - there's no persisted per-source raw cache to check individually, only the engineered feature matrix's most recent row, which every source feeds into.
 - **`POST /api/models/{type}/deploy` is a no-op under normal operation** - training auto-activates. It exists for explicit rollback to a specific older job's version.
+- **`POST /api/train/start`'s `cv_folds`/`gap_days` are accepted but not implemented.** This project trains a single fixed train/val split (`TRAIN_START`..`TRAIN_END` / `VAL_START`..`VAL_END`, or `cutoff_date`-shifted), not real k-fold time-series cross-validation. The frontend's Training Control form still exposes these controls; wiring real CV would mean N TabPFN retrains per fold per model, a genuine feature addition, not a shape fix.
+- **`GET /api/reports/daily/{role}`'s nested `DailyReport` has a handful of static placeholder fields** where no model output exists today, clearly marked in `report_assembler.py::nest_daily_report()`: `eia.breakdown.{gasoline,distillate,cushing}` (model forecasts crude only), `eia.interval_80_low/high` and `historical_direction_accuracy`/`historical_mae`/`consensus_mae` (no confidence interval or rolling accuracy tracking), `regime.switch_trigger` and `returns.condition_description` (narrative text), `returns.median_return`/`skewness` (the 4-bucket categorical return distribution has no resolution for continuous moments). Everything else in the nested contract - including `regime.duration_weeks`/`historical_avg_duration`/`switch_probability_4w`, SHAP-derived `shap_drivers`, and `returns.buckets`/`downside_prob`/`tail_prob`/`upside_prob` - is real, not placeholder.
+- **`GET /api/reports/daily/{role}` ignores `role` for data purposes** - every role gets the same full nested report; `role` only exists so the URL matches what each frontend view fetches. There is no per-role filtering or authorization at the API layer (there's no auth at all - see the frontend doc's Role Model section).
