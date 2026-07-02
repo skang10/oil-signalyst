@@ -68,7 +68,7 @@ export default function TraderView({ report }: { report: DailyReport }) {
           </div>
           <div className="flex items-end gap-1 h-[56px] mb-2">
             {prices.map((p, i) => {
-              const up = i === 0 ? true : p >= prices[i - 1];
+              const up = i === 0 ? false : p >= prices[i - 1];
               const h = 14 + ((p - min) / range) * 36;
               return (
                 <div key={labels[i]} className="flex-1 flex flex-col items-center gap-[3px]">
@@ -97,11 +97,11 @@ export default function TraderView({ report }: { report: DailyReport }) {
           <div className="flex gap-4 pt-2 border-t border-border">
             <div>
               <div className="text-[10px] text-text-muted">5d High</div>
-              <div className="text-[13px] font-medium">{formatUsd(max, 1)}</div>
+              <div className="text-[13px] font-medium">{formatUsd(trader.price_5d_high, 1)}</div>
             </div>
             <div>
               <div className="text-[10px] text-text-muted">5d Low</div>
-              <div className="text-[13px] font-medium">{formatUsd(min, 1)}</div>
+              <div className="text-[13px] font-medium">{formatUsd(trader.price_5d_low, 1)}</div>
             </div>
             <div>
               <div className="text-[10px] text-text-muted">Brent Spread</div>

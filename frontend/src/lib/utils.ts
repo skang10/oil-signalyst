@@ -19,6 +19,12 @@ export function formatUsd(value: number, digits = 2): string {
   return `$${value.toFixed(digits)}`
 }
 
+/** ISO date (YYYY-MM-DD) -> short month label, e.g. "Nov '25". */
+export function formatShortMonth(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }).replace(' ', " '")
+}
+
 /** Last N business days (Mon-Fri) ending at `endDate` (inclusive), formatted M/D. */
 export function lastBusinessDayLabels(endDate: string, n: number): string[] {
   const labels: string[] = []

@@ -6,9 +6,9 @@ import AgentMessage from './AgentMessage';
 import { cn } from '@/lib/utils';
 
 const QUICK_ACTIONS = [
-  'Evaluate signals first, then retrain returns model',
-  'Retrain directly without adding new signals',
-  'Analyse AIS VLCC signal IC stability',
+  { label: 'Evaluate AIS signal', fill: 'Analyse AIS VLCC signal and evaluate for feature pool' },
+  { label: 'Full retrain', fill: 'Retrain all three models with latest data' },
+  { label: "Explain today's forecast", fill: "Explain today's Regime forecast drivers" },
 ];
 
 export default function AgentPanel({ onClose }: { onClose: () => void }) {
@@ -37,8 +37,6 @@ export default function AgentPanel({ onClose }: { onClose: () => void }) {
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }
-
-  const showQuickActions = messages.length === 1;
 
   return (
     <div
@@ -87,21 +85,6 @@ export default function AgentPanel({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      {showQuickActions && (
-        <div className="flex flex-col gap-[5px] p-[0_12px_10px]">
-          {QUICK_ACTIONS.map((q) => (
-            <button
-              key={q}
-              type="button"
-              onClick={() => sendMessage(q)}
-              className="text-left p-[6px_10px] text-[12px] border border-border rounded-default bg-surface-1 text-text-secondary cursor-pointer hover:bg-surface-0 hover:text-text-primary"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="border-t border-border p-[10px_12px] shrink-0 bg-surface-1">
         <div className="flex gap-2 items-end">
           <textarea
@@ -132,7 +115,22 @@ export default function AgentPanel({ onClose }: { onClose: () => void }) {
             <IconSend size={15} stroke={1.75} />
           </button>
         </div>
-        <div className="text-[11px] text-text-muted mt-[6px]">Enter to send · Shift+Enter for newline</div>
+        <div className="text-[11px] text-text-muted mt-[6px] flex gap-3 flex-wrap items-center">
+          <span>Quick actions:</span>
+          {QUICK_ACTIONS.map((q) => (
+            <button
+              key={q.label}
+              type="button"
+              onClick={() => {
+                setInput(q.fill);
+                textareaRef.current?.focus();
+              }}
+              className="bg-none border border-border rounded-[20px] px-[10px] py-[3px] text-[11px] text-text-secondary cursor-pointer hover:bg-surface-2"
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

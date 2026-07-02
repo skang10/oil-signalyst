@@ -13,6 +13,8 @@ export interface DailyReport {
     stop_loss_pct: number;
     expected_return: number;
     price_5d_history: number[];
+    price_5d_high: number;
+    price_5d_low: number;
     brent_wti_spread: number;
     cot_net_percentile: number;
     ovx: number;

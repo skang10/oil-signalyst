@@ -1,11 +1,12 @@
 import { useChart } from '@/hooks/useChart';
+import { formatShortMonth } from '@/lib/utils';
 import { baseOptions, GRID_COLOR, MUTED } from './chart-base';
 
 export default function RollingICChart({ series, dates }: { series: number[]; dates: string[] }) {
   const canvasRef = useChart(() => ({
     type: 'line',
     data: {
-      labels: dates.map((d) => d.slice(0, 7)),
+      labels: dates.map(formatShortMonth),
       datasets: [
         {
           data: series,
