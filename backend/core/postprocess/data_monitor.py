@@ -43,6 +43,22 @@ def feature_coverage_7d(as_of: date | None = None) -> float:
     return round(float(covered / len(recent.columns)), 4)
 
 
+def feature_missing_rates(as_of: date | None = None) -> list[dict]:
+    """Per-feature missing rate (%) over the trailing coverage window, for
+    the Data Monitor page's per-feature bar list."""
+    matrix = _latest_feature_matrix(as_of)
+    if matrix is None or matrix.empty:
+        return []
+    recent = matrix.tail(FEATURE_COVERAGE_WINDOW)
+    if recent.empty:
+        return []
+    missing = (1 - recent.notna().mean()) * 100
+    return [
+        {"name": name, "pct": round(float(pct), 1)}
+        for name, pct in missing.sort_values(ascending=False).items()
+    ]
+
+
 def data_source_status(as_of: date | None = None) -> list[dict]:
     """Per-source freshness status.
 

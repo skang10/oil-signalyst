@@ -38,6 +38,15 @@ def _historical_segment_durations(regime: str) -> list[int]:
     return segments.loc[segments["first"] == regime, "count"].tolist()
 
 
+def historical_avg_duration_weeks(regime: str) -> float:
+    """Mean trading-day duration of historical segments of `regime` in
+    REGIME_TRANSITIONS, in weeks. Same source data as estimate_switch_probability."""
+    durations = _historical_segment_durations(regime)
+    if not durations:
+        return 0.0
+    return round(sum(durations) / len(durations) / TRADING_DAYS_PER_WEEK, 1)
+
+
 async def estimate_switch_probability(current_regime: str, horizon_weeks: int = 4) -> float:
     """Empirical probability the regime switches within `horizon_weeks`, given
     how long it has already persisted, estimated from historical segments of

@@ -39,7 +39,9 @@ def predict_eia(artifact: dict, features, recent_inventory=None) -> dict:
     point = float(model.predict(x)[0])
     consensus = 0.0
     if recent_inventory is not None and len(recent_inventory.dropna()) >= 5:
-        consensus = float(recent_inventory.dropna().diff().tail(4).mean())
+        # recent_inventory is raw EIA thousand-barrel data; divide by 1000 to
+        # match the model's million-barrel scale (see build_eia_labels).
+        consensus = float(recent_inventory.dropna().diff().tail(4).mean() / 1000)
     return {
         "crude": round(point, 2),
         "market_consensus": round(consensus, 2),

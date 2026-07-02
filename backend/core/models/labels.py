@@ -23,7 +23,10 @@ def build_eia_labels(
         return pd.Series(dtype=float)
 
     published = crude[crude.ne(crude.shift())]
-    changes = published.diff()
+    # EIA reports crude_inventory (PET.WCRSTUS1.W) in thousand barrels; divide
+    # by 1000 so the model trains/predicts directly in million barrels, the
+    # unit every consumer (report, UI, MAE metric) expects.
+    changes = published.diff() / 1000
     next_change = changes.shift(-1).dropna()
     daily_index = pd.date_range(start, end, freq="D")
     return next_change.reindex(daily_index, method="bfill").rename("eia_change")

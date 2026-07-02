@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import models, reports, signals, training, users
 from api.routes.health import router as health_router
@@ -28,6 +29,14 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="oil-signalyst", version="0.2.1", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        # Vite dev server only - this is a local single-user dev tool with no
+        # deployed frontend origin yet.
+        allow_origins=["http://localhost:5173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(health_router)
     app.include_router(reports.router)
     app.include_router(models.router)

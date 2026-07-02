@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 import core.postprocess.report_assembler as report_assembler
-from api.routes.reports import _filter_by_role
+from core.postprocess.report_assembler import nest_daily_report
 
 
 def test_cot_net_percentile_returns_neutral_when_value_missing():
@@ -87,42 +87,39 @@ def sample_report() -> dict:
         "cot_net_percentile": 60.0,
         "price_5d_history": [70.0, 71.0, 72.0, 73.0, 75.0],
         "var_95": 0.3,
+        "shap_values": {"vix": 0.4, "ovx": -0.2},
+        "feature_signals": [
+            {"name": "vix", "value": 20.0, "direction": "bearish"},
+            {"name": "ovx", "value": 18.0, "direction": "bullish"},
+        ],
+        "regime_duration_weeks": 3,
+        "regime_historical_avg_duration_weeks": 8.5,
+        "switch_prob_4w": 0.22,
     }
 
 
-class _FakeUser:
-    exposure_barrels = 250_000
+def test_trader_block_exposes_all_new_fields(sample_report):
+    result = nest_daily_report(sample_report, "trader", exposure_barrels=250_000, r3_max_drawdown=-0.42)
+
+    trader = result["trader"]
+    assert trader["signal"] == "LONG"
+    assert trader["kelly_position"] == 0.3
+    assert trader["stop_loss_price"] == 70.0
+    assert trader["stop_loss_pct"] == 0.0667
+    assert trader["expected_return"] == 0.05
+    assert trader["price_5d_history"] == [70.0, 71.0, 72.0, 73.0, 75.0]
+    assert trader["brent_wti_spread"] == 3.5
+    assert trader["cot_net_percentile"] == 60.0
+    assert trader["ovx"] == 20.0
 
 
-@pytest.mark.asyncio
-async def test_trader_role_exposes_all_new_fields(sample_report):
-    result = await _filter_by_role(sample_report, "trader", _FakeUser())
+def test_risk_block_exposes_all_new_fields(sample_report):
+    result = nest_daily_report(sample_report, "risk", exposure_barrels=250_000, r3_max_drawdown=-0.42)
 
-    assert result["signal"] == "LONG"
-    assert result["kelly_position"] == 0.3
-    assert result["stop_loss_price"] == 70.0
-    assert result["stop_loss_pct"] == 0.0667
-    assert result["expected_return"] == 0.05
-    assert result["price_5d_history"] == [70.0, 71.0, 72.0, 73.0, 75.0]
-    assert result["brent_wti_spread"] == 3.5
-    assert result["cot_net_percentile"] == 60.0
-    assert result["ovx"] == 20.0
-
-
-@pytest.mark.asyncio
-async def test_risk_role_exposes_all_new_fields(sample_report, monkeypatch):
-    import api.routes.reports as reports_module
-
-    async def fake_r3_drawdown():
-        return -0.42
-
-    monkeypatch.setattr(reports_module, "get_r3_max_drawdown", fake_r3_drawdown)
-
-    result = await _filter_by_role(sample_report, "risk", _FakeUser())
-
-    assert result["var_95"] == 0.3
-    assert result["cvar_95"] == -0.09
-    assert result["current_exposure_mbbls"] == 0.25
-    assert result["hedge_ratio"] == 0.4
-    assert result["recommended_hedge_ratio"] == 0.4
-    assert result["r3_historical_max_drawdown"] == -0.42
+    risk = result["risk"]
+    assert risk["var_95"] == 0.3
+    assert risk["cvar_95"] == -0.09
+    assert risk["current_exposure_mbbls"] == 0.25
+    assert risk["hedge_ratio"] == 0.4
+    assert risk["recommended_hedge_ratio"] == 0.4
+    assert risk["r3_historical_max_drawdown"] == -0.42

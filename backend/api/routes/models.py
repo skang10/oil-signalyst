@@ -5,7 +5,11 @@ from sqlalchemy import desc, select, text
 
 from api.dependencies import DbSession
 from core.models.model_registry import ModelRegistry
-from core.postprocess.data_monitor import data_source_status, feature_coverage_7d
+from core.postprocess.data_monitor import (
+    data_source_status,
+    feature_coverage_7d,
+    feature_missing_rates,
+)
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD
 from db.models import FeatureSnapshot, ModelVersion, TrainJob
 
@@ -53,6 +57,13 @@ async def get_model_status(db: DbSession) -> dict:
         "models": models_out,
         "data_sources": data_source_status(),
         "feature_coverage_7d": feature_coverage_7d(),
+        "feature_missing_rates": feature_missing_rates(),
+        "feature_psi": [
+            {"name": name, "psi": round(value, 4)}
+            for name, value in sorted(
+                (psi_scores or {}).items(), key=lambda item: item[1], reverse=True
+            )
+        ],
     }
 
 

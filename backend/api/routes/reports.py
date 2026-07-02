@@ -1,15 +1,26 @@
-from datetime import date
+from datetime import date, timedelta
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
 
 from api.dependencies import CurrentUser, DbSession
+from core.logging import get_logger
+from core.models.labels import build_eia_labels
 from core.models.regime import dominant_regime
-from core.postprocess.report_assembler import assemble_daily_report
+from core.postprocess.regime_stats import estimate_switch_probability, get_regime_duration
+from core.postprocess.report_assembler import (
+    assemble_daily_report,
+    build_history_detail,
+    build_history_response,
+    nest_daily_report,
+)
 from core.postprocess.stress_test import get_r3_max_drawdown, run_stress_test
 from db.crud import get_recent_predictions
-from db.models import FeatureSnapshot, Prediction, User
+from db.models import FeatureSnapshot, Prediction
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 VALID_ROLES = {"trader", "risk", "researcher", "ds"}
@@ -20,20 +31,26 @@ async def get_daily_report(role: str, db: DbSession, user: CurrentUser) -> dict:
     if role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Unknown report role: {role}")
 
+    # Serve the most recent prediction regardless of whether it's dated
+    # exactly today - the daily pipeline may not have run yet (weekends, a
+    # missed cron tick), and the frontend has no representation for an
+    # empty/no-prediction state. Its own "date" field tells the UI how stale
+    # this is.
     row = await db.execute(
         select(Prediction)
         .options(selectinload(Prediction.model_version))
-        .where(Prediction.date == date.today())
-        .order_by(desc(Prediction.created_at))
+        .order_by(desc(Prediction.date), desc(Prediction.created_at))
         .limit(1)
     )
     prediction = row.scalar_one_or_none()
     if prediction is None:
-        return {"status": "no_prediction", "date": str(date.today())}
+        raise HTTPException(status_code=503, detail="No predictions available yet")
 
     snapshot = await _get_snapshot(db, prediction)
-    full = await assemble_daily_report(prediction, snapshot)
-    return await _filter_by_role(full, role, user)
+    raw = await assemble_daily_report(prediction, snapshot)
+    exposure_barrels = user.exposure_barrels or 100_000
+    r3_max_drawdown = await get_r3_max_drawdown()
+    return nest_daily_report(raw, role, exposure_barrels, r3_max_drawdown)
 
 
 @router.get("/stress")
@@ -47,9 +64,10 @@ async def get_history(
     db: DbSession,
     user: CurrentUser,
     days: int = Query(default=30, le=365),
-) -> list[dict]:
+) -> dict:
     del user
-    return [_history_row(prediction) for prediction in await get_recent_predictions(db, days)]
+    predictions = await get_recent_predictions(db, days)
+    return build_history_response(predictions)
 
 
 @router.get("/history/{prediction_date}")
@@ -66,11 +84,30 @@ async def get_prediction_detail(prediction_date: date, db: DbSession, user: Curr
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
     snapshot = await _get_snapshot(db, prediction)
-    full = await assemble_daily_report(prediction, snapshot)
-    full["actual_return"] = prediction.actual_return
-    full["outcome_correct"] = prediction.outcome_correct
-    full["feature_snapshot"] = snapshot.features if snapshot else None
-    return full
+    regime_probs = prediction.regime_probs or {}
+    dominant = dominant_regime(regime_probs)
+    duration_weeks = (await get_regime_duration(dominant)) // 5
+    switch_probability_4w = await estimate_switch_probability(dominant)
+    eia_actual_mb = _lookup_eia_actual(prediction_date)
+    return build_history_detail(
+        prediction, snapshot, duration_weeks, switch_probability_4w, eia_actual_mb
+    )
+
+
+def _lookup_eia_actual(prediction_date: date) -> float | None:
+    """Real realized EIA change for this prediction's date, using the same
+    next-published-change alignment build_eia_labels trains on. None if the
+    outcome hasn't published yet (too recent) or history doesn't reach back
+    that far."""
+    try:
+        window_start = prediction_date - timedelta(days=21)
+        window_end = prediction_date + timedelta(days=21)
+        series = build_eia_labels(str(window_start), str(window_end))
+        value = series.get(pd.Timestamp(prediction_date))
+    except Exception as exc:
+        logger.warning("History EIA actual lookup failed", extra={"error": str(exc)})
+        return None
+    return round(float(value), 2) if value is not None and pd.notna(value) else None
 
 
 async def _get_snapshot(db: DbSession, prediction: Prediction) -> FeatureSnapshot | None:
@@ -82,61 +119,3 @@ async def _get_snapshot(db: DbSession, prediction: Prediction) -> FeatureSnapsho
     return row.scalar_one_or_none()
 
 
-async def _filter_by_role(report: dict, role: str, user: User) -> dict:
-    base_keys = [
-        "date",
-        "price",
-        "dominant_regime",
-        "regime_probs",
-        "return_dist",
-        "eia_forecast",
-        "decision",
-    ]
-    base = {key: report[key] for key in base_keys}
-    if role == "trader":
-        decision = report["decision"]
-        return {
-            **base,
-            "signal": decision.get("direction", "FLAT"),
-            "kelly_position": decision.get("kelly_position", 0.0),
-            "stop_loss_price": decision.get("stop_loss"),
-            "stop_loss_pct": decision.get("stop_loss_pct", 0.0),
-            "expected_return": decision.get("expected_ret", 0.0),
-            "price_5d_history": report["price_5d_history"],
-            "brent_wti_spread": report["brent_wti_spread"],
-            "cot_net_percentile": report["cot_net_percentile"],
-            "ovx": report["ovx"],
-        }
-    if role == "risk":
-        decision = report["decision"]
-        exposure_barrels = user.exposure_barrels or 100_000
-        hedge_ratio = decision.get("hedge_ratio", 0.0)
-        return {
-            **base,
-            "var_95": report["var_95"],
-            "cvar_95": decision.get("cvar_95", 0.0),
-            "current_exposure_mbbls": round(exposure_barrels / 1_000_000, 4),
-            "hedge_ratio": hedge_ratio,
-            "recommended_hedge_ratio": hedge_ratio,
-            "r3_historical_max_drawdown": await get_r3_max_drawdown(),
-        }
-    if role == "researcher":
-        return {
-            **base,
-            "feature_signals": report["feature_signals"],
-            "regime_duration_weeks": report["regime_duration_weeks"],
-            "switch_prob_4w": report["switch_prob_4w"],
-        }
-    return report
-
-
-def _history_row(prediction: Prediction) -> dict:
-    regime_probs = prediction.regime_probs or {}
-    return {
-        "date": str(prediction.date),
-        "dominant_regime": dominant_regime(regime_probs),
-        "return_dist": prediction.return_dist,
-        "eia_forecast": prediction.eia_forecast.get("crude") if prediction.eia_forecast else None,
-        "actual_return": prediction.actual_return,
-        "outcome_correct": prediction.outcome_correct,
-    }
