@@ -34,4 +34,13 @@ export const modelStatusFixture: ModelStatus = {
     { name: 'AIS', status: 'delayed', lag_hours: 26, last_updated: '2026-06-30T16:00:00Z' },
   ],
   feature_coverage_7d: 0.986,
+  feature_missing_rates: [
+    { name: 'crude_inv_dev', pct: 0 },
+    { name: 'spec_net_pct', pct: 0.03 },
+    { name: 'ais_vlcc_count', pct: 0.09 },
+  ],
+  feature_psi: [
+    { name: 'curve_slope_zscore', psi: 0.06 },
+    { name: 'ret_20d', psi: 0.22 },
+  ],
 };

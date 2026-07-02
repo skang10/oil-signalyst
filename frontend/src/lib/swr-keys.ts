@@ -8,4 +8,5 @@ export const swrKeys = {
   signals: () => '/api/signals',
   signalEvaluation: (name: string) => `/api/signals/evaluate/${name}`,
   trainStatus: (jobId: string) => `/api/train/status/${jobId}`,
+  trainLog: (jobId: string) => `/api/train/log/${jobId}`,
 };

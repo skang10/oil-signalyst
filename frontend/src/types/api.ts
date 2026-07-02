@@ -103,6 +103,14 @@ export interface ModelStatus {
     last_updated: string;
   }[];
   feature_coverage_7d: number;
+  /**
+   * Not in spec §9's ModelStatus - added for Data Monitor's "Feature Missing
+   * Rate" and "Feature Distribution Drift (PSI)" bar lists (§7.4), which the
+   * HTML prototype requires but the spec's type omits (same gap class as
+   * eia.shap_drivers / regime.shap_drivers).
+   */
+  feature_missing_rates: { name: string; pct: number }[];
+  feature_psi: { name: string; psi: number }[];
 }
 
 export interface TrainJob {
