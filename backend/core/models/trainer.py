@@ -1,11 +1,12 @@
 import os
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from numbers import Number
 
 import joblib
 import mlflow
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from core.config_paths import FEATURES_DIR, MLRUNS_DIR, MODELS_DIR
 from core.logging import get_logger
@@ -15,7 +16,7 @@ from core.models.model_registry import ModelRegistry
 from core.models.regime import build_regime_model, predict_regime_batch
 from core.models.returns import build_returns_model
 from db.database import get_db
-from db.models import ModelVersion
+from db.models import ModelVersion, TrainJob
 from features.engine import FeatureEngine
 
 logger = get_logger(__name__)
@@ -67,7 +68,10 @@ def _align(features: pd.DataFrame, target: pd.Series) -> tuple[pd.DataFrame, pd.
     return x.loc[mask], y.loc[mask]
 
 
-async def run_full_training(triggered_by_user_id: int | None = None) -> dict:
+async def run_full_training(
+    triggered_by_user_id: int | None = None,
+    on_progress: Callable[[str], Awaitable[None]] | None = None,
+) -> dict:
     del triggered_by_user_id
     _init_mlflow()
     train_x = load_features(TRAIN_START, TRAIN_END)
@@ -139,6 +143,8 @@ async def run_full_training(triggered_by_user_id: int | None = None) -> dict:
                 extra_artifact=extra_artifact,
             )
             mlflow.log_artifact(results[model_type]["file_path"])
+            if on_progress:
+                await on_progress(f"{model_type} model trained: {metrics_val}")
 
     return results
 
@@ -186,4 +192,58 @@ async def _save_model(
 
     ModelRegistry.invalidate(model_type)
     logger.info("Model trained", extra={"model_type": model_type, "metrics": metrics_val})
-    return {"file_path": str(file_path), "metrics": metrics_val}
+    return {
+        "file_path": str(file_path),
+        "metrics": metrics_val,
+        "version": version,
+        "mlflow_run_id": mlflow_run_id,
+    }
+
+
+async def _capture_active_metrics() -> dict:
+    async with get_db() as db:
+        rows = (
+            await db.execute(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
+        ).scalars().all()
+    return {version.model_type: (version.metrics_oos or {}) for version in rows}
+
+
+def _ts() -> str:
+    return datetime.now(UTC).strftime("%H:%M:%S")
+
+
+async def run_full_training_with_log(job_id: str, triggered_by_user_id: int | None = None) -> dict:
+    """Wraps run_full_training() with per-milestone log lines appended to
+    TrainJob.log_lines (for the /api/train/log/{job_id} SSE stream), and
+    returns a structured result comparing pre-training (old) vs post-training
+    (new) metrics for each model type.
+    """
+
+    async def log(line: str) -> None:
+        async with get_db() as db:
+            job = await db.get(TrainJob, job_id)
+            if job:
+                job.log_lines = (job.log_lines or []) + [f"[{_ts()}] {line}"]
+                db.add(job)
+
+    old_metrics = await _capture_active_metrics()
+    await log("Starting training run...")
+    result = await run_full_training(triggered_by_user_id=triggered_by_user_id, on_progress=log)
+    await log("Training run complete.")
+
+    new_metrics = {model_type: info["metrics"] for model_type, info in result.items()}
+    old_returns_brier = (old_metrics.get("returns") or {}).get("brier")
+    new_returns_brier = (new_metrics.get("returns") or {}).get("brier")
+    improvement_pct = None
+    if old_returns_brier:
+        improvement_pct = round(
+            (new_returns_brier - old_returns_brier) / old_returns_brier * 100, 1
+        )
+
+    return {
+        "old_metrics": old_metrics,
+        "new_metrics": new_metrics,
+        "improvement_pct": improvement_pct,
+        "versions": {model_type: info["version"] for model_type, info in result.items()},
+        "mlflow_run_id": (result.get("returns") or {}).get("mlflow_run_id"),
+    }
