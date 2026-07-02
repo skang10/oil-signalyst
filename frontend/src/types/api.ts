@@ -130,7 +130,7 @@ export interface TrainJob {
 
 export interface TrainParams {
   model_types: string[];
-  cutoff_date: string;
+  cutoff_date?: string;
   cv_folds: number;
   gap_days: number;
 }

@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import useSWR, { mutate } from 'swr';
-import { useEffect, useRef } from 'react';
-import { api } from '@/lib/api';
+import { useEffect } from 'react';
+import { api, BASE } from '@/lib/api';
 import { swrKeys } from '@/lib/swr-keys';
 import type { TrainJob, TrainParams } from '@/types/api';
 
@@ -20,36 +20,27 @@ export function useTrainStatus(jobId: string | null) {
 }
 
 /**
- * Public signature matches spec §5.2's SSE-based useTrainLog exactly, but
- * Phase 3 drives it via polling an in-memory mock log array instead of a
- * real EventSource (locked decision - sidesteps MSW/Service-Worker SSE
- * compatibility risk, zero-change swap to real SSE in Phase 4).
+ * Reads the backend's real SSE stream (GET /api/train/log/{job_id}, a
+ * text/event-stream of `data: <line>` frames ending in a `[done:status]`
+ * sentinel). Closes explicitly on that sentinel rather than letting the
+ * stream end naturally - EventSource auto-reconnects by default when a
+ * connection closes, which would replay the whole log from the top.
  */
 export function useTrainLog(jobId: string | null, onLine: (line: string) => void) {
-  const seenCount = useRef(0);
-
   useEffect(() => {
-    seenCount.current = 0;
     if (!jobId) return;
 
-    let cancelled = false;
-    const poll = async () => {
-      if (cancelled) return;
-      try {
-        const { lines } = await api.get<{ lines: string[] }>(swrKeys.trainLog(jobId));
-        for (let i = seenCount.current; i < lines.length; i++) onLine(lines[i]);
-        seenCount.current = lines.length;
-      } catch {
-        // job not found yet / transient - keep polling
+    const source = new EventSource(`${BASE}${swrKeys.trainLog(jobId)}`);
+    source.onmessage = (event) => {
+      if (event.data.startsWith('[done:') || event.data === '[job not found]') {
+        source.close();
+        return;
       }
+      onLine(event.data);
     };
+    source.onerror = () => source.close();
 
-    const interval = setInterval(poll, 500);
-    poll();
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    return () => source.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 }

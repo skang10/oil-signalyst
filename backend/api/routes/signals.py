@@ -1,5 +1,5 @@
 import yaml
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import desc, select
 
 from api.dependencies import DbSession
@@ -17,6 +17,19 @@ _RECOMMENDATION_BY_SCAN_STATUS = {"candidate": "add", "watch": "watch", "rejecte
 
 def _label(name: str) -> str:
     return name.replace("_", " ").title()
+
+
+def _lifecycle_status(signal_name: str, scan_status: str, active_names: set[str]) -> str:
+    """"active"/"ignored"/"candidate" is the feature's adoption lifecycle (is
+    it live in the model?), distinct from the scanner's scan-quality status
+    (candidate/watch/rejected) - the two get conflated onto one field name by
+    the frontend contract, so derive lifecycle from membership in the real
+    active feature list."""
+    if signal_name in active_names:
+        return "active"
+    if scan_status == "rejected":
+        return "ignored"
+    return "candidate"
 
 
 @router.get("")
@@ -46,17 +59,6 @@ async def _candidate_signals(db: DbSession, active_names: set[str]) -> list[dict
         ic_scores = evaluation.ic_scores or {}
         ic5 = (ic_scores.get("5") or {}).get("val_ic", 0.0)
         ic20 = (ic_scores.get("20") or {}).get("val_ic", 0.0)
-        # "active"/"ignored"/"candidate" is the feature's adoption lifecycle
-        # (is it live in the model?), distinct from the scanner's scan-quality
-        # status (candidate/watch/rejected) - the two get conflated onto one
-        # field name by the frontend contract, so derive lifecycle from
-        # membership in the real active feature list.
-        if evaluation.signal_name in active_names:
-            lifecycle_status = "active"
-        elif evaluation.status == "rejected":
-            lifecycle_status = "ignored"
-        else:
-            lifecycle_status = "candidate"
         results.append(
             {
                 "name": evaluation.signal_name,
@@ -65,7 +67,7 @@ async def _candidate_signals(db: DbSession, active_names: set[str]) -> list[dict
                 "ic20": ic20,
                 "decay": evaluation.oos_decay,
                 "coverage": evaluation.coverage,
-                "status": lifecycle_status,
+                "status": _lifecycle_status(evaluation.signal_name, evaluation.status, active_names),
                 "recommendation": _RECOMMENDATION_BY_SCAN_STATUS.get(evaluation.status, "reject"),
             }
         )
@@ -82,23 +84,37 @@ async def get_signal_evaluation(signal_name: str, db: DbSession) -> dict:
     )
     evaluation = row.scalar_one_or_none()
     if not evaluation:
-        return {"error": "signal not found"}
+        raise HTTPException(status_code=404, detail="signal not found")
 
     charts = await build_signal_charts(signal_name)
     if charts is None:
-        return {"error": "signal not found in candidate config"}
+        raise HTTPException(status_code=404, detail="signal not found in candidate config")
+
+    active_names = {a["name"] for a in await _active_signals(db)}
+    ic_scores = evaluation.ic_scores or {}
+    price_history = charts["price_history"]
+    rolling_ic = charts["rolling_ic"]
 
     return {
         "name": signal_name,
-        "price_history": charts["price_history"],
-        "rolling_ic": charts["rolling_ic"],
-        "oos_by_year": charts["oos_by_year"],
-        # Richer than a flat Record<string, number>: per-lag train/val IC and
-        # both raw and Bonferroni-corrected p-values, from the signal scanner.
-        "ic_scores": evaluation.ic_scores,
-        "oos_decay": evaluation.oos_decay,
+        "label": _label(signal_name),
+        "ic5": (ic_scores.get("5") or {}).get("val_ic", 0.0),
+        # ic10 has no scanner equivalent (IC_LAGS_DAYS tests 5/20/60, not 10) -
+        # see build_signal_charts's own ic10 comment for why it's computed
+        # separately rather than stubbed.
+        "ic10": charts["ic10"],
+        "ic20": (ic_scores.get("20") or {}).get("val_ic", 0.0),
+        "decay": evaluation.oos_decay,
         "coverage": evaluation.coverage,
+        "status": _lifecycle_status(signal_name, evaluation.status, active_names),
         "recommendation": _RECOMMENDATION_BY_SCAN_STATUS.get(evaluation.status, "reject"),
+        "price": [p["price"] for p in price_history],
+        "signal": [p["signal"] for p in price_history],
+        "dates": [p["date"] for p in price_history],
+        "ic5_series": [p["ic_5d"] for p in rolling_ic],
+        "ic10_series": [p["ic_10d"] for p in rolling_ic],
+        "ic20_series": [p["ic_20d"] for p in rolling_ic],
+        "oos_years": charts["oos_by_year"],
     }
 
 

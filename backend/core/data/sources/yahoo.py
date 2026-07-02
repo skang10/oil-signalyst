@@ -24,7 +24,13 @@ class YahooSource(BaseSource):
             series = data[field][cfg["ticker"]]
         else:
             series = data[field]
-        series = series.squeeze()
+        # Both branches above already select a single column, i.e. a Series -
+        # unconditional .squeeze() used to collapse a single-row *Series*
+        # (a narrow date range, e.g. a recent cutoff_date) down to a bare
+        # scalar, which has no .index. Only squeeze if it's still a
+        # DataFrame (defensive fallback for shapes not covered above).
+        if isinstance(series, pd.DataFrame):
+            series = series.squeeze()
         series.index = pd.to_datetime(series.index).astype("datetime64[ns]")
         series.name = cfg["ticker"]
         return series

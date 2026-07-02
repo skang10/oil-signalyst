@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from api.dependencies import CurrentUser, DbSession
 from core.models.trainer import run_full_training_with_log
@@ -15,12 +16,25 @@ router = APIRouter(prefix="/api/train", tags=["training"])
 SSE_POLL_INTERVAL_SECONDS = 0.5
 
 
+class TrainStartRequest(BaseModel):
+    model_types: list[str] = ["regime", "eia", "returns"]
+    cutoff_date: str | None = None
+    # Not yet implemented - this project trains a single train/val split, not
+    # real k-fold cross-validation. Accepted so the frontend's config form
+    # doesn't 422; silently ignored rather than silently wrong.
+    cv_folds: int | None = None
+    gap_days: int | None = None
+
+
 @router.post("/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_training(
-    background_tasks: BackgroundTasks, db: DbSession, user: CurrentUser
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+    user: CurrentUser,
+    body: TrainStartRequest = TrainStartRequest(),
 ) -> dict:
     job_id = str(uuid.uuid4())[:8]
-    model_types = ["regime", "eia", "returns"]
+    model_types = body.model_types or ["regime", "eia", "returns"]
     db.add(TrainJob(id=job_id, status="queued", model_types=model_types, triggered_by=user.id))
     # Must actually commit (not just flush) before the background task
     # starts: BackgroundTasks run before this request's own DbSession
@@ -41,7 +55,12 @@ async def start_training(
                 session.add(job)
 
         try:
-            result = await run_full_training_with_log(job_id=job_id, triggered_by_user_id=user.id)
+            result = await run_full_training_with_log(
+                job_id=job_id,
+                triggered_by_user_id=user.id,
+                model_types=model_types,
+                cutoff_date=body.cutoff_date,
+            )
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)
                 if job:

@@ -29,6 +29,10 @@ VAL_END = "2024-12-31"
 MLFLOW_EXPERIMENT = "oil-signalyst"
 SHAP_BACKGROUND_SIZE = 30
 
+# Mirrors api/routes/models.py's PRIMARY_METRIC_KEY - duplicated rather than
+# imported since core/ shouldn't depend on api/.
+PRIMARY_METRIC_KEY = {"regime": "accuracy", "eia": "mae", "returns": "brier"}
+
 
 def _init_mlflow() -> None:
     MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -71,23 +75,34 @@ def _align(features: pd.DataFrame, target: pd.Series) -> tuple[pd.DataFrame, pd.
 async def run_full_training(
     triggered_by_user_id: int | None = None,
     on_progress: Callable[[str], Awaitable[None]] | None = None,
+    model_types: list[str] | None = None,
+    cutoff_date: str | None = None,
 ) -> dict:
     del triggered_by_user_id
     _init_mlflow()
-    train_x = load_features(TRAIN_START, TRAIN_END)
-    val_x = load_features(VAL_START, VAL_END)
+    selected = model_types or ["regime", "eia", "returns"]
+    # cutoff_date shifts the train/val split boundary for a what-if backtest:
+    # train up to cutoff, validate on everything since. Real k-fold
+    # cross-validation (cv_folds/gap_days) isn't implemented - this project
+    # uses a single train/val split; see api/routes/training.py's start_training.
+    train_end = cutoff_date or TRAIN_END
+    val_start = str((pd.Timestamp(cutoff_date) + pd.Timedelta(days=1)).date()) if cutoff_date else VAL_START
+    val_end = str(datetime.now(UTC).date()) if cutoff_date else VAL_END
+
+    train_x = load_features(TRAIN_START, train_end)
+    val_x = load_features(val_start, val_end)
     version = datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S")
     feature_version = FeatureEngine().feature_version
 
     labels = {
         "regime": (
-            build_regime_labels(TRAIN_START, TRAIN_END),
-            build_regime_labels(VAL_START, VAL_END),
+            build_regime_labels(TRAIN_START, train_end),
+            build_regime_labels(val_start, val_end),
         ),
-        "eia": (build_eia_labels(TRAIN_START, TRAIN_END), build_eia_labels(VAL_START, VAL_END)),
+        "eia": (build_eia_labels(TRAIN_START, train_end), build_eia_labels(val_start, val_end)),
         "returns": (
-            build_return_bucket_labels(TRAIN_START, TRAIN_END),
-            build_return_bucket_labels(VAL_START, VAL_END),
+            build_return_bucket_labels(TRAIN_START, train_end),
+            build_return_bucket_labels(val_start, val_end),
         ),
     }
     builders = {
@@ -98,10 +113,30 @@ async def run_full_training(
 
     results = {}
     regime_model = None
-    for model_type in ("regime", "eia", "returns"):
+    if "returns" in selected and "regime" not in selected:
+        # Returns model needs regime probabilities as input features even
+        # when regime itself isn't being retrained this run - fall back to
+        # the currently deployed regime model.
+        regime_model = (await ModelRegistry.get_active("regime"))["model"]
+
+    for model_type in selected:
         builder = builders[model_type]
         x_train, y_train = _align(train_x, labels[model_type][0])
         x_val, y_val = _align(val_x, labels[model_type][1])
+
+        if x_train.empty or x_val.empty:
+            # Forward-looking labels (eia/returns) need N trailing days of
+            # future data to compute - a cutoff_date too close to "today"
+            # leaves the validation window with zero labeled rows. Fail
+            # fast with a clear message instead of a cryptic TabPFN
+            # "x_test is empty" error deep inside predict_regime_batch.
+            empty_side = "training" if x_train.empty else "validation"
+            raise ValueError(
+                f"No {empty_side} rows available for '{model_type}' with "
+                f"train_end={train_end}, val_start={val_start}, val_end={val_end}. "
+                "Pick an earlier cutoff date - forward-looking labels need trailing "
+                "days of future data that don't exist yet this close to today."
+            )
 
         if model_type == "returns":
             x_train = pd.concat([x_train, predict_regime_batch(regime_model, x_train)], axis=1)
@@ -113,9 +148,9 @@ async def run_full_training(
                     "model_type": model_type,
                     "feature_version": feature_version,
                     "train_start": TRAIN_START,
-                    "train_end": TRAIN_END,
-                    "val_start": VAL_START,
-                    "val_end": VAL_END,
+                    "train_end": train_end,
+                    "val_start": val_start,
+                    "val_end": val_end,
                     "feature_count": len(x_train.columns),
                 }
             )
@@ -212,7 +247,12 @@ def _ts() -> str:
     return datetime.now(UTC).strftime("%H:%M:%S")
 
 
-async def run_full_training_with_log(job_id: str, triggered_by_user_id: int | None = None) -> dict:
+async def run_full_training_with_log(
+    job_id: str,
+    triggered_by_user_id: int | None = None,
+    model_types: list[str] | None = None,
+    cutoff_date: str | None = None,
+) -> dict:
     """Wraps run_full_training() with per-milestone log lines appended to
     TrainJob.log_lines (for the /api/train/log/{job_id} SSE stream), and
     returns a structured result comparing pre-training (old) vs post-training
@@ -226,14 +266,35 @@ async def run_full_training_with_log(job_id: str, triggered_by_user_id: int | No
                 job.log_lines = (job.log_lines or []) + [f"[{_ts()}] {line}"]
                 db.add(job)
 
-    old_metrics = await _capture_active_metrics()
+    old_metrics_by_type = await _capture_active_metrics()
     await log("Starting training run...")
-    result = await run_full_training(triggered_by_user_id=triggered_by_user_id, on_progress=log)
+    result = await run_full_training(
+        triggered_by_user_id=triggered_by_user_id,
+        on_progress=log,
+        model_types=model_types,
+        cutoff_date=cutoff_date,
+    )
     await log("Training run complete.")
 
-    new_metrics = {model_type: info["metrics"] for model_type, info in result.items()}
-    old_returns_brier = (old_metrics.get("returns") or {}).get("brier")
-    new_returns_brier = (new_metrics.get("returns") or {}).get("brier")
+    new_metrics_by_type = {model_type: info["metrics"] for model_type, info in result.items()}
+    # Frontend's TrainJob.result expects flat {model_type}_{primary_metric}
+    # keys (e.g. "returns_brier"), not the nested per-model-type dicts above -
+    # see ModelCompareCard.tsx's METRIC_LABEL map.
+    old_metrics = {
+        f"{model_type}_{PRIMARY_METRIC_KEY[model_type]}": (old_metrics_by_type.get(model_type) or {}).get(
+            PRIMARY_METRIC_KEY[model_type]
+        )
+        for model_type in result
+    }
+    new_metrics = {
+        f"{model_type}_{PRIMARY_METRIC_KEY[model_type]}": new_metrics_by_type[model_type].get(
+            PRIMARY_METRIC_KEY[model_type]
+        )
+        for model_type in result
+    }
+
+    old_returns_brier = (old_metrics_by_type.get("returns") or {}).get("brier")
+    new_returns_brier = (new_metrics_by_type.get("returns") or {}).get("brier")
     improvement_pct = None
     if old_returns_brier:
         improvement_pct = round(

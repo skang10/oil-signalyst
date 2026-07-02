@@ -18,7 +18,12 @@ export default function TrainConfigCard({
   isPending: boolean;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set(['returns']));
-  const [cutoffDate, setCutoffDate] = useState('2026-06-30');
+  // Left unset by default (uses the backend's full historical train/val
+  // split) rather than a fixed recent date - forward-looking labels (eia,
+  // returns) need trailing days of future data that don't exist yet for a
+  // cutoff too close to today, so any hardcoded "recent" default would
+  // reliably fail.
+  const [cutoffDate, setCutoffDate] = useState('');
   const [folds, setFolds] = useState(5);
   const [gapDays, setGapDays] = useState(20);
 
@@ -77,7 +82,14 @@ export default function TrainConfigCard({
       <button
         type="button"
         disabled={isPending || selected.size === 0}
-        onClick={() => onSubmit({ model_types: Array.from(selected), cutoff_date: cutoffDate, cv_folds: folds, gap_days: gapDays })}
+        onClick={() =>
+          onSubmit({
+            model_types: Array.from(selected),
+            cutoff_date: cutoffDate || undefined,
+            cv_folds: folds,
+            gap_days: gapDays,
+          })
+        }
         className="mt-3 px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-surface-2 border border-border-strong hover:bg-surface-1 disabled:opacity-50"
       >
         {isPending ? 'Starting...' : 'Start Training'}

@@ -37,6 +37,21 @@ def test_yahoo_source_returns_series():
     assert str(result.index.dtype) == "datetime64[ns]"
 
 
+def test_yahoo_source_single_row_range_stays_a_series():
+    """A narrow date range yielding exactly one trading day used to collapse
+    to a bare scalar via an unguarded .squeeze() - real bug hit by a short
+    cutoff_date training window (2026-07-01..2026-07-03)."""
+    import pandas as pd
+
+    from core.data.sources.yahoo import YahooSource
+
+    source = YahooSource()
+    result = source.fetch({"ticker": "CL=F", "field": "Close"}, "2024-01-02", "2024-01-03")
+
+    assert isinstance(result, pd.Series)
+    assert len(result) == 1
+
+
 def test_registry_fetch_all_returns_dataframe():
     _require_api_keys()
 

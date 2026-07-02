@@ -53,12 +53,17 @@ async def build_signal_charts(signal_name: str) -> dict | None:
 
     df = pd.concat([signal.rename("signal"), wti.rename("price")], axis=1).dropna()
     if df.empty:
-        return {"price_history": [], "rolling_ic": [], "oos_by_year": []}
+        return {"price_history": [], "rolling_ic": [], "oos_by_year": [], "ic10": 0.0}
 
     return {
         "price_history": _price_history(df),
         "rolling_ic": _rolling_ic(df),
         "oos_by_year": _oos_by_year(df),
+        # Full-history 10-day IC. The signal scanner's official Bonferroni
+        # run only tests lags [5, 20, 60] (core/signal_scanner.py::IC_LAGS_DAYS)
+        # - this is a separate, single-candidate ad-hoc calc for the Evaluate
+        # page's headline stat, not part of that corrected family of tests.
+        "ic10": _ic_mean(df["signal"], df["price"].pct_change(10).shift(-10)) or 0.0,
     }
 
 
@@ -77,14 +82,23 @@ def _price_history(df: pd.DataFrame) -> list[dict]:
 
 def _rolling_ic(df: pd.DataFrame) -> list[dict]:
     target_5d = df["price"].pct_change(5).shift(-5)
+    target_10d = df["price"].pct_change(10).shift(-10)
     target_20d = df["price"].pct_change(20).shift(-20)
     window = ROLLING_IC_WINDOW_DAYS
     points = []
     for end in range(window, len(df), ROLLING_IC_STEP_DAYS):
         sig_window = df["signal"].iloc[end - window : end]
         ic_5d = _ic_mean(sig_window, target_5d.iloc[end - window : end])
+        ic_10d = _ic_mean(sig_window, target_10d.iloc[end - window : end])
         ic_20d = _ic_mean(sig_window, target_20d.iloc[end - window : end])
-        points.append({"date": str(df.index[end - 1].date()), "ic_5d": ic_5d, "ic_20d": ic_20d})
+        points.append(
+            {
+                "date": str(df.index[end - 1].date()),
+                "ic_5d": ic_5d,
+                "ic_10d": ic_10d,
+                "ic_20d": ic_20d,
+            }
+        )
     return points
 
 
