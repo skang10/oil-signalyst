@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OilSignalyst — Signal Evaluation</title>
+<style>
+  :root {
+    --bg-page: #F7F6F2;
+    --surface-0: #F7F6F2;
+    --surface-1: #F1EFE8;
+    --surface-2: #FFFFFF;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.14);
+    --text-primary: #2C2C2A;
+    --text-secondary: #5F5E5A;
+    --text-muted: #888780;
+    --text-danger: #A32D2D;
+    --text-success: #3B6D11;
+    --text-warning: #854F0B;
+    --text-accent: #185FA5;
+    --text-pro: #534AB7;
+    --bg-danger: #FCEBEB;
+    --bg-success: #EAF3DE;
+    --bg-warning: #FAEEDA;
+    --bg-accent: #E6F1FB;
+    --border-danger: #F09595;
+    --border-success: #97C459;
+    --border-warning: #EF9F27;
+    --border-accent: #85B7EB;
+    --fill-accent: #378ADD;
+    --on-accent: #FFFFFF;
+    --radius: 8px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--surface-0); color: var(--text-primary); font-family: var(--font); font-size: 13px; line-height: 1.5; padding: 20px; }
+  .page-head { margin-bottom: 16px; }
+  .page-title { font-size: 15px; font-weight: 500; margin-bottom: 3px; }
+  .page-sub { font-size: 12px; color: var(--text-muted); }
+  .card { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
+  .card-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; margin-bottom: 10px; }
+  .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .t-green { background: var(--bg-success); color: var(--text-success); }
+  .t-yellow { background: var(--bg-warning); color: var(--text-warning); }
+  .t-blue { background: var(--bg-accent); color: var(--text-accent); }
+  .t-muted { background: var(--surface-1); color: var(--text-muted); border: 0.5px solid var(--border); }
+  .btn { padding: 6px 14px; font-size: 12px; border: 0.5px solid var(--border-strong); background: var(--surface-2); color: var(--text-primary); border-radius: var(--radius); cursor: pointer; font-family: var(--font); }
+  .btn:hover { background: var(--surface-1); }
+  .btn-primary { background: var(--fill-accent); color: var(--on-accent); border-color: var(--fill-accent); }
+  .btn-primary:hover { opacity: 0.9; }
+  .sig-selector { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .sig-btn { padding: 6px 14px; font-size: 12px; border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-secondary); border-radius: var(--radius); cursor: pointer; font-family: var(--font); }
+  .sig-btn.active { border-color: var(--border-accent); background: var(--bg-accent); color: var(--text-accent); font-weight: 500; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 14px; }
+  .stat-box { background: var(--surface-1); border-radius: var(--radius); padding: 10px 12px; }
+  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat-val { font-size: 18px; font-weight: 500; }
+
+  /* Charts */
+  canvas { display: block; width: 100%; }
+  .chart-wrap { position: relative; background: var(--surface-2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px 10px; margin-bottom: 12px; }
+  .chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .chart-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+  .chart-sub { font-size: 11px; color: var(--text-muted); }
+  .lag-pills { display: flex; gap: 4px; }
+  .lag-pill { padding: 3px 10px; font-size: 11px; border: 0.5px solid var(--border); border-radius: 20px; cursor: pointer; background: var(--surface-2); color: var(--text-muted); font-family: var(--font); }
+  .lag-pill.active { background: var(--fill-accent); color: var(--on-accent); border-color: var(--fill-accent); }
+  .legend-row { display: flex; gap: 16px; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-line { width: 16px; height: 2px; flex-shrink: 0; }
+
+  /* Signal list */
+  .sig-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--surface-1); border-radius: var(--radius); font-size: 12px; margin-bottom: 6px; cursor: pointer; border: 0.5px solid transparent; }
+  .sig-row:hover, .sig-row.active { border-color: var(--border-accent); background: var(--bg-accent); }
+  .sig-row.active { background: var(--bg-accent); }
+  .ic-bar-wrap { flex: 1; height: 6px; background: var(--surface-0); border-radius: 3px; overflow: hidden; }
+  .ic-bar { height: 100%; border-radius: 3px; background: var(--fill-accent); opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div class="page-title">Signal Evaluation</div>
+  <div class="page-sub">Select a candidate signal to view IC, OOS decay and historical charts</div>
+</div>
+
+<!-- Signal selector -->
+<div class="sig-selector">
+  <button class="sig-btn active" onclick="selectSig('satellite',this)">🛰 Satellite Tank Fill Rate</button>
+  <button class="sig-btn" onclick="selectSig('ais',this)">🚢 AIS VLCC Vessel Count</button>
+  <button class="sig-btn" onclick="selectSig('natgas',this)">📈 Natural Gas NG=F</button>
+  <button class="sig-btn" onclick="selectSig('copper',this)">🔩 Copper HG=F</button>
+</div>
+
+<!-- Stat summary -->
+<div class="stats-row" id="stats-row">
+  <div class="stat-box"><div class="stat-lbl">IC (lag 5d)</div><div class="stat-val" style="color:var(--text-success)">0.31</div></div>
+  <div class="stat-box"><div class="stat-lbl">IC (lag 20d)</div><div class="stat-val" style="color:var(--text-success)">0.28</div></div>
+  <div class="stat-box"><div class="stat-lbl">OOS decay</div><div class="stat-val" style="color:var(--text-success)">18%</div></div>
+  <div class="stat-box"><div class="stat-lbl">Coverage</div><div class="stat-val">94%</div></div>
+  <div class="stat-box"><div class="stat-lbl">Recommendation</div><div class="stat-val"><span class="tag t-green">Recommended</span></div></div>
+</div>
+
+<!-- Chart 1: Price vs Signal overlay -->
+<div class="chart-wrap">
+  <div class="chart-head">
+    <div>
+      <div class="chart-title">Price vs Signal Overlay (dual Y-axis)</div>
+      <div class="chart-sub">WTI close + satellite tank fill rate (normalised)</div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-line" style="background:#378ADD"></div> WTI Price</div>
+      <div class="legend-item"><div class="legend-line" style="background:#BA7517;border-top:2px dashed #BA7517;height:0"></div> Signal</div>
+    </div>
+  </div>
+  <canvas id="chart1" height="140"></canvas>
+</div>
+
+<!-- Chart 2: Rolling IC -->
+<div class="chart-wrap">
+  <div class="chart-head">
+    <div>
+      <div class="chart-title">Rolling IC (52-week window)</div>
+      <div class="chart-sub">Spearman IC, higher = more stable</div>
+    </div>
+    <div class="lag-pills">
+      <button class="lag-pill active" onclick="setLag(5,this)">5d</button>
+      <button class="lag-pill" onclick="setLag(10,this)">10d</button>
+      <button class="lag-pill" onclick="setLag(20,this)">20d</button>
+    </div>
+  </div>
+  <canvas id="chart2" height="120"></canvas>
+  <div class="legend-row" style="margin-top:6px">
+    <div class="legend-item"><div class="legend-line" style="background:#378ADD"></div> Rolling IC</div>
+    <div class="legend-item"><div class="legend-line" style="background:#E24B4A;border-top:1px dashed #E24B4A;height:0"></div> IC=0 baseline</div>
+  </div>
+</div>
+
+<!-- Chart 3: OOS by year bar chart -->
+<div class="chart-wrap">
+  <div class="chart-head">
+    <div>
+      <div class="chart-title">Year-by-Year OOS (Train IC vs Out-of-Sample IC)</div>
+      <div class="chart-sub">Each year as independent OOS test set, checking stability</div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--fill-accent)"></div> Train IC</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#97C459"></div> OOS IC</div>
+    </div>
+  </div>
+  <canvas id="chart3" height="140"></canvas>
+</div>
+
+<!-- Signal list below for comparison -->
+<div class="card">
+  <div class="card-label" style="margin-bottom:10px">All Candidate Signals</div>
+  <div class="sig-row active" onclick="selectSigRow('satellite',this)">
+    <span style="color:var(--text-muted);width:20px">🛰</span>
+    <span style="flex:1;color:var(--text-primary)">Satellite Tank Fill Rate (Middle East)</span>
+    <div class="ic-bar-wrap"><div class="ic-bar" style="width:62%"></div></div>
+    <span style="font-family:var(--mono);font-size:11px;width:36px;text-align:right;color:var(--text-success)">0.31</span>
+    <span style="font-size:11px;color:var(--text-muted);width:56px;text-align:right">Decay 18%</span>
+    <span class="tag t-green" style="flex-shrink:0">Recommended</span>
+  </div>
+  <div class="sig-row" onclick="selectSigRow('ais',this)">
+    <span style="color:var(--text-muted);width:20px">🚢</span>
+    <span style="flex:1;color:var(--text-primary)">AIS VLCC Vessel Count (Persian Gulf)</span>
+    <div class="ic-bar-wrap"><div class="ic-bar" style="width:56%"></div></div>
+    <span style="font-family:var(--mono);font-size:11px;width:36px;text-align:right;color:var(--text-success)">0.28</span>
+    <span style="font-size:11px;color:var(--text-muted);width:56px;text-align:right">Decay 22%</span>
+    <span class="tag t-green" style="flex-shrink:0">Recommended</span>
+  </div>
+  <div class="sig-row" onclick="selectSigRow('natgas',this)">
+    <span style="color:var(--text-muted);width:20px">📈</span>
+    <span style="flex:1;color:var(--text-primary)">Natural Gas Price (NG=F)</span>
+    <div class="ic-bar-wrap"><div class="ic-bar" style="width:38%;opacity:0.4"></div></div>
+    <span style="font-family:var(--mono);font-size:11px;width:36px;text-align:right;color:var(--text-warning)">0.19</span>
+    <span style="font-size:11px;color:var(--text-muted);width:56px;text-align:right">Decay 21%</span>
+    <span class="tag t-yellow" style="flex-shrink:0">Watch</span>
+  </div>
+  <div class="sig-row" onclick="selectSigRow('copper',this)">
+    <span style="color:var(--text-muted);width:20px">🔩</span>
+    <span style="flex:1;color:var(--text-primary)">Copper (HG=F)</span>
+    <div class="ic-bar-wrap"><div class="ic-bar" style="width:48%"></div></div>
+    <span style="font-family:var(--mono);font-size:11px;width:36px;text-align:right;color:var(--text-success)">0.24</span>
+    <span style="font-size:11px;color:var(--text-muted);width:56px;text-align:right">Decay 22%</span>
+    <span class="tag t-green" style="flex-shrink:0">Recommended</span>
+  </div>
+</div>
+
+<div style="display:flex;gap:8px">
+  <button class="btn btn-primary" id="add-btn">Add "Satellite Tank Fill Rate" to feature pool ↗</button>
+  <button class="btn">Ignore</button>
+</div>
+
+<script>
+// ── Signal data ──
+var signals = {
+  satellite: {
+    name: 'Satellite Tank Fill Rate',
+    ic5: 0.31, ic20: 0.28, decay: '18%', coverage: '94%', status: 'Recommended',
+    statusClass: 't-green',
+    // price series (normalized), 36 weekly points
+    price: [72,73,75,78,77,76,74,73,75,79,81,80,78,77,76,78,80,82,81,79,78,79,81,83,82,80,79,78,79,80,79,78,77,78,80,78],
+    signal: [0.2,0.3,0.4,0.5,0.4,0.3,0.2,0.1,0.2,0.4,0.5,0.5,0.4,0.3,0.2,0.3,0.4,0.5,0.5,0.4,0.3,0.4,0.5,0.6,0.5,0.4,0.3,0.3,0.4,0.5,0.4,0.3,0.2,0.3,0.5,0.4],
+    // rolling IC, 36 weekly points
+    ic5_series:  [0.15,0.18,0.22,0.25,0.28,0.30,0.28,0.26,0.24,0.27,0.30,0.32,0.31,0.29,0.27,0.28,0.30,0.33,0.34,0.32,0.30,0.31,0.33,0.35,0.34,0.32,0.30,0.29,0.31,0.33,0.32,0.30,0.28,0.29,0.31,0.30],
+    ic10_series: [0.12,0.15,0.19,0.22,0.25,0.27,0.26,0.24,0.23,0.25,0.28,0.29,0.28,0.27,0.25,0.26,0.28,0.30,0.31,0.29,0.27,0.28,0.30,0.32,0.31,0.30,0.28,0.27,0.29,0.30,0.29,0.28,0.26,0.27,0.29,0.28],
+    ic20_series: [0.10,0.12,0.16,0.19,0.22,0.24,0.23,0.21,0.20,0.22,0.25,0.26,0.25,0.24,0.22,0.23,0.25,0.27,0.28,0.26,0.25,0.26,0.27,0.29,0.28,0.27,0.25,0.25,0.26,0.27,0.26,0.25,0.24,0.25,0.27,0.26],
+    // OOS by year: [year, train_ic, oos_ic]
+    oos_years: [['2019',0.29,0.25],['2020',0.31,0.24],['2021',0.33,0.28],['2022',0.30,0.26],['2023',0.32,0.27],['2024',0.31,0.26]]
+  },
+  ais: {
+    name: 'AIS VLCC Vessel Count',
+    ic5: 0.28, ic20: 0.25, decay: '22%', coverage: '91%', status: 'Recommended',
+    statusClass: 't-green',
+    price: [72,73,75,78,77,76,74,73,75,79,81,80,78,77,76,78,80,82,81,79,78,79,81,83,82,80,79,78,79,80,79,78,77,78,80,78],
+    signal: [0.3,0.4,0.5,0.6,0.5,0.4,0.3,0.2,0.3,0.5,0.6,0.5,0.4,0.3,0.2,0.3,0.5,0.6,0.6,0.5,0.4,0.5,0.6,0.7,0.6,0.5,0.4,0.4,0.5,0.6,0.5,0.4,0.3,0.4,0.6,0.5],
+    ic5_series:  [0.12,0.15,0.18,0.21,0.24,0.26,0.25,0.23,0.22,0.24,0.27,0.28,0.27,0.26,0.24,0.25,0.27,0.29,0.30,0.28,0.26,0.27,0.29,0.31,0.30,0.28,0.27,0.26,0.28,0.29,0.28,0.26,0.25,0.26,0.28,0.27],
+    ic10_series: [0.10,0.13,0.16,0.19,0.22,0.24,0.23,0.21,0.20,0.22,0.25,0.26,0.25,0.24,0.22,0.23,0.25,0.27,0.28,0.26,0.25,0.26,0.27,0.29,0.28,0.27,0.25,0.25,0.26,0.27,0.26,0.25,0.24,0.25,0.27,0.26],
+    ic20_series: [0.08,0.11,0.14,0.17,0.19,0.21,0.20,0.18,0.18,0.20,0.22,0.23,0.22,0.21,0.20,0.21,0.22,0.24,0.25,0.23,0.22,0.23,0.24,0.26,0.25,0.24,0.22,0.22,0.23,0.24,0.23,0.22,0.21,0.22,0.23,0.23],
+    oos_years: [['2019',0.26,0.21],['2020',0.28,0.22],['2021',0.30,0.24],['2022',0.27,0.21],['2023',0.29,0.23],['2024',0.28,0.22]]
+  },
+  natgas: {
+    name: 'Natural Gas NG=F',
+    ic5: 0.19, ic20: 0.17, decay: '21%', coverage: '100%', status: 'Watch',
+    statusClass: 't-yellow',
+    price: [72,73,75,78,77,76,74,73,75,79,81,80,78,77,76,78,80,82,81,79,78,79,81,83,82,80,79,78,79,80,79,78,77,78,80,78],
+    signal: [0.1,0.2,0.3,0.4,0.3,0.2,0.1,0.0,0.1,0.3,0.4,0.4,0.3,0.2,0.1,0.2,0.3,0.4,0.4,0.3,0.2,0.3,0.4,0.5,0.4,0.3,0.2,0.2,0.3,0.4,0.3,0.2,0.1,0.2,0.4,0.3],
+    ic5_series:  [0.05,0.08,0.10,0.13,0.15,0.17,0.16,0.14,0.13,0.15,0.18,0.19,0.18,0.17,0.15,0.16,0.18,0.20,0.21,0.19,0.17,0.18,0.20,0.22,0.21,0.19,0.18,0.17,0.19,0.20,0.19,0.18,0.16,0.17,0.19,0.18],
+    ic10_series: [0.04,0.06,0.09,0.11,0.13,0.15,0.14,0.12,0.12,0.13,0.16,0.17,0.16,0.15,0.13,0.14,0.16,0.18,0.19,0.17,0.15,0.16,0.18,0.20,0.19,0.17,0.16,0.15,0.17,0.18,0.17,0.16,0.14,0.15,0.17,0.16],
+    ic20_series: [0.03,0.05,0.07,0.09,0.11,0.13,0.12,0.10,0.10,0.11,0.14,0.15,0.14,0.13,0.11,0.12,0.14,0.16,0.17,0.15,0.13,0.14,0.16,0.18,0.17,0.15,0.14,0.13,0.15,0.16,0.15,0.14,0.12,0.13,0.15,0.14],
+    oos_years: [['2019',0.17,0.13],['2020',0.19,0.15],['2021',0.20,0.16],['2022',0.18,0.14],['2023',0.19,0.15],['2024',0.19,0.15]]
+  },
+  copper: {
+    name: 'Copper HG=F',
+    ic5: 0.24, ic20: 0.22, decay: '22%', coverage: '100%', status: 'Recommended',
+    statusClass: 't-green',
+    price: [72,73,75,78,77,76,74,73,75,79,81,80,78,77,76,78,80,82,81,79,78,79,81,83,82,80,79,78,79,80,79,78,77,78,80,78],
+    signal: [0.25,0.30,0.35,0.45,0.40,0.35,0.30,0.25,0.30,0.40,0.45,0.45,0.40,0.35,0.30,0.35,0.40,0.50,0.50,0.45,0.40,0.45,0.50,0.55,0.50,0.45,0.40,0.40,0.45,0.50,0.45,0.40,0.35,0.40,0.50,0.45],
+    ic5_series:  [0.10,0.13,0.16,0.20,0.22,0.24,0.23,0.21,0.21,0.23,0.26,0.27,0.26,0.25,0.23,0.24,0.26,0.28,0.29,0.27,0.25,0.26,0.28,0.30,0.29,0.27,0.26,0.25,0.27,0.28,0.27,0.26,0.24,0.25,0.27,0.26],
+    ic10_series: [0.08,0.11,0.14,0.17,0.20,0.22,0.21,0.19,0.19,0.21,0.24,0.25,0.24,0.23,0.21,0.22,0.24,0.26,0.27,0.25,0.24,0.25,0.26,0.28,0.27,0.26,0.24,0.24,0.25,0.26,0.25,0.24,0.22,0.23,0.25,0.24],
+    ic20_series: [0.06,0.09,0.12,0.15,0.17,0.19,0.18,0.17,0.17,0.18,0.21,0.22,0.21,0.20,0.19,0.20,0.21,0.23,0.24,0.22,0.21,0.22,0.23,0.25,0.24,0.23,0.21,0.21,0.22,0.23,0.22,0.21,0.20,0.21,0.22,0.22],
+    oos_years: [['2019',0.22,0.18],['2020',0.24,0.19],['2021',0.26,0.21],['2022',0.23,0.18],['2023',0.25,0.20],['2024',0.24,0.19]]
+  }
+};
+
+var currentSig = 'satellite';
+var currentLag = 5;
+
+// ── Drawing helpers ──
+function getCtx(id) {
+  var c = document.getElementById(id);
+  c.width = c.parentElement.clientWidth - 32;
+  return c.getContext('2d');
+}
+
+function lerp(arr, i) { return arr[Math.round(i)] ?? arr[arr.length-1]; }
+
+// Chart 1: Price vs Signal (dual axis)
+function drawChart1(sig) {
+  var ctx = getCtx('chart1');
+  var W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  var prices = sig.price;
+  var signals = sig.signal;
+  var n = prices.length;
+  var pad = {l:40, r:40, t:10, b:24};
+  var innerW = W - pad.l - pad.r;
+  var innerH = H - pad.t - pad.b;
+
+  var pMin = Math.min(...prices) - 2, pMax = Math.max(...prices) + 2;
+  var sMin = Math.min(...signals) - 0.05, sMax = Math.max(...signals) + 0.05;
+
+  function px(i) { return pad.l + (i/(n-1)) * innerW; }
+  function py_p(v) { return pad.t + innerH - ((v-pMin)/(pMax-pMin))*innerH; }
+  function py_s(v) { return pad.t + innerH - ((v-sMin)/(sMax-sMin))*innerH; }
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 0.5;
+  for (var g=0; g<=4; g++) {
+    var y = pad.t + (g/4)*innerH;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+  }
+
+  // Y axis labels (price, left)
+  ctx.fillStyle = '#888780'; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+  for (var g=0; g<=4; g++) {
+    var v = pMin + (1-g/4)*(pMax-pMin);
+    ctx.fillText('$'+v.toFixed(0), pad.l-4, pad.t + (g/4)*innerH + 3);
+  }
+  // Y axis labels (signal, right)
+  ctx.textAlign = 'left';
+  for (var g=0; g<=4; g++) {
+    var v = sMin + (1-g/4)*(sMax-sMin);
+    ctx.fillText(v.toFixed(2), W-pad.r+4, pad.t + (g/4)*innerH + 3);
+  }
+
+  // X axis labels
+  ctx.textAlign = 'center';
+  var months = ['Jan','Apr','Jul','Oct','Jan','Apr','Jul','Oct','Jan'];
+  for (var m=0; m<4; m++) {
+    var xi = Math.round((m/3) * (n-1));
+    ctx.fillText(months[m*2], px(xi), H-6);
+  }
+
+  // Signal area (behind price)
+  ctx.beginPath();
+  for (var i=0; i<n; i++) {
+    var x = px(i), y = py_s(signals[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.lineTo(px(n-1), pad.t+innerH);
+  ctx.lineTo(px(0), pad.t+innerH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(186,117,23,0.08)';
+  ctx.fill();
+
+  // Signal line (dashed)
+  ctx.beginPath();
+  ctx.setLineDash([4,3]);
+  ctx.strokeStyle = '#BA7517';
+  ctx.lineWidth = 1.5;
+  for (var i=0; i<n; i++) {
+    var x = px(i), y = py_s(signals[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Price line
+  ctx.beginPath();
+  ctx.strokeStyle = '#378ADD';
+  ctx.lineWidth = 2;
+  for (var i=0; i<n; i++) {
+    var x = px(i), y = py_p(prices[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+
+// Chart 2: Rolling IC
+function drawChart2(sig, lag) {
+  var ctx = getCtx('chart2');
+  var W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  var key = 'ic'+lag+'_series';
+  var series = sig[key] || sig.ic5_series;
+  var n = series.length;
+  var pad = {l:36, r:16, t:8, b:20};
+  var innerW = W-pad.l-pad.r, innerH = H-pad.t-pad.b;
+
+  var vMin = -0.05, vMax = 0.45;
+  function px(i) { return pad.l + (i/(n-1))*innerW; }
+  function py(v) { return pad.t + innerH - ((v-vMin)/(vMax-vMin))*innerH; }
+
+  // Grid + labels
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 0.5;
+  [0, 0.1, 0.2, 0.3, 0.4].forEach(function(v) {
+    var y = py(v);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillStyle='#888780'; ctx.font='10px system-ui'; ctx.textAlign='right';
+    ctx.fillText(v.toFixed(1), pad.l-4, y+3);
+  });
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(226,75,74,0.4)';
+  ctx.setLineDash([4,3]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  var y0 = py(0); ctx.moveTo(pad.l, y0); ctx.lineTo(W-pad.r, y0); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // IC area
+  ctx.beginPath();
+  for (var i=0; i<n; i++) {
+    var x=px(i), y=py(series[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.lineTo(px(n-1), py(0)); ctx.lineTo(px(0), py(0)); ctx.closePath();
+  ctx.fillStyle='rgba(55,138,221,0.10)'; ctx.fill();
+
+  // IC line
+  ctx.beginPath(); ctx.strokeStyle='#378ADD'; ctx.lineWidth=2;
+  for (var i=0; i<n; i++) {
+    var x=px(i), y=py(series[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // X labels
+  ctx.fillStyle='#888780'; ctx.textAlign='center';
+  var labels = ['2022 Q1','2022 Q3','2023 Q1','2023 Q3','2024 Q1','2024 Q3','2025 Q1'];
+  labels.forEach(function(l,k) {
+    var xi = Math.round((k/(labels.length-1))*(n-1));
+    ctx.fillText(l, px(xi), H-4);
+  });
+}
+
+// Chart 3: OOS by year
+function drawChart3(sig) {
+  var ctx = getCtx('chart3');
+  var W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  var data = sig.oos_years; // [year, train, oos]
+  var n = data.length;
+  var pad = {l:36, r:16, t:10, b:24};
+  var innerW = W-pad.l-pad.r, innerH = H-pad.t-pad.b;
+  var barW = (innerW/n)*0.35;
+  var vMin = 0, vMax = 0.40;
+
+  function py(v) { return pad.t + innerH - ((v-vMin)/(vMax-vMin))*innerH; }
+
+  // Grid + labels
+  ctx.strokeStyle='rgba(0,0,0,0.06)'; ctx.lineWidth=0.5;
+  [0,0.1,0.2,0.3,0.4].forEach(function(v) {
+    var y=py(v);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillStyle='#888780'; ctx.font='10px system-ui'; ctx.textAlign='right';
+    ctx.fillText(v.toFixed(1), pad.l-4, y+3);
+  });
+
+  var segW = innerW/n;
+  data.forEach(function(d, i) {
+    var year = d[0], train = d[1], oos = d[2];
+    var cx = pad.l + (i+0.5)*segW;
+
+    // Train bar
+    var x1 = cx - barW - 2;
+    var h1 = ((train-vMin)/(vMax-vMin))*innerH;
+    ctx.fillStyle = 'rgba(55,138,221,0.7)';
+    ctx.fillRect(x1, pad.t+innerH-h1, barW, h1);
+
+    // OOS bar
+    var x2 = cx + 2;
+    var h2 = ((oos-vMin)/(vMax-vMin))*innerH;
+    ctx.fillStyle = 'rgba(151,196,89,0.85)';
+    ctx.fillRect(x2, pad.t+innerH-h2, barW, h2);
+
+    // Year label
+    ctx.fillStyle='#888780'; ctx.font='10px system-ui'; ctx.textAlign='center';
+    ctx.fillText(year, cx, H-6);
+
+    // OOS value label
+    ctx.fillStyle = '#3B6D11';
+    ctx.fillText(oos.toFixed(2), x2+barW/2, pad.t+innerH-h2-3);
+  });
+}
+
+function updateStats(sig) {
+  var row = document.getElementById('stats-row');
+  var statusColor = sig.status === 'Recommended' ? 'var(--text-success)' : 'var(--text-warning)';
+  row.innerHTML = `
+    <div class="stat-box"><div class="stat-lbl">IC (lag 5d)</div><div class="stat-val" style="color:var(--text-success)">${sig.ic5}</div></div>
+    <div class="stat-box"><div class="stat-lbl">IC (lag 20d)</div><div class="stat-val" style="color:var(--text-success)">${sig.ic20}</div></div>
+    <div class="stat-box"><div class="stat-lbl">OOS decay</div><div class="stat-val" style="color:${sig.decay.replace('%','') < 25 ? 'var(--text-success)':'var(--text-warning)'}">${sig.decay}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Coverage</div><div class="stat-val">${sig.coverage}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Recommendation</div><div class="stat-val"><span class="tag ${sig.statusClass}">${sig.status}</span></div></div>
+  `;
+  document.getElementById('add-btn').textContent = `Add "${sig.name}" to feature pool ↗`;
+}
+
+function drawAll() {
+  var sig = signals[currentSig];
+  updateStats(sig);
+  drawChart1(sig);
+  drawChart2(sig, currentLag);
+  drawChart3(sig);
+}
+
+function selectSig(key, btn) {
+  currentSig = key;
+  document.querySelectorAll('.sig-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  drawAll();
+}
+
+function selectSigRow(key, row) {
+  currentSig = key;
+  document.querySelectorAll('.sig-row').forEach(function(r){ r.classList.remove('active'); });
+  row.classList.add('active');
+  var btn = Array.from(document.querySelectorAll('.sig-btn')).find(function(b){
+    return b.getAttribute('onclick').includes(key);
+  });
+  if (btn) {
+    document.querySelectorAll('.sig-btn').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+  }
+  drawAll();
+}
+
+function setLag(lag, btn) {
+  currentLag = lag;
+  document.querySelectorAll('.lag-pill').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  drawChart2(signals[currentSig], lag);
+}
+
+window.addEventListener('load', function() { drawAll(); });
+window.addEventListener('resize', function() { drawAll(); });
+</script>
+</body>
+</html>

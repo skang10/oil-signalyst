@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OilSignalyst — Dashboard</title>
+<style>
+  :root {
+    --surface-0:#F7F6F2; --surface-1:#F1EFE8; --surface-2:#FFFFFF;
+    --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.14);
+    --text-primary:#2C2C2A; --text-secondary:#5F5E5A; --text-muted:#888780;
+    --text-danger:#A32D2D; --text-success:#3B6D11; --text-warning:#854F0B;
+    --text-accent:#185FA5; --text-pro:#534AB7;
+    --bg-danger:#FCEBEB; --bg-success:#EAF3DE; --bg-warning:#FAEEDA;
+    --bg-accent:#E6F1FB; --bg-pro:#EEEDFE;
+    --border-danger:#F09595; --border-success:#97C459;
+    --border-warning:#EF9F27; --border-accent:#85B7EB;
+    --fill-accent:#378ADD; --on-accent:#FFFFFF;
+    --radius:8px;
+    --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    --mono:'SF Mono','Cascadia Code','Fira Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--surface-0);color:var(--text-primary);font-family:var(--font);font-size:13px;line-height:1.5;}
+  .app{display:flex;height:100vh;overflow:hidden;}
+  .sidebar{width:192px;flex-shrink:0;background:var(--surface-2);border-right:0.5px solid var(--border);display:flex;flex-direction:column;}
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+  .topbar{height:46px;flex-shrink:0;background:var(--surface-2);border-bottom:0.5px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px;}
+  .content{flex:1;background:var(--surface-0);display:flex;flex-direction:column;overflow:hidden;}
+  .sb-logo{padding:13px 16px 11px;border-bottom:0.5px solid var(--border);}
+  .sb-logo-name{font-size:14px;font-weight:500;letter-spacing:-0.2px;}
+  .sb-logo-ver{font-size:11px;color:var(--text-muted);margin-top:1px;font-family:var(--mono);}
+  .sb-section{font-size:10px;color:var(--text-muted);letter-spacing:0.7px;text-transform:uppercase;padding:12px 14px 4px;font-weight:500;}
+  .sb-item{display:flex;align-items:center;gap:8px;padding:6px 10px;margin:1px 6px;border-radius:var(--radius);cursor:pointer;color:var(--text-secondary);font-size:13px;transition:background .1s,color .1s;}
+  .sb-item:hover{background:var(--surface-1);color:var(--text-primary);}
+  .sb-item.active{background:var(--bg-accent);color:var(--text-accent);font-weight:500;}
+  .sb-item i{font-size:16px;flex-shrink:0;}
+  .sb-badge{margin-left:auto;font-size:10px;font-weight:500;padding:1px 6px;border-radius:10px;}
+  .b-warn{background:var(--bg-warning);color:var(--text-warning);}
+  .b-danger{background:var(--bg-danger);color:var(--text-danger);}
+  .sb-bottom{margin-top:auto;padding:10px 6px;border-top:0.5px solid var(--border);}
+  .sb-user{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--radius);}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--bg-accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:var(--text-accent);flex-shrink:0;border:0.5px solid var(--border-accent);}
+  .sb-uname{font-size:12px;font-weight:500;}
+  .sb-urole{font-size:11px;color:var(--text-muted);}
+  .tb-title{font-size:13px;font-weight:500;flex:1;}
+  .tb-price{font-size:12px;color:var(--text-secondary);white-space:nowrap;}
+  .tb-price strong{color:var(--text-danger);}
+  .tb-chg{color:var(--text-danger);font-size:11px;}
+  .src-dots{display:flex;align-items:center;gap:10px;}
+  .src-dot{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);white-space:nowrap;}
+  .dot{width:6px;height:6px;border-radius:50%;}
+  .dok{background:#3B6D11;} .dwarn{background:#BA7517;}
+  .pulse{animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+  .role-pill{display:flex;background:var(--surface-1);border:0.5px solid var(--border);border-radius:20px;padding:3px;gap:2px;}
+  .rp-btn{padding:3px 11px;font-size:11px;border-radius:16px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-family:var(--font);transition:all .12s;white-space:nowrap;}
+  .rp-btn.active{background:var(--fill-accent);color:var(--on-accent);font-weight:500;}
+  .tb-icon{width:28px;height:28px;border-radius:var(--radius);border:0.5px solid var(--border);background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary);font-size:15px;position:relative;flex-shrink:0;}
+  .tb-icon:hover{background:var(--surface-1);}
+  .pip{position:absolute;top:5px;right:5px;width:5px;height:5px;border-radius:50%;background:var(--text-warning);}
+  .dash-tabs{display:flex;border-bottom:0.5px solid var(--border);background:var(--surface-2);flex-shrink:0;padding:0 18px;}
+  .dash-tab{padding:9px 14px;font-size:12px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-family:var(--font);border-bottom:2px solid transparent;white-space:nowrap;margin-bottom:-0.5px;transition:color .1s;}
+  .dash-tab:hover{color:var(--text-primary);}
+  .dash-tab.active{color:var(--text-primary);font-weight:500;border-bottom-color:var(--fill-accent);}
+  .content-inner{padding:16px 18px;flex:1;overflow-y:auto;}
+  .alert-banner{background:var(--bg-warning);border:0.5px solid var(--border-warning);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-warning);}
+  .ab-close{margin-left:auto;background:none;border:none;color:var(--text-warning);cursor:pointer;font-size:16px;line-height:1;opacity:.7;padding:0;}
+  .card{background:var(--surface-2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+  .card-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:500;margin-bottom:8px;}
+  .metric{font-size:22px;font-weight:500;letter-spacing:-.3px;}
+  .metric-sub{font-size:11px;color:var(--text-muted);margin-top:3px;}
+  .card-accent-top{border-top:2px solid var(--border-danger);}
+  .card-accent-warn{border-top:2px solid var(--border-warning);}
+  .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}
+  .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;}
+  .t-red{background:var(--bg-danger);color:var(--text-danger);}
+  .t-green{background:var(--bg-success);color:var(--text-success);}
+  .t-yellow{background:var(--bg-warning);color:var(--text-warning);}
+  .t-blue{background:var(--bg-accent);color:var(--text-accent);}
+  .t-purple{background:var(--bg-pro);color:var(--text-pro);}
+  .t-muted{background:var(--surface-1);color:var(--text-muted);border:0.5px solid var(--border);}
+  .dist-wrap{display:flex;gap:6px;align-items:flex-end;height:80px;margin:10px 0 6px;}
+  .dist-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .dist-bar{width:100%;border-radius:3px 3px 0 0;}
+  .dist-lbl{font-size:10px;color:var(--text-muted);white-space:nowrap;}
+  .dist-pct{font-size:12px;font-weight:500;}
+  .regime-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .regime-card{padding:10px 12px;background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);}
+  .regime-card.dominant{background:var(--bg-danger);border-color:var(--border-danger);}
+  .regime-name{font-size:11px;color:var(--text-muted);margin-bottom:4px;}
+  .regime-name.dom{color:var(--text-danger);}
+  .regime-prob{font-size:20px;font-weight:500;}
+  .regime-bar{height:3px;border-radius:2px;margin-top:6px;}
+  .shap-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px;}
+  .shap-row:last-child{border-bottom:none;}
+  .shap-name{color:var(--text-secondary);width:152px;flex-shrink:0;font-family:var(--mono);font-size:11px;}
+  .shap-track{flex:1;height:5px;background:var(--surface-1);border-radius:3px;overflow:hidden;}
+  .shap-fill{height:100%;border-radius:3px;opacity:.7;}
+  .shap-val{font-size:11px;width:32px;text-align:right;}
+  .sig-row{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface-1);border-radius:var(--radius);font-size:12px;}
+  .cfg-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12px;}
+  .cfg-row:last-child{border-bottom:none;}
+  .cfg-key{color:var(--text-secondary);}
+  .cfg-val{font-weight:500;font-family:var(--mono);font-size:12px;}
+  .ms-card{padding:12px 14px;background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);}
+  .ms-card.warn{background:var(--bg-warning);border-color:var(--border-warning);}
+  .ms-type{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+  .ms-ver{font-size:13px;font-weight:500;}
+  .ms-metric{font-size:11px;margin-top:3px;}
+  .log-mono{font-family:var(--mono);font-size:11px;color:var(--text-secondary);line-height:1.9;background:var(--surface-1);border-radius:var(--radius);padding:10px 12px;}
+  .log-ok{color:var(--text-success);} .log-muted{color:var(--text-muted);} .log-hi{color:var(--text-accent);}
+  .agent-row{display:flex;gap:8px;align-items:flex-start;}
+  .agent-av{width:24px;height:24px;border-radius:50%;background:var(--bg-pro);border:0.5px solid var(--border-accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .agent-bubble{background:var(--surface-1);border:0.5px solid var(--border);border-radius:3px 10px 10px 10px;padding:9px 12px;font-size:12px;line-height:1.75;color:var(--text-secondary);flex:1;}
+  .btn{padding:6px 14px;font-size:12px;border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary);border-radius:var(--radius);cursor:pointer;font-family:var(--font);transition:background .1s;}
+  .btn:hover{background:var(--surface-1);}
+  .btn-primary{background:var(--fill-accent);color:var(--on-accent);border-color:var(--fill-accent);}
+  .btn-row{display:flex;gap:8px;}
+  .cfg-input{background:var(--surface-1);border:0.5px solid var(--border-strong);border-radius:var(--radius);padding:5px 10px;color:var(--text-primary);font-size:12px;font-family:var(--font);width:130px;}
+  .stress-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-1);border-radius:var(--radius);font-size:12px;margin-bottom:6px;}
+  .dur-wrap{display:flex;align-items:center;gap:8px;font-size:11px;margin:6px 0;}
+  .dur-track{flex:1;height:8px;background:var(--surface-1);border-radius:4px;overflow:hidden;}
+  .dur-fill{height:100%;border-radius:4px;background:var(--fill-accent);}
+  .support-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px;}
+  .support-row:last-child{border-bottom:none;}
+  .drawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.15);z-index:100;}
+  .drawer{display:none;position:fixed;right:0;top:0;bottom:0;width:376px;background:var(--surface-2);border-left:0.5px solid var(--border);z-index:101;flex-direction:column;}
+  .drawer.open,.drawer-overlay.open{display:flex;}
+  .drawer-head{padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:10px;}
+  .dtabs{display:flex;border-bottom:0.5px solid var(--border);}
+  .dtab{flex:1;padding:8px;font-size:12px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-family:var(--font);border-bottom:2px solid transparent;}
+  .dtab.active{color:var(--text-primary);font-weight:500;border-bottom-color:var(--fill-accent);}
+  .drawer-body{flex:1;overflow-y:auto;padding:14px 16px;}
+  .page{display:none;} .page.active{display:flex;flex-direction:column;flex:1;min-height:0;}
+  .dtab-content{display:none;} .dtab-content.active{display:block;}
+  .view{display:none;} .view.active{display:block;}
+  .inv-bar-wrap{flex:1;height:18px;background:var(--surface-1);border-radius:3px;overflow:hidden;display:flex;align-items:center;}
+  .inv-bar{height:100%;display:flex;align-items:center;padding-left:7px;font-size:11px;font-weight:500;}
+  .decision-card{border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-name">OilSignalyst</div>
+    <div class="sb-logo-ver">v0.1 · local</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding-top:4px;">
+    <div class="sb-section">Navigation</div>
+    <div class="sb-item active" id="nav-dashboard" onclick="goPage('dashboard',this)"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</div>
+    <div class="sb-item" id="nav-history" onclick="goPage('history',this)"><i class="ti ti-chart-line" aria-hidden="true"></i> History</div>
+    <div class="sb-item" id="nav-signals" onclick="goPage('signals',this)"><i class="ti ti-radar" aria-hidden="true"></i> Signals<span class="sb-badge b-warn" style="margin-left:auto">2 New</span></div>
+    <div id="ds-nav-group" style="display:none">
+      <div class="sb-section" style="padding-top:10px">DS Workbench</div>
+      <div class="sb-item" id="nav-data-monitor" onclick="goPage('data-monitor',this)"><i class="ti ti-database" aria-hidden="true"></i> Data Monitor</div>
+      <div class="sb-item" id="nav-model-monitor" onclick="goPage('model-monitor',this)"><i class="ti ti-activity" aria-hidden="true"></i> Model Monitor<span class="sb-badge b-danger" style="margin-left:auto">!</span></div>
+      <div class="sb-item" id="nav-train" onclick="goPage('train',this)"><i class="ti ti-player-play" aria-hidden="true"></i> Training Control</div>
+    </div>
+    <div class="sb-section">System</div>
+    <div class="sb-item" id="nav-settings" onclick="goPage('settings',this)"><i class="ti ti-settings" aria-hidden="true"></i> Settings</div>
+  </div>
+  <div class="sb-bottom">
+    <div class="sb-user">
+      <div class="avatar">XM</div>
+      <div><div class="sb-uname">Xuemei</div><div class="sb-urole" id="sb-role-label">Researcher</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="tb-title" id="page-title">Dashboard</div>
+    <div class="tb-price">WTI <strong>$78.40</strong> <span class="tb-chg">▼ 0.8%</span></div>
+    <div class="src-dots">
+      <div class="src-dot" title="EIA · 3h ago"><span class="dot dok pulse"></span> EIA</div>
+      <div class="src-dot" title="Yahoo · Live"><span class="dot dok pulse"></span> Price</div>
+      <div class="src-dot" title="CFTC · 2d ago"><span class="dot dok"></span> CFTC</div>
+      <div class="src-dot" title="AIS · 26h ago (delayed)"><span class="dot dwarn pulse"></span><span style="color:var(--text-warning)"> AIS</span></div>
+    </div>
+    <div class="role-pill">
+      <button class="rp-btn" id="rp-trader" onclick="switchRole('Trader','trader')">Trader</button>
+      <button class="rp-btn" id="rp-risk" onclick="switchRole('Risk','risk')">Risk</button>
+      <button class="rp-btn active" id="rp-researcher" onclick="switchRole('Researcher','researcher')">Researcher</button>
+      <button class="rp-btn" id="rp-ds" onclick="switchRole('DS','ds')">DS</button>
+    </div>
+    <button class="tb-icon" title="Alerts"><i class="ti ti-bell" aria-hidden="true"></i><span class="pip"></span></button>
+    <button class="tb-icon" title="Refresh"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD PAGE -->
+    <div id="page-dashboard" class="page active">
+      <div class="dash-tabs" id="dash-tabs">
+        <button class="dash-tab active" onclick="switchDashTab('overview',this)">Overview</button>
+        <button class="dash-tab" id="dt-eia-btn" onclick="switchDashTab('eia',this)">EIA Forecast</button>
+        <button class="dash-tab" id="dt-regime-btn" onclick="switchDashTab('regime',this)">Regime</button>
+        <button class="dash-tab" id="dt-returns-btn" onclick="switchDashTab('returns',this)">Return Dist.</button>
+        <button class="dash-tab" id="dt-charts-btn" onclick="switchDashTab('charts',this)">Market Data</button>
+      </div>
+      <div class="content-inner">
+        <div class="alert-banner" id="ab">
+          <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+          Returns model PSI 0.22 exceeds alert threshold. Retraining recommended.
+          <button class="ab-close" onclick="document.getElementById('ab').style.display='none'">×</button>
+        </div>
+
+        <!-- Overview tab -->
+        <div class="dtab-content active" id="tab-overview">
+
+          <!-- TRADER view -->
+          <div id="view-trader" class="view">
+            <div class="g3" style="margin-bottom:12px">
+              <div class="card card-accent-top">
+                <div class="card-label">Signal</div>
+                <div class="metric" style="color:var(--text-muted)">FLAT</div>
+                <div class="metric-sub">Expected −1.8%, signal too weak</div>
+              </div>
+              <div class="card">
+                <div class="card-label">Kelly Position</div>
+                <div class="metric">0%</div>
+                <div class="metric-sub">Win/odds insufficient to enter</div>
+              </div>
+              <div class="card">
+                <div class="card-label">Stop Loss</div>
+                <div class="metric">$71.2</div>
+                <div class="metric-sub">−9.2% below current price</div>
+              </div>
+            </div>
+            <div class="g2" style="margin-bottom:12px">
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">WTI Price (Last 5 Days)</div>
+                <div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-bottom:8px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                    <div style="width:100%;height:22px;background:var(--bg-danger);border-top:2px solid var(--border-danger);border-radius:2px 2px 0 0"></div>
+                    <span style="font-size:10px;color:var(--text-muted)">6/25</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                    <div style="width:100%;height:14px;background:var(--bg-danger);border-top:2px solid var(--border-danger);border-radius:2px 2px 0 0"></div>
+                    <span style="font-size:10px;color:var(--text-muted)">6/26</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                    <div style="width:100%;height:30px;background:var(--bg-success);border-top:2px solid var(--border-success);border-radius:2px 2px 0 0"></div>
+                    <span style="font-size:10px;color:var(--text-muted)">6/27</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                    <div style="width:100%;height:40px;background:var(--bg-success);border-top:2px solid var(--border-success);border-radius:2px 2px 0 0"></div>
+                    <span style="font-size:10px;color:var(--text-muted)">6/30</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                    <div style="width:100%;height:50px;background:var(--bg-success);border-top:2px solid var(--border-success);border-radius:2px 2px 0 0"></div>
+                    <span style="font-size:10px;color:var(--text-muted)">7/1</span>
+                  </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <span style="font-size:12px;color:var(--text-secondary)">$76.2 → <strong style="color:var(--text-primary)">$78.40</strong></span>
+                  <span class="tag t-green">+2.9% 5d</span>
+                </div>
+                <div style="display:flex;gap:16px;padding-top:8px;border-top:0.5px solid var(--border)">
+                  <div><div style="font-size:10px;color:var(--text-muted)">5d High</div><div style="font-size:13px;font-weight:500">$79.1</div></div>
+                  <div><div style="font-size:10px;color:var(--text-muted)">5d Low</div><div style="font-size:13px;font-weight:500">$75.8</div></div>
+                  <div><div style="font-size:10px;color:var(--text-muted)">Brent Spread</div><div style="font-size:13px;font-weight:500">+$3.2</div></div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">Market Regime</div>
+                <div class="regime-grid">
+                  <div class="regime-card dominant"><div class="regime-name dom">R3 Oversupply Bear ★</div><div class="regime-prob" style="color:var(--text-danger)">61%</div><div class="regime-bar" style="width:61%;background:#A32D2D"></div></div>
+                  <div class="regime-card"><div class="regime-name">R1 Supply Squeeze Bull</div><div class="regime-prob" style="color:var(--text-accent)">18%</div><div class="regime-bar" style="width:18%;background:var(--fill-accent)"></div></div>
+                  <div class="regime-card"><div class="regime-name">R4 Demand Collapse Bear</div><div class="regime-prob" style="color:var(--text-warning)">13%</div><div class="regime-bar" style="width:13%;background:#BA7517"></div></div>
+                  <div class="regime-card"><div class="regime-name">R2 Demand Expansion Bull</div><div class="regime-prob" style="color:var(--text-success)">8%</div><div class="regime-bar" style="width:8%;background:#3B6D11"></div></div>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:var(--text-warning)">28% chance of regime switch in 4w · Trigger: geopolitical escalation or OPEC+ cut</div>
+              </div>
+            </div>
+            <div class="g3" style="margin-bottom:12px">
+              <div class="card">
+                <div class="card-label" style="margin-bottom:8px">EIA Inventory Forecast</div>
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+                  <span class="metric" style="color:var(--text-danger)">−2.8</span>
+                  <span style="font-size:13px;color:var(--text-muted)">MB</span>
+                  <span class="tag t-red" style="margin-left:auto">Surprise</span>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">Consensus −1.2 MB · Tomorrow 14:30 ET</div>
+                <div style="font-size:12px;color:var(--text-warning)"><i class="ti ti-bolt" style="font-size:12px;vertical-align:-1px;margin-right:3px" aria-hidden="true"></i>Price impact if data confirms: +1.5~+2.8%</div>
+              </div>
+              <div class="card">
+                <div class="card-label" style="margin-bottom:8px">COT Speculative Net</div>
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+                  <span class="metric" style="color:var(--text-danger)">22</span>
+                  <span style="font-size:13px;color:var(--text-muted)">percentile</span>
+                  <span class="tag t-red" style="margin-left:auto">Bearish</span>
+                </div>
+                <div style="height:6px;background:var(--surface-1);border-radius:3px;margin-bottom:6px;overflow:hidden"><div style="width:22%;height:100%;background:var(--text-danger);border-radius:3px"></div></div>
+                <div style="font-size:12px;color:var(--text-secondary)">Speculators reducing longs, bearish sentiment</div>
+              </div>
+              <div class="card">
+                <div class="card-label" style="margin-bottom:8px">OVX Volatility</div>
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+                  <span class="metric">28.4</span>
+                  <span class="tag t-muted" style="margin-left:auto">Below avg</span>
+                </div>
+                <div style="height:6px;background:var(--surface-1);border-radius:3px;margin-bottom:6px;overflow:hidden"><div style="width:38%;height:100%;background:var(--text-accent);border-radius:3px"></div></div>
+                <div style="font-size:12px;color:var(--text-secondary)">Low option protection cost — consider buying Puts</div>
+              </div>
+            </div>
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div class="card-label" style="margin-bottom:0">Return Distribution (Next 20 Days)</div>
+                <div style="display:flex;gap:8px"><span class="tag t-red">Downside 51%</span><span class="tag t-yellow">Tail 21%</span></div>
+              </div>
+              <div class="dist-wrap">
+                <div class="dist-col"><span class="dist-pct" style="color:var(--text-danger)">21%</span><div class="dist-bar" style="height:52px;background:var(--bg-danger);border-top:2px solid var(--border-danger)"></div><span class="dist-lbl">&lt;−10%</span></div>
+                <div class="dist-col"><span class="dist-pct" style="color:var(--text-warning)">30%</span><div class="dist-bar" style="height:66px;background:var(--bg-warning);border-top:2px solid var(--border-warning)"></div><span class="dist-lbl">−10~0%</span></div>
+                <div class="dist-col"><span class="dist-pct" style="color:var(--text-success)">34%</span><div class="dist-bar" style="height:74px;background:var(--bg-success);border-top:2px solid var(--border-success)"></div><span class="dist-lbl">0~+10%</span></div>
+                <div class="dist-col"><span class="dist-pct" style="color:var(--text-accent)">15%</span><div class="dist-bar" style="height:36px;background:var(--bg-accent);border-top:2px solid var(--border-accent)"></div><span class="dist-lbl">&gt;+10%</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">
+                <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">Expected Return</div><div style="font-size:15px;font-weight:500;color:var(--text-danger)">−1.8%</div></div>
+                <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">VaR 95%</div><div style="font-size:15px;font-weight:500;color:var(--text-danger)">−13.2%</div></div>
+                <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">Price Range</div><div style="font-size:15px;font-weight:500">$66~$89</div></div>
+                <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">Kelly Position</div><div style="font-size:15px;font-weight:500;color:var(--text-muted)">Flat</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RISK view -->
+          <div id="view-risk" class="view">
+            <div class="g4" style="margin-bottom:12px">
+              <div class="card" style="border-top:2px solid var(--border-danger)">
+                <div class="card-label">VaR 95% (20-day)</div>
+                <div class="metric" style="color:var(--text-danger)">−13.2%</div>
+                <div class="metric-sub">= $13.2M (1M bbl exposure)</div>
+              </div>
+              <div class="card" style="border-top:2px solid var(--border-danger)">
+                <div class="card-label">CVaR (conditional expected loss)</div>
+                <div class="metric" style="color:var(--text-danger)">−18.7%</div>
+                <div class="metric-sub">Tail average loss, more conservative</div>
+              </div>
+              <div class="card" style="border-top:2px solid var(--border-warning)">
+                <div class="card-label">Crude Exposure</div>
+                <div class="metric" style="color:var(--text-warning)">1.0M bbl</div>
+                <div class="metric-sub">Notional value $78.4M</div>
+              </div>
+              <div class="card" style="border-top:2px solid var(--border-warning)">
+                <div class="card-label">Hedge Ratio</div>
+                <div class="metric" style="color:var(--text-warning)">62%</div>
+                <div class="metric-sub" style="color:var(--text-warning)">Raise to 75% recommended</div>
+              </div>
+            </div>
+            <div class="g2" style="margin-bottom:12px">
+              <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                  <div class="card-label" style="margin-bottom:0">Return Distribution (Full Stats)</div>
+                  <span class="tag t-red">Left-skewed −0.42</span>
+                </div>
+                <div class="dist-wrap">
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-danger)">21%</span><div class="dist-bar" style="height:52px;background:var(--bg-danger);border-top:2px solid var(--border-danger)"></div><span class="dist-lbl">&lt;−10%</span></div>
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-warning)">30%</span><div class="dist-bar" style="height:66px;background:var(--bg-warning);border-top:2px solid var(--border-warning)"></div><span class="dist-lbl">−10~0%</span></div>
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-success)">34%</span><div class="dist-bar" style="height:74px;background:var(--bg-success);border-top:2px solid var(--border-success)"></div><span class="dist-lbl">0~+10%</span></div>
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-accent)">15%</span><div class="dist-bar" style="height:36px;background:var(--bg-accent);border-top:2px solid var(--border-accent)"></div><span class="dist-lbl">&gt;+10%</span></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border)">
+                  <div style="padding:6px 8px;background:var(--bg-danger);border-radius:var(--radius);text-align:center"><div style="font-size:10px;color:var(--text-danger)">VaR 95%</div><div style="font-size:13px;font-weight:500;color:var(--text-danger)">−13.2%</div></div>
+                  <div style="padding:6px 8px;background:var(--bg-danger);border-radius:var(--radius);text-align:center"><div style="font-size:10px;color:var(--text-danger)">CVaR 95%</div><div style="font-size:13px;font-weight:500;color:var(--text-danger)">−18.7%</div></div>
+                  <div style="padding:6px 8px;background:var(--surface-1);border-radius:var(--radius);text-align:center"><div style="font-size:10px;color:var(--text-muted)">Price Range</div><div style="font-size:13px;font-weight:500">$66~$89</div></div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">Stress Test (Historical Extremes)</div>
+                <div class="stress-row" style="margin-bottom:6px"><span style="flex:1;color:var(--text-secondary);font-size:12px">2020 Covid demand collapse</span><span style="font-weight:500;color:var(--text-danger);font-size:12px">−55%</span><span class="tag t-green">Alerted ✓</span></div>
+                <div class="stress-row" style="margin-bottom:6px"><span style="flex:1;color:var(--text-secondary);font-size:12px">2022 Russia-Ukraine supply shock</span><span style="font-weight:500;color:var(--text-success);font-size:12px">+65%</span><span class="tag t-green">Alerted ✓</span></div>
+                <div class="stress-row"><span style="flex:1;color:var(--text-secondary);font-size:12px">2014 OPEC price war</span><span style="font-weight:500;color:var(--text-danger);font-size:12px">−45%</span><span class="tag t-green">Alerted ✓</span></div>
+                <div style="margin-top:10px;padding:7px 10px;background:var(--surface-1);border-radius:var(--radius);font-size:11px;color:var(--text-muted)">Max drawdown in R3 regime: <strong style="color:var(--text-danger)">−38%</strong>（2014 OPEC price war）</div>
+              </div>
+            </div>
+            <div class="g2">
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">R3 Regime Historical Risk</div>
+                <div class="cfg-row"><span class="cfg-key">R3 avg duration</span><span class="cfg-val">14 weeks</span></div>
+                <div class="cfg-row"><span class="cfg-key">CurrentRunning</span><span class="cfg-val">8 weeks (mid-cycle)</span></div>
+                <div class="cfg-row"><span class="cfg-key">R3 avg return</span><span class="cfg-val" style="color:var(--text-danger)">−2.3% (20-day)</span></div>
+                <div class="cfg-row"><span class="cfg-key">R3 max drawdown</span><span class="cfg-val" style="color:var(--text-danger)">−38%</span></div>
+                <div class="cfg-row"><span class="cfg-key">4w switch probability</span><span class="cfg-val" style="color:var(--text-warning)">28%</span></div>
+              </div>
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">Hedge Recommendations + Cost Estimate</div>
+                <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+                  <div style="padding:8px 10px;background:var(--bg-warning);border:0.5px solid var(--border-warning);border-radius:var(--radius)">
+                    <div style="font-size:11px;color:var(--text-warning);margin-bottom:3px">✈ Airlines (oil buyers)</div>
+                    <div style="font-weight:500;color:var(--text-warning)">Raise hedge ratio to 75%</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Downside 51%, tail 21%, locking in cost is prudent</div>
+                  </div>
+                  <div style="padding:8px 10px;background:var(--surface-1);border-radius:var(--radius)">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">🛢 Oil producers (oil sellers)</div>
+                    <div style="font-weight:500">Hold current hedge, do not increase</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Upside 49% intact — full hedge forgoes gains</div>
+                  </div>
+                </div>
+                <div style="padding:8px 10px;background:var(--surface-1);border-radius:var(--radius)">
+                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Hedge Cost Estimate (OVX 28.4)</div>
+                  <div class="cfg-row" style="padding:3px 0"><span class="cfg-key">ATM Put option (20-day)</span><span class="cfg-val">approx $1.8/bbl</span></div>
+                  <div class="cfg-row" style="padding:3px 0"><span class="cfg-key">10% OTM Put</span><span class="cfg-val">approx $0.6/bbl</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+<!-- RESEARCHER view -->
+          <div id="view-researcher" class="view active">
+            <div class="regime-grid" style="margin-bottom:12px">
+              <div class="regime-card dominant"><div class="regime-name dom">R3 — Oversupply Bear ★</div><div class="regime-prob" style="color:var(--text-danger)">61%</div><div class="regime-bar" style="width:61%;background:#A32D2D"></div></div>
+              <div class="regime-card"><div class="regime-name">R1 — Supply Squeeze Bull</div><div class="regime-prob" style="color:var(--text-accent)">18%</div><div class="regime-bar" style="width:18%;background:var(--fill-accent)"></div></div>
+              <div class="regime-card"><div class="regime-name">R4 — Demand Collapse Bear</div><div class="regime-prob" style="color:var(--text-warning)">13%</div><div class="regime-bar" style="width:13%;background:#BA7517"></div></div>
+              <div class="regime-card"><div class="regime-name">R2 — Demand Expansion Bull</div><div class="regime-prob" style="color:var(--text-success)">8%</div><div class="regime-bar" style="width:8%;background:#3B6D11"></div></div>
+            </div>
+            <div class="g2" style="margin-bottom:12px">
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">SHAP Feature Importance (Regime)</div>
+                <div class="shap-row"><span class="shap-name">curve_slope_zscore</span><div class="shap-track"><div class="shap-fill" style="width:72%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">0.18</span><span class="tag t-red" style="margin-left:4px;flex-shrink:0">Bearish</span></div>
+                <div class="shap-row"><span class="shap-name">crude_inv_dev</span><div class="shap-track"><div class="shap-fill" style="width:60%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">0.16</span><span class="tag t-red" style="margin-left:4px;flex-shrink:0">Bearish</span></div>
+                <div class="shap-row"><span class="shap-name">spec_net_pct</span><div class="shap-track"><div class="shap-fill" style="width:44%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">0.11</span><span class="tag t-red" style="margin-left:4px;flex-shrink:0">Bearish</span></div>
+                <div class="shap-row"><span class="shap-name">ovx</span><div class="shap-track"><div class="shap-fill" style="width:36%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">0.09</span><span class="tag t-red" style="margin-left:4px;flex-shrink:0">Bearish</span></div>
+                <div class="shap-row"><span class="shap-name">copper_ret_20d</span><div class="shap-track"><div class="shap-fill" style="width:28%;background:var(--text-success)"></div></div><span class="shap-val" style="color:var(--text-success)">0.07</span><span class="tag t-green" style="margin-left:4px;flex-shrink:0">Bullish</span></div>
+              </div>
+              <div class="card">
+                <div class="card-label" style="margin-bottom:10px">New Signal Candidates (Signal Scanner)</div>
+                <div class="sig-row" style="margin-bottom:6px"><i class="ti ti-satellite" style="font-size:15px;color:var(--text-accent)" aria-hidden="true"></i><span style="flex:1;color:var(--text-secondary)">Satellite Tank Fill Rate (Middle East)</span><span style="font-weight:500;font-family:var(--mono)">IC 0.31</span><span class="tag t-green">Recommended</span></div>
+                <div class="sig-row" style="margin-bottom:6px"><i class="ti ti-ship" style="font-size:15px;color:var(--text-accent)" aria-hidden="true"></i><span style="flex:1;color:var(--text-secondary)">AIS VLCC Vessel Count (Persian Gulf)</span><span style="font-weight:500;font-family:var(--mono)">IC 0.28</span><span class="tag t-green">Recommended</span></div>
+                <div class="sig-row"><i class="ti ti-chart-line" style="font-size:15px;color:var(--text-muted)" aria-hidden="true"></i><span style="flex:1;color:var(--text-secondary)">Natural Gas Price (NG=F)</span><span style="font-weight:500;font-family:var(--mono)">IC 0.19</span><span class="tag t-yellow">Watch</span></div>
+                <div style="margin-top:10px;font-size:12px;color:var(--text-muted)">Full evaluation in <a href="#" onclick="goPage('signals',document.getElementById('nav-signals'));return false;" style="color:var(--text-accent)">Signals ↗</a></div>
+              </div>
+            </div>
+            <div class="g2">
+              <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="card-label" style="margin-bottom:0">EIA Inventory Forecast</div><span class="tag t-red">Surprise −1.6 MB</span></div>
+                <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px"><span class="metric" style="color:var(--text-danger)">−2.8 <span style="font-size:14px;font-weight:400">MB</span></span></div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">Market consensus −1.2 MB · Range −4.5~−1.1 MB</div>
+                <div style="font-size:12px;color:var(--text-muted)">Full SHAP + historical accuracy → <button class="btn" style="padding:2px 10px;font-size:11px" onclick="switchDashTab('eia',document.getElementById('dt-eia-btn'))">EIA Detail ↗</button></div>
+              </div>
+              <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="card-label" style="margin-bottom:0">Return Distribution (Next 20 Days)</div><span class="tag t-red">Downside 51%</span></div>
+                <div class="dist-wrap" style="height:60px">
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-danger)">21%</span><div class="dist-bar" style="height:38px;background:var(--bg-danger);border-top:2px solid var(--border-danger)"></div><span class="dist-lbl">&lt;−10%</span></div>
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-warning)">30%</span><div class="dist-bar" style="height:50px;background:var(--bg-warning);border-top:2px solid var(--border-warning)"></div><span class="dist-lbl">−10~0%</span></div>
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-success)">34%</span><div class="dist-bar" style="height:56px;background:var(--bg-success);border-top:2px solid var(--border-success)"></div><span class="dist-lbl">0~+10%</span></div>
+                  <div class="dist-col"><span class="dist-pct" style="color:var(--text-accent)">15%</span><div class="dist-bar" style="height:26px;background:var(--bg-accent);border-top:2px solid var(--border-accent)"></div><span class="dist-lbl">&gt;+10%</span></div>
+                </div>
+                <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">Stats summary + full breakdown → <button class="btn" style="padding:2px 10px;font-size:11px" onclick="switchDashTab('returns',document.getElementById('dt-returns-btn'))">Returns Detail ↗</button></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- DS view -->
+          <div id="view-ds" class="view">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+              <div class="ms-card"><div class="ms-type">Regime Model</div><div class="ms-ver">TabPFN v2.3</div><div class="ms-metric" style="color:var(--text-success)"><i class="ti ti-circle-check" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> Acc 73.1% · PSI 0.08</div></div>
+              <div class="ms-card"><div class="ms-type">EIA Forecast Model</div><div class="ms-ver">TabPFN v2.3</div><div class="ms-metric" style="color:var(--text-success)"><i class="ti ti-circle-check" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> MAE 1.2 MB · PSI 0.11</div></div>
+              <div class="ms-card warn"><div class="ms-type">Returns Model</div><div class="ms-ver">TabPFN v2.3</div><div class="ms-metric" style="color:var(--text-warning)"><i class="ti ti-alert-triangle" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> PSI 0.22 — Alerts</div></div>
+            </div>
+            <div class="card" style="border:0.5px solid var(--border-accent);margin-bottom:12px">
+              <div class="card-label" style="margin-bottom:10px">DS Agent</div>
+              <div style="background:var(--surface-1);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
+                <div class="agent-row"><div class="agent-av"><i class="ti ti-robot" style="font-size:13px;color:var(--text-pro)" aria-hidden="true"></i></div><div class="agent-bubble">Returns model PSI 0.22 exceeds threshold. 2 new signal candidates found (IC 0.31 / 0.28). Evaluate signals before scheduling retraining?</div></div>
+              </div>
+              <div class="btn-row">
+              <button class="btn btn-primary" onclick="goPage('model-monitor',document.getElementById('nav-model-monitor'))">Model Monitor ↗</button>
+              <button class="btn" onclick="goPage('train',document.getElementById('nav-train'))">Training Control ↗</button>
+            </div>
+            </div>
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-label" style="margin-bottom:0">Last Training Run</div><span class="tag t-green">Success</span></div>
+              <div class="log-mono"><span class="log-muted">[00:00]</span> Loading feature matrix... 14 features × 3,456 samples<br><span class="log-muted">[00:01]</span> Data leakage check... <span class="log-ok">Passed ✓</span><br><span class="log-muted">[00:13]</span> OOS Brier: <span class="log-ok">0.211 ✓</span> · MLflow: <span class="log-hi">a3f2c8d1</span></div>
+            </div>
+          </div>
+        </div><!-- /tab-overview -->
+
+        <!-- EIA detail tab -->
+        <div class="dtab-content" id="tab-eia">
+          <div style="margin-bottom:14px"><div style="font-size:15px;font-weight:500">EIA Weekly Inventory Forecast</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">Generated: 2026-07-01 18:30 UTC · Release: 2026-07-02 14:30 ET</div></div>
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-label" style="margin-bottom:10px">Core Forecast</div>
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:10px"><span style="font-size:32px;font-weight:500;color:var(--text-danger)">−2.8</span><span style="font-size:14px;color:var(--text-muted)">million barrels (drawdown)</span><span class="tag t-red" style="margin-left:auto">Drawdown</span></div>
+            <div class="cfg-row"><span class="cfg-key">80% Confidence Interval</span><span class="cfg-val">−4.5 MB ~ −1.1 MB</span></div>
+            <div class="cfg-row"><span class="cfg-key">Market Consensus (Bloomberg survey)</span><span class="cfg-val">−1.2 MB</span></div>
+            <div class="cfg-row"><span class="cfg-key">Model vs Consensus</span><span class="cfg-val" style="color:var(--text-danger)">More bearish −1.6 MB (larger-than-expected draw)</span></div>
+            <div style="margin-top:10px;padding:8px 10px;background:var(--bg-warning);border-radius:var(--radius);font-size:12px;color:var(--text-warning)"><i class="ti ti-bolt" style="font-size:13px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>If confirmed, expect oil price +1.5%~+2.8% short-term</div>
+          </div>
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-label" style="margin-bottom:12px">Component Inventory Forecast (million barrels)</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:56px;color:var(--text-secondary)">Crude</span><div class="inv-bar-wrap" style="height:24px"><div class="inv-bar" style="width:70%;background:var(--bg-danger);border-left:4px solid var(--border-danger);color:var(--text-danger)">−2.8 MB</div></div><span style="color:var(--text-danger);font-weight:500;width:44px;text-align:right">−2.8</span></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:56px;color:var(--text-secondary)">Gasoline</span><div class="inv-bar-wrap" style="height:24px"><div class="inv-bar" style="width:35%;background:var(--bg-danger);border-left:4px solid var(--border-danger);color:var(--text-danger)">−1.1 MB</div></div><span style="color:var(--text-danger);font-weight:500;width:44px;text-align:right">−1.1</span></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:56px;color:var(--text-secondary)">Distillate</span><div class="inv-bar-wrap" style="height:24px"><div class="inv-bar" style="width:20%;background:var(--bg-success);border-left:4px solid var(--border-success);color:var(--text-success)">+0.6 MB</div></div><span style="color:var(--text-success);font-weight:500;width:44px;text-align:right">+0.6</span></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:56px;color:var(--text-secondary)">Cushing</span><div class="inv-bar-wrap" style="height:24px"><div class="inv-bar" style="width:28%;background:var(--bg-danger);border-left:4px solid var(--border-danger);color:var(--text-danger)">−0.9 MB</div></div><span style="color:var(--text-danger);font-weight:500;width:44px;text-align:right">−0.9</span></div>
+            </div>
+          </div>
+          <div class="g2">
+            <div class="card">
+              <div class="card-label" style="margin-bottom:10px">Key Drivers (SHAP)</div>
+              <div class="shap-row"><span class="shap-name">Refinery utilisation +3.2%</span><div class="shap-track"><div class="shap-fill" style="width:65%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">−1.4</span></div>
+              <div class="shap-row"><span class="shap-name">Crude import decline</span><div class="shap-track"><div class="shap-fill" style="width:44%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">−0.9</span></div>
+              <div class="shap-row"><span class="shap-name">Summer driving demand peak</span><div class="shap-track"><div class="shap-fill" style="width:36%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">−0.7</span></div>
+              <div class="shap-row"><span class="shap-name">US crude exports flat</span><div class="shap-track"><div class="shap-fill" style="width:12%;background:var(--text-success)"></div></div><span class="shap-val" style="color:var(--text-success)">+0.2</span></div>
+            </div>
+            <div class="card">
+              <div class="card-label" style="margin-bottom:10px">Model Historical Performance (Last 52 Weeks)</div>
+              <div class="cfg-row"><span class="cfg-key">Directional Accuracy (draw/build)</span><span class="cfg-val" style="color:var(--text-success)">71.2%</span></div>
+              <div class="cfg-row"><span class="cfg-key">MAE (Mean Absolute Error)</span><span class="cfg-val">1.3 MB</span></div>
+              <div class="cfg-row"><span class="cfg-key">vs Consensus MAE</span><span class="cfg-val">1.9 MB</span></div>
+              <div class="cfg-row"><span class="cfg-key">Model Edge</span><span class="cfg-val" style="color:var(--text-success)">−31.6%</span></div>
+              <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Most accurate for draws >2 MB — matches current scenario</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Regime detail tab -->
+        <div class="dtab-content" id="tab-regime">
+          <div style="margin-bottom:14px"><div style="font-size:15px;font-weight:500">Market Regime Report</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">2026-07-01 · Based on closing data</div></div>
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-label" style="margin-bottom:12px">Current Regime Probability Distribution</div>
+            <div class="regime-grid">
+              <div class="regime-card dominant"><div class="regime-name dom">R3 — Oversupply Bear ★</div><div class="regime-prob" style="color:var(--text-danger)">61%</div><div class="regime-bar" style="width:61%;background:#A32D2D"></div><div style="font-size:11px;color:var(--text-danger);margin-top:6px">OPEC production increase / inventory build</div></div>
+              <div class="regime-card"><div class="regime-name">R1 — Supply Squeeze Bull</div><div class="regime-prob" style="color:var(--text-accent)">18%</div><div class="regime-bar" style="width:18%;background:var(--fill-accent)"></div><div style="font-size:11px;color:var(--text-muted);margin-top:6px">Production cuts / geopolitical disruption</div></div>
+              <div class="regime-card"><div class="regime-name">R4 — Demand Collapse Bear</div><div class="regime-prob" style="color:var(--text-warning)">13%</div><div class="regime-bar" style="width:13%;background:#BA7517"></div><div style="font-size:11px;color:var(--text-muted);margin-top:6px">Recession / pandemic shock</div></div>
+              <div class="regime-card"><div class="regime-name">R2 — Demand Expansion Bull</div><div class="regime-prob" style="color:var(--text-success)">8%</div><div class="regime-bar" style="width:8%;background:#3B6D11"></div><div style="font-size:11px;color:var(--text-muted);margin-top:6px">Strong GDP / China demand</div></div>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-label" style="margin-bottom:10px">Supporting Signals</div>
+            <div class="support-row"><span style="color:var(--text-secondary);flex:1">Futures Curve Structure</span><span style="font-weight:500">Contango +$2.4/bbl</span><span class="tag t-red">Bearish</span></div>
+            <div class="support-row"><span style="color:var(--text-secondary);flex:1">Inventory vs 5yr Average</span><span style="font-weight:500">+8.2% (above average)</span><span class="tag t-red">Bearish</span></div>
+            <div class="support-row"><span style="color:var(--text-secondary);flex:1">COT Speculative Net Percentile</span><span style="font-weight:500">22nd percentile (Bearish)</span><span class="tag t-red">Bearish</span></div>
+            <div class="support-row"><span style="color:var(--text-secondary);flex:1">OPEC Compliance Rate</span><span style="font-weight:500">87% (significant overproduction)</span><span class="tag t-red">Bearish</span></div>
+            <div class="support-row"><span style="color:var(--text-secondary);flex:1">Middle East Geopolitical Risk Index</span><span style="font-weight:500">Moderate (0.42/1.0)</span><span class="tag t-muted">Neutral</span></div>
+            <div class="support-row"><span style="color:var(--text-secondary);flex:1">Global PMI</span><span style="font-weight:500">51.2 (mild expansion)</span><span class="tag t-green">Bullish</span></div>
+          </div>
+          <div class="g2">
+            <div class="card">
+              <div class="card-label" style="margin-bottom:10px">Current Regime Duration</div>
+              <div class="dur-wrap"><span style="width:48px;color:var(--text-secondary)">Running</span><div class="dur-track"><div class="dur-fill" style="width:57%"></div></div><span style="font-weight:500">8 weeks</span></div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px">R3 historically lasts 14 weeks avg — currently mid-cycle</div>
+            </div>
+            <div class="card">
+              <div class="card-label" style="margin-bottom:10px">Regime Switch Warning</div>
+              <div style="padding:10px;background:var(--bg-warning);border:0.5px solid var(--border-warning);border-radius:var(--radius);font-size:12px;color:var(--text-warning)">
+                <div style="font-weight:500;margin-bottom:6px">4-week switch probability: 28%</div>
+                Trigger conditions:<br>· Geopolitical escalation → supply disruption<br>· OPEC+ emergency production cut meeting<br>Switch direction: R3 → R1 (Supply Squeeze Bull)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Returns detail tab -->
+        <div class="dtab-content" id="tab-returns">
+          <div style="margin-bottom:14px"><div style="font-size:15px;font-weight:500">Conditional Return Distribution (WTI, Next 20 Trading Days)</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">2026-07-01 · Current price: $78.40/bbl</div></div>
+          <div class="card" style="margin-bottom:12px">
+            <div style="margin-bottom:10px;padding:8px 10px;background:var(--bg-accent);border-radius:var(--radius);border:0.5px solid var(--border-accent);font-size:12px;color:var(--text-secondary)">Conditional on Regime R3 (P=61%); weighted by other regimes: R1×18% + R2×8% + R4×13%</div>
+            <div class="card-label" style="margin-bottom:10px">Return Bucket Probability Distribution</div>
+            <div class="dist-wrap" style="height:100px">
+              <div class="dist-col"><span class="dist-pct" style="color:var(--text-danger)">21%</span><div class="dist-bar" style="height:70px;background:var(--bg-danger);border-top:2px solid var(--border-danger)"></div><span class="dist-lbl">&lt;−10%</span><span style="font-size:10px;color:var(--text-danger)">Large drop</span></div>
+              <div class="dist-col"><span class="dist-pct" style="color:var(--text-warning)">30%</span><div class="dist-bar" style="height:90px;background:var(--bg-warning);border-top:2px solid var(--border-warning)"></div><span class="dist-lbl">−10~0%</span><span style="font-size:10px;color:var(--text-warning)">Small drop</span></div>
+              <div class="dist-col"><span class="dist-pct" style="color:var(--text-success)">34%</span><div class="dist-bar" style="height:96px;background:var(--bg-success);border-top:2px solid var(--border-success)"></div><span class="dist-lbl">0~+10%</span><span style="font-size:10px;color:var(--text-success)">Small gain</span></div>
+              <div class="dist-col"><span class="dist-pct" style="color:var(--text-accent)">15%</span><div class="dist-bar" style="height:48px;background:var(--bg-accent);border-top:2px solid var(--border-accent)"></div><span class="dist-lbl">&gt;+10%</span><span style="font-size:10px;color:var(--text-accent)">Large gain</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><span class="tag t-red">Downside (<0%): 51%</span><span class="tag t-green">Upside (>0%): 49%</span><span class="tag t-yellow">Tail risk (<−10%): 21%</span></div>
+          </div>
+          <div class="g4" style="margin-bottom:12px">
+            <div class="card"><div class="card-label">Expected Return</div><div class="metric" style="color:var(--text-danger)">−1.8%</div></div>
+            <div class="card"><div class="card-label">VaR 95%</div><div class="metric" style="color:var(--text-danger)">−13.2%</div></div>
+            <div class="card"><div class="card-label">Distribution Skewness</div><div class="metric" style="color:var(--text-danger)">−0.42</div><div class="metric-sub">Left-skewed (fat downside tail)</div></div>
+            <div class="card"><div class="card-label">Price Range</div><div class="metric" style="font-size:18px">$66~$89</div><div class="metric-sub">80% confidence interval</div></div>
+          </div>
+          <div class="card">
+            <div class="card-label" style="margin-bottom:12px">Distribution-Based Decision Recommendations</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="decision-card"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">✈ Airlines (oil buyers)</div><div style="font-weight:500;color:var(--text-danger);margin-bottom:4px">Raise hedge ratio to 75%</div><div style="font-size:11px;color:var(--text-muted);line-height:1.6">Downside 51%, tail 21% — locking in cost beats bearing downside</div></div>
+              <div class="decision-card"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">🛢 Oil producers (oil sellers)</div><div style="font-weight:500;color:var(--text-warning);margin-bottom:4px">Hold current hedge, do not increase</div><div style="font-size:11px;color:var(--text-muted);line-height:1.6">Upside 49% intact — full hedge forgoes geopolitical upside</div></div>
+              <div class="decision-card"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">📊 Trader (directional)</div><div style="font-weight:500;color:var(--text-muted);margin-bottom:4px">Small short, tight stop-loss</div><div style="font-size:11px;color:var(--text-muted);line-height:1.6">Negative expected return but weak signal (−1.8%) — too small to size up</div></div>
+              <div class="decision-card"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">⚙ Options Strategy</div><div style="font-weight:500;color:var(--text-accent);margin-bottom:4px">Buy puts to hedge downside tail</div><div style="font-size:11px;color:var(--text-muted);line-height:1.6">21% large-drop probability makes OTM put insurance value exceed premium cost</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+        <!-- Market Data tab -->
+        <div class="dtab-content" id="tab-charts">
+          <div style="margin-bottom:14px">
+            <div style="font-size:15px;font-weight:500">Market Data Charts</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Price · Inventory · Futures Curve · Sentiment · Indicative data</div>
+          </div>
+
+          <div class="g2" style="margin-bottom:12px">
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:12px;font-weight:500">WTI Crude Price (Last 18 Months)</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Background colour = Regime phase</div></div>
+                <span class="tag t-red">Current $78.40</span>
+              </div>
+              <div style="position:relative;height:160px"><canvas id="chart-wti" role="img" aria-label="WTI oil price over 18 months">WTI crude oil price trend</canvas></div>
+            </div>
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:12px;font-weight:500">Brent-WTI Spread</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Widening spread reflects export premium or transport costs</div></div>
+                <span class="tag t-blue">Current +$3.2</span>
+              </div>
+              <div style="position:relative;height:160px"><canvas id="chart-spread" role="img" aria-label="Brent-WTI spread">Brent-WTI spread trend</canvas></div>
+            </div>
+          </div>
+
+          <div class="g2" style="margin-bottom:12px">
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:12px;font-weight:500">US Crude Inventory (EIA Weekly)</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Grey band = 5yr avg ±1σ · Current +8.2% above avg</div></div>
+                <span class="tag t-red">+8.2% above avg</span>
+              </div>
+              <div style="position:relative;height:160px"><canvas id="chart-inventory" role="img" aria-label="US crude inventory vs 5 year average">US crude inventory vs 5yr average</canvas></div>
+            </div>
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:12px;font-weight:500">WTI Futures Curve Structure</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Today (red) vs 3 months ago (grey)</div></div>
+                <span class="tag t-red">Contango +$2.4</span>
+              </div>
+              <div style="position:relative;height:160px"><canvas id="chart-curve" role="img" aria-label="WTI futures curve">WTI futures curve</canvas></div>
+            </div>
+          </div>
+
+          <div class="g2">
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:12px;font-weight:500">OVX + VIX Volatility Indices</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Low OVX = cheap option protection</div></div>
+                <div style="display:flex;gap:6px"><span class="tag t-muted">OVX 28.4</span><span class="tag t-muted">VIX 18.2</span></div>
+              </div>
+              <div style="position:relative;height:160px"><canvas id="chart-vix" role="img" aria-label="OVX and VIX volatility indices">OVX and VIX volatility trends</canvas></div>
+            </div>
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:12px;font-weight:500">COT Speculative Net (CFTC Weekly)</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Positive=net long · Negative=net short · Current: 22nd percentile</div></div>
+                <span class="tag t-red">Net short, 22nd percentile</span>
+              </div>
+              <div style="position:relative;height:160px"><canvas id="chart-cot" role="img" aria-label="COT speculative net position">COT speculative net position</canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY PAGE -->
+    <div id="page-history" class="page">
+      <div class="content-inner" style="flex:1;overflow-y:auto">
+        <div style="font-size:15px;font-weight:500;margin-bottom:4px">History</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Past predictions vs actual outcomes</div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-label" style="margin-bottom:10px">Prediction Log (Last 7 Days)</div>
+          <div class="sig-row" onclick="openDrawer('0701')" style="cursor:pointer;margin-bottom:6px"><span style="color:var(--text-muted);width:68px;flex-shrink:0;font-size:11px">Jul 1</span><span class="tag t-red">R3</span><span style="flex:1;color:var(--text-secondary)">Expected −1.8% · Downside 51%</span><span style="color:var(--text-muted);font-size:11px">EIA −2.8 MB</span><i class="ti ti-chevron-right" style="font-size:13px;color:var(--text-muted)" aria-hidden="true"></i></div>
+          <div class="sig-row" onclick="openDrawer('0630')" style="cursor:pointer;margin-bottom:6px"><span style="color:var(--text-muted);width:68px;flex-shrink:0;font-size:11px">Jun 30</span><span class="tag t-red">R3</span><span style="flex:1;color:var(--text-secondary)">Expected −2.1% · Downside 54%</span><span style="color:var(--text-muted);font-size:11px">EIA −1.4 MB</span><i class="ti ti-chevron-right" style="font-size:13px;color:var(--text-muted)" aria-hidden="true"></i></div>
+          <div class="sig-row" onclick="openDrawer('0627')" style="cursor:pointer"><span style="color:var(--text-muted);width:68px;flex-shrink:0;font-size:11px">Jun 27</span><span class="tag t-red">R3</span><span style="flex:1;color:var(--text-secondary)">Expected −0.9% · Downside 46%</span><span style="color:var(--text-success);font-size:11px">EIA +0.3 MB</span><i class="ti ti-chevron-right" style="font-size:13px;color:var(--text-muted)" aria-hidden="true"></i></div>
+        </div>
+        <div class="card"><div class="card-label" style="margin-bottom:10px">Model Accuracy (Rolling 30 Days)</div><div style="display:flex;gap:24px"><div><div style="font-size:11px;color:var(--text-muted)">Regime Directional Acc.</div><div style="font-size:20px;font-weight:500;margin-top:2px">73%</div></div><div><div style="font-size:11px;color:var(--text-muted)">EIA Directional Acc.</div><div style="font-size:20px;font-weight:500;margin-top:2px">71%</div></div><div><div style="font-size:11px;color:var(--text-muted)">Return Dist. Brier</div><div style="font-size:20px;font-weight:500;margin-top:2px">0.21</div></div></div></div>
+      </div>
+      <div class="drawer-overlay" id="d-overlay" onclick="closeDrawer()"></div>
+      <div class="drawer" id="d-drawer">
+        <div class="drawer-head"><div><div style="font-size:13px;font-weight:500" id="d-date">July 1, 2026</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">WTI $78.40 · v2.3</div></div><button class="tb-icon" onclick="closeDrawer()" style="margin-left:auto" aria-label="Close"><i class="ti ti-x" style="font-size:14px" aria-hidden="true"></i></button></div>
+        <div class="dtabs"><button class="dtab active" onclick="switchDTab('summary',this)">Summary</button><button class="dtab" onclick="switchDTab('regime',this)">Regime</button><button class="dtab" onclick="switchDTab('features',this)">Features</button><button class="dtab" onclick="switchDTab('outcome',this)">Outcome</button></div>
+        <div class="drawer-body">
+          <div id="dt-summary"><div class="cfg-row"><span class="cfg-key">Dominant Regime</span><span class="tag t-red">R3 · 61%</span></div><div class="cfg-row"><span class="cfg-key">Signal</span><span class="cfg-val" style="color:var(--text-muted)">FLAT</span></div><div class="cfg-row"><span class="cfg-key">Expected Return (20d)</span><span class="cfg-val" style="color:var(--text-danger)">−1.8%</span></div><div class="cfg-row"><span class="cfg-key">Downside Risk</span><span class="cfg-val" style="color:var(--text-danger)">51%</span></div><div class="cfg-row"><span class="cfg-key">EIA Forecast</span><span class="cfg-val" style="color:var(--text-danger)">−2.8 MB</span></div><div class="cfg-row"><span class="cfg-key">Risk Recommendations</span><span class="cfg-val">Raise hedge to 75%</span></div></div>
+          <div id="dt-regime" style="display:none"><div class="regime-grid" style="margin-bottom:12px"><div class="regime-card dominant"><div class="regime-name dom">R3 ★</div><div class="regime-prob" style="color:var(--text-danger)">61%</div></div><div class="regime-card"><div class="regime-name">R1</div><div class="regime-prob" style="color:var(--text-accent)">18%</div></div><div class="regime-card"><div class="regime-name">R4</div><div class="regime-prob" style="color:var(--text-warning)">13%</div></div><div class="regime-card"><div class="regime-name">R2</div><div class="regime-prob" style="color:var(--text-success)">8%</div></div></div><div class="cfg-row"><span class="cfg-key">Duration</span><span class="cfg-val">8 weeks</span></div><div class="cfg-row"><span class="cfg-key">4w switch prob</span><span class="cfg-val" style="color:var(--text-warning)">28%</span></div></div>
+          <div id="dt-features" style="display:none"><div class="shap-row"><span class="shap-name">curve_slope_zscore</span><div class="shap-track"><div class="shap-fill" style="width:72%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">0.18</span></div><div class="shap-row"><span class="shap-name">crude_inv_dev</span><div class="shap-track"><div class="shap-fill" style="width:60%;background:var(--text-danger)"></div></div><span class="shap-val" style="color:var(--text-danger)">0.16</span></div></div>
+          <div id="dt-outcome" style="display:none"><div class="cfg-row"><span class="cfg-key">EIA Actual</span><span style="font-size:11px;color:var(--text-muted)">Published tomorrow</span></div><div class="cfg-row"><span class="cfg-key">Actual Return</span><span style="font-size:11px;color:var(--text-muted)">Window closes 2026-07-29</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIGNALS PAGE -->
+    <div id="page-signals" class="page">
+      <div class="content-inner" style="flex:1;overflow-y:auto">
+        <div style="font-size:15px;font-weight:500;margin-bottom:4px">Signals</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Active Features · Signal Scanner Candidates</div>
+        <div class="card" style="margin-bottom:12px"><div class="card-label" style="margin-bottom:10px">Active Features (14)</div><div style="display:flex;flex-wrap:wrap;gap:6px"><span class="tag t-blue">✓ curve_slope_zscore</span><span class="tag t-blue">✓ brent_wti_spread</span><span class="tag t-blue">✓ crude_inv_dev</span><span class="tag t-blue">✓ crude_inv_chg_4w</span><span class="tag t-blue">✓ spec_net_pct</span><span class="tag t-blue">✓ spec_net_chg</span><span class="tag t-blue">✓ ovx</span><span class="tag t-blue">✓ rvol_20d</span><span class="tag t-blue">✓ ret_5d</span><span class="tag t-blue">✓ ret_20d</span><span class="tag t-blue">✓ ret_60d</span><span class="tag t-blue">✓ dxy_ret_20d</span><span class="tag t-blue">✓ copper_ret_20d</span><span class="tag t-blue">✓ vix</span></div></div>
+        <div class="card"><div class="card-label" style="margin-bottom:10px">New Signal Candidates</div>
+          <div class="sig-row" style="margin-bottom:6px"><i class="ti ti-satellite" style="font-size:15px;color:var(--text-accent)" aria-hidden="true"></i><div style="flex:1"><div style="color:var(--text-primary);margin-bottom:2px">Satellite Tank Fill Rate (Middle East)</div><div style="font-size:11px;color:var(--text-muted)">IC 0.31 · OOS decay 18% · Bonferroni pass</div></div><span class="tag t-green">Recommended</span><button class="btn" style="font-size:11px;padding:3px 10px" onclick="this.textContent='Added ✓';this.disabled=true;this.style.color='var(--text-success)'">Evaluate ↗</button></div>
+          <div class="sig-row"><i class="ti ti-ship" style="font-size:15px;color:var(--text-accent)" aria-hidden="true"></i><div style="flex:1"><div style="color:var(--text-primary);margin-bottom:2px">AIS VLCC Vessel Count (Persian Gulf)</div><div style="font-size:11px;color:var(--text-muted)">IC 0.28 · OOS decay 22% · Bonferroni pass</div></div><span class="tag t-green">Recommended</span><button class="btn" style="font-size:11px;padding:3px 10px" onclick="this.textContent='Added ✓';this.disabled=true;this.style.color='var(--text-success)'">Evaluate ↗</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA MONITOR PAGE -->
+    <div id="page-data-monitor" class="page">
+      <div class="content-inner" style="flex:1;overflow-y:auto">
+        <div style="font-size:15px;font-weight:500;margin-bottom:3px">Data Monitor</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Data Source Status · FeaturesCoverage · publication lag</div>
+        <div class="g3" style="margin-bottom:12px">
+          <div class="card"><div class="card-label">Data Sources</div><div class="metric">5</div><div class="metric-sub">4 normal · 1 delayed</div></div>
+          <div class="card"><div class="card-label">Feature Coverage (7d)</div><div class="metric" style="color:var(--text-success)">98.6%</div><div class="metric-sub">Missing 0.8%</div></div>
+          <div class="card card-accent-warn"><div class="card-label">Max Data Lag</div><div class="metric" style="color:var(--text-warning)">+26h</div><div class="metric-sub">AIS data delayed</div></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-label" style="margin-bottom:10px">Data Source Status</div>
+          <div class="support-row"><span class="dot dok" style="width:8px;height:8px;flex-shrink:0"></span><span style="flex:1">EIA API</span><span style="color:var(--text-muted);font-size:11px">Inventory · Weekly</span><span class="tag t-green">OK</span></div>
+          <div class="support-row"><span class="dot dok" style="width:8px;height:8px;flex-shrink:0"></span><span style="flex:1">Yahoo Finance</span><span style="color:var(--text-muted);font-size:11px">Price · Daily</span><span class="tag t-green">OK</span></div>
+          <div class="support-row"><span class="dot dok" style="width:8px;height:8px;flex-shrink:0"></span><span style="flex:1">FRED</span><span style="color:var(--text-muted);font-size:11px">Macro · Daily</span><span class="tag t-green">OK</span></div>
+          <div class="support-row"><span class="dot dok" style="width:8px;height:8px;flex-shrink:0"></span><span style="flex:1">CFTC COT</span><span style="color:var(--text-muted);font-size:11px">Positions · Weekly</span><span class="tag t-green">OK</span></div>
+          <div class="support-row" style="background:var(--bg-warning);border-radius:var(--radius);padding:7px 10px;border:0.5px solid var(--border-warning)"><span class="dot dwarn" style="width:8px;height:8px;flex-shrink:0"></span><span style="flex:1">AIS Vessel Data</span><span style="color:var(--text-warning);font-size:11px">26-hour lag</span><span class="tag t-yellow">Delayed</span></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-label" style="margin-bottom:10px">Feature Missing Rate (Last 30 Days)</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:140px;font-family:var(--mono);font-size:11px;color:var(--text-secondary)">crude_inv_dev</span><div style="flex:1;height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:0%;height:100%;background:var(--text-success)"></div></div><span style="font-size:11px;color:var(--text-success);width:36px;text-align:right">0%</span></div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:140px;font-family:var(--mono);font-size:11px;color:var(--text-secondary)">spec_net_pct</span><div style="flex:1;height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:3%;height:100%;background:var(--text-success)"></div></div><span style="font-size:11px;color:var(--text-success);width:36px;text-align:right">3%</span></div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:140px;font-family:var(--mono);font-size:11px;color:var(--text-secondary)">ais_vlcc_count</span><div style="flex:1;height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:9%;height:100%;background:var(--border-warning)"></div></div><span style="font-size:11px;color:var(--text-warning);width:36px;text-align:right">9%</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label" style="margin-bottom:10px">Feature Distribution Drift (PSI)</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:140px;font-family:var(--mono);font-size:11px;color:var(--text-secondary)">curve_slope_zscore</span><div style="flex:1;height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:12%;height:100%;background:var(--text-success)"></div></div><span style="font-size:11px;color:var(--text-success);width:36px;text-align:right">0.06</span><span class="tag t-green" style="flex-shrink:0">stable</span></div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="width:140px;font-family:var(--mono);font-size:11px;color:var(--text-secondary)">ret_20d</span><div style="flex:1;height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:44%;height:100%;background:var(--border-warning)"></div></div><span style="font-size:11px;color:var(--text-warning);width:36px;text-align:right">0.22</span><span class="tag t-yellow" style="flex-shrink:0">Watch</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODEL MONITOR PAGE -->
+    <div id="page-model-monitor" class="page">
+      <div class="content-inner" style="flex:1;overflow-y:auto">
+        <div style="font-size:15px;font-weight:500;margin-bottom:3px">Model Monitor</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">PSI Drift · Brier Score · Feature Importance</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+          <div class="ms-card"><div class="ms-type">Regime Model</div><div class="ms-ver">TabPFN v2.3</div><div class="ms-metric" style="color:var(--text-success)"><i class="ti ti-circle-check" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> Acc 73.1% · PSI 0.08</div></div>
+          <div class="ms-card"><div class="ms-type">EIA Forecast Model</div><div class="ms-ver">TabPFN v2.3</div><div class="ms-metric" style="color:var(--text-success)"><i class="ti ti-circle-check" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> MAE 1.2 MB · PSI 0.11</div></div>
+          <div class="ms-card warn"><div class="ms-type">Returns Model</div><div class="ms-ver">TabPFN v2.3</div><div class="ms-metric" style="color:var(--text-warning)"><i class="ti ti-alert-triangle" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> PSI 0.22 — Alerts</div></div>
+        </div>
+        <div class="g2" style="margin-bottom:12px">
+          <div class="card">
+            <div class="card-label" style="margin-bottom:10px">PSI Drift Trend</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--text-secondary)">Regime</span><span style="color:var(--text-success)">0.08</span></div><div style="height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:16%;height:100%;background:#3B6D11;border-radius:3px"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--text-secondary)">EIA Forecast</span><span style="color:var(--text-success)">0.11</span></div><div style="height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:22%;height:100%;background:#3B6D11;border-radius:3px"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--text-secondary)">Return Dist.</span><span style="color:var(--text-warning)">0.22 ⚠</span></div><div style="height:6px;background:var(--surface-1);border-radius:3px;overflow:hidden"><div style="width:44%;height:100%;background:#BA7517;border-radius:3px"></div></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label" style="margin-bottom:10px">Feature Importance (SHAP)</div>
+            <div class="shap-row"><span class="shap-name">curve_slope_zscore</span><div class="shap-track"><div class="shap-fill" style="width:72%;background:var(--fill-accent)"></div></div><span class="shap-val">0.18</span></div>
+            <div class="shap-row"><span class="shap-name">crude_inv_dev</span><div class="shap-track"><div class="shap-fill" style="width:60%;background:var(--fill-accent)"></div></div><span class="shap-val">0.16</span></div>
+            <div class="shap-row"><span class="shap-name">spec_net_pct</span><div class="shap-track"><div class="shap-fill" style="width:44%;background:var(--fill-accent)"></div></div><span class="shap-val">0.11</span></div>
+            <div class="shap-row"><span class="shap-name">ovx</span><div class="shap-track"><div class="shap-fill" style="width:36%;background:var(--fill-accent)"></div></div><span class="shap-val">0.09</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label" style="margin-bottom:10px">Stress Test</div>
+          <div class="stress-row" style="margin-bottom:6px"><span style="flex:1;color:var(--text-secondary);font-size:12px">2020 Covid demand collapse</span><span style="font-weight:500;color:var(--text-danger);font-size:12px">−55%</span><span class="tag t-green">Alerted ✓</span></div>
+          <div class="stress-row" style="margin-bottom:6px"><span style="flex:1;color:var(--text-secondary);font-size:12px">2022 Russia-Ukraine supply shock</span><span style="font-weight:500;color:var(--text-success);font-size:12px">+65%</span><span class="tag t-green">Alerted ✓</span></div>
+          <div class="stress-row"><span style="flex:1;color:var(--text-secondary);font-size:12px">2014 OPEC price war</span><span style="font-weight:500;color:var(--text-danger);font-size:12px">−45%</span><span class="tag t-green">Alerted ✓</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRAIN CONTROL PAGE -->
+    <div id="page-train" class="page">
+      <div class="content-inner" style="flex:1;overflow-y:auto">
+        <div style="font-size:15px;font-weight:500;margin-bottom:3px">Training Control</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Config · Triggers · Live Log · Model Compare</div>
+        <div style="padding:8px 12px;background:var(--bg-warning);border:0.5px solid var(--border-warning);border-radius:var(--radius);font-size:12px;color:var(--text-warning);margin-bottom:14px"><i class="ti ti-alert-triangle" style="font-size:13px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Returns model PSI 0.22 exceeds threshold 0.20 — retraining recommended</div>
+        <div class="g2" style="margin-bottom:12px">
+          <div class="card">
+            <div class="card-label" style="margin-bottom:12px">Training Configuration</div>
+            <div class="cfg-row"><span class="cfg-key">Retrain Models</span><div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" style="accent-color:var(--fill-accent)"> Regime</label><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" style="accent-color:var(--fill-accent)"> EIA Forecast</label><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" checked style="accent-color:var(--fill-accent)"> Return Dist.</label></div></div>
+            <div class="cfg-row"><span class="cfg-key">Training Cutoff Date</span><input class="cfg-input" type="date" value="2026-06-30" style="width:140px"></div>
+            <div class="cfg-row"><span class="cfg-key">TimeSeriesSplit Folds</span><div style="display:flex;align-items:center;gap:8px"><input type="range" min="3" max="10" value="5" step="1" style="width:80px" oninput="document.getElementById('split-val').textContent=this.value"><span id="split-val" style="font-weight:500;font-family:var(--mono);font-size:12px">5</span></div></div>
+            <div class="cfg-row"><span class="cfg-key">Validation Gap (leakage prevention)</span><div style="display:flex;align-items:center;gap:8px"><input type="range" min="5" max="60" value="20" step="5" style="width:80px" oninput="document.getElementById('gap-val').textContent=this.value"><span id="gap-val" style="font-weight:500;font-family:var(--mono);font-size:12px">20</span><span style="font-size:11px;color:var(--text-muted)">days</span></div></div>
+          </div>
+          <div class="card">
+            <div class="card-label" style="margin-bottom:12px">Auto-Trigger Mode</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1.5px solid var(--border-accent);background:var(--bg-accent);border-radius:var(--radius);font-size:12px;cursor:pointer"><span>Trigger on PSI threshold breach</span><input type="radio" name="retrain-mode" checked style="accent-color:var(--fill-accent)"></label>
+              <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;cursor:pointer"><span>Auto every Sunday</span><input type="radio" name="retrain-mode" style="accent-color:var(--fill-accent)"></label>
+              <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;cursor:pointer"><span>Manual only</span><input type="radio" name="retrain-mode" style="accent-color:var(--fill-accent)"></label>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div class="card-label" style="margin-bottom:0">Training Log</div><div style="display:flex;gap:8px"><button class="btn" onclick="startTrainSim()" id="train-start-btn">Start Training</button><button class="btn btn-primary" style="display:none" id="train-running-btn" disabled>Training...</button></div></div>
+          <div class="log-mono" id="train-log"><span class="log-muted">// Awaiting training command...</span></div>
+        </div>
+        <div class="card" id="compare-card" style="display:none">
+          <div class="card-label" style="margin-bottom:10px">Old vs New Model Comparison</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;font-size:12px;border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <div style="padding:8px 10px;background:var(--surface-1);font-size:11px;font-weight:500;color:var(--text-muted)">Model</div><div style="padding:8px 10px;background:var(--surface-1);font-size:11px;font-weight:500;color:var(--text-muted);text-align:right">Old</div><div style="padding:8px 10px;background:var(--surface-1);font-size:11px;font-weight:500;color:var(--text-muted);text-align:right">New</div><div style="padding:8px 10px;background:var(--surface-1);font-size:11px;font-weight:500;color:var(--text-muted);text-align:right">Change</div>
+            <div style="padding:8px 10px;border-top:0.5px solid var(--border);color:var(--text-secondary)">Return Dist. Brier</div><div style="padding:8px 10px;border-top:0.5px solid var(--border);text-align:right;color:var(--text-muted)">0.240</div><div style="padding:8px 10px;border-top:0.5px solid var(--border);text-align:right;font-weight:500;color:var(--text-success)">0.198</div><div style="padding:8px 10px;border-top:0.5px solid var(--border);text-align:right;color:var(--text-success)">−17.5%</div>
+          </div>
+          <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" onclick="this.textContent='Deployed ✓';this.disabled=true;this.style.color='var(--text-success)'">Deploy New Model</button><button class="btn">Save for later</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div id="page-settings" class="page">
+      <div class="content-inner" style="flex:1;overflow-y:auto">
+        <div style="font-size:15px;font-weight:500;margin-bottom:4px">Settings</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Role · Instrument · Alert Threshold</div>
+        <div class="card" style="margin-bottom:12px"><div class="card-label" style="margin-bottom:10px">Identity</div><div class="cfg-row"><span class="cfg-key">Name</span><input class="cfg-input" value="Xuemei M."></div><div class="cfg-row"><span class="cfg-key">Role</span><select class="cfg-input"><option>Trader</option><option>Risk</option><option selected>Researcher</option><option>Data Scientist</option></select></div></div>
+        <div class="card" style="margin-bottom:12px"><div class="card-label" style="margin-bottom:10px">Alert Threshold</div><div class="cfg-row"><span class="cfg-key">PSI Alert Threshold</span><input class="cfg-input" type="number" value="0.20" step="0.05" style="width:80px"></div><div class="cfg-row"><span class="cfg-key">EIA SurpriseAlerts</span><div style="display:flex;align-items:center;gap:6px"><input class="cfg-input" type="number" value="1.5" step="0.5" style="width:80px"><span style="color:var(--text-muted);font-size:11px">MB</span></div></div></div>
+        <div class="btn-row"><button class="btn btn-primary">Save Settings</button><button class="btn">Reset Defaults</button></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+
+<script>
+var _chartsInitialized = false;
+
+function initCharts(){
+  if(typeof Chart === 'undefined') return;
+  // Safely destroy existing chart instances
+  if(_chartsInitialized){
+    try{
+      var ids=['chart-wti','chart-spread','chart-inventory','chart-curve','chart-vix','chart-cot'];
+      ids.forEach(function(id){
+        var canvas=document.getElementById(id);
+        if(canvas){
+          var existing=Chart.getChart(canvas);
+          if(existing) existing.destroy();
+        }
+      });
+    }catch(e){}
+  }
+  _chartsInitialized = true;
+
+  var months18 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul'];
+  var wtiData = [88,86,85,83,82,80,79,81,83,85,84,82,80,79,78,76,75,77,79,81,82,80,78,77,75,73,72,74,76,78,79,78,76,75,73,74,76,78,80,81,80,78,77,75,74,72,71,73,75,77,78,77,76,74,73,75,77,79,80,79,78,76,75,73,72,74,76,78,79,78,77,76,75,73,72,74,76,78.4];
+  var wtiLabels = wtiData.map(function(_,i){ return i%8===0 ? months18[Math.floor(i/8)] : ''; });
+  var gridColor = 'rgba(0,0,0,0.06)';
+  var muted = '#888780';
+  var base = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: true } },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { color: muted, font: { size: 10 }, maxRotation: 0 } },
+      y: { grid: { color: gridColor }, ticks: { color: muted, font: { size: 10 } } }
+    }
+  };
+
+  /* Chart 1: WTI price */
+  new Chart(document.getElementById('chart-wti'), {
+    type: 'line',
+    data: {
+      labels: wtiLabels,
+      datasets: [{
+        data: wtiData,
+        borderColor: '#378ADD', borderWidth: 2,
+        pointRadius: 0, pointHoverRadius: 4,
+        backgroundColor: 'rgba(55,138,221,0.08)', fill: true,
+        tension: 0.3
+      }]
+    },
+    options: Object.assign({}, base, {
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10},maxRotation:0} },
+        y: { min:68, max:93, grid:{color:gridColor}, ticks:{color:muted,font:{size:10},callback:function(v){return '$'+v;}} }
+      }
+    })
+  });
+
+  /* Chart 2: Brent-WTI spread */
+  var spreadData = [2.1,2.3,2.5,2.8,3.0,2.7,2.4,2.2,2.0,1.8,2.1,2.4,2.6,2.8,3.1,3.3,3.0,2.7,2.5,2.3,2.1,2.4,2.7,3.0,3.2,3.4,3.1,2.8,2.5,2.3,2.1,2.3,2.6,2.9,3.1,3.2,3.0,2.7,2.5,2.2,2.0,2.2,2.5,2.8,3.1,3.3,3.5,3.2,2.9,2.6,2.4,2.2,2.4,2.7,3.0,3.2,3.4,3.2,2.9,2.7,2.5,2.3,2.5,2.8,3.1,3.2,3.3,3.2,3.0,2.8,2.6,2.4,2.6,2.9,3.1,3.2,3.3,3.2];
+  new Chart(document.getElementById('chart-spread'), {
+    type: 'line',
+    data: {
+      labels: wtiLabels,
+      datasets: [
+        { data: spreadData, borderColor: '#185FA5', borderWidth: 2, pointRadius: 0, backgroundColor: 'rgba(24,95,165,0.08)', fill: true, tension: 0.3 },
+        { data: wtiData.map(function(){return 2.6;}), borderColor: 'rgba(136,135,128,0.5)', borderWidth: 1, borderDash: [4,3], pointRadius: 0, fill: false }
+      ]
+    },
+    options: Object.assign({}, base, {
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10},maxRotation:0} },
+        y: { min:1.2, max:4.2, grid:{color:gridColor}, ticks:{color:muted,font:{size:10},callback:function(v){return '$'+v;}} }
+      }
+    })
+  });
+
+  /* Chart 3: US Crude Inventory */
+  var invData = [420,418,422,425,428,430,432,428,425,422,420,418,422,425,428,432,435,438,435,432,428,425,422,420,418,422,425,428,432,436,440,438,435,432,428,425,422,420,418,422,426,430,434,438,442,445,442,438,435,432,428,425,422,420,418,422,426,430,434,438,442,446,450,448,445,442,438,435,432,430,428,426,428,432,436,440,444,448];
+  var avgLine = invData.map(function(){return 418;});
+  var upperBand = invData.map(function(){return 436;});
+  var lowerBand = invData.map(function(){return 400;});
+  new Chart(document.getElementById('chart-inventory'), {
+    type: 'line',
+    data: {
+      labels: wtiLabels,
+      datasets: [
+        { data: upperBand, borderColor: 'transparent', backgroundColor: 'rgba(136,135,128,0.12)', fill: '+1', pointRadius: 0 },
+        { data: lowerBand, borderColor: 'transparent', backgroundColor: 'transparent', fill: false, pointRadius: 0 },
+        { data: avgLine, borderColor: 'rgba(136,135,128,0.5)', borderWidth: 1, borderDash: [4,3], fill: false, pointRadius: 0 },
+        { data: invData, borderColor: '#A32D2D', borderWidth: 2, backgroundColor: 'rgba(163,45,45,0.07)', fill: false, pointRadius: 0, tension: 0.3 }
+      ]
+    },
+    options: Object.assign({}, base, {
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10},maxRotation:0} },
+        y: { min:390, max:465, grid:{color:gridColor}, ticks:{color:muted,font:{size:10},callback:function(v){return v+'M';}} }
+      }
+    })
+  });
+
+  /* Chart 4: Futures curve */
+  var curveLabels = ['M1','M2','M3','M4','M5','M6','M9','M12','M18','M24'];
+  var curveToday = [78.4,79.1,79.6,80.0,80.3,80.6,81.1,81.4,81.9,82.2];
+  var curve3ago = [82.1,81.8,81.4,81.1,80.8,80.5,80.0,79.6,79.0,78.5];
+  new Chart(document.getElementById('chart-curve'), {
+    type: 'line',
+    data: {
+      labels: curveLabels,
+      datasets: [
+        { label: 'Today (Contango)', data: curveToday, borderColor: '#A32D2D', borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#A32D2D', tension: 0.2, fill: false },
+        { label: '3 months ago (Backwardation)', data: curve3ago, borderColor: 'rgba(136,135,128,0.6)', borderWidth: 1.5, borderDash: [4,3], pointRadius: 3, pointBackgroundColor: 'rgba(136,135,128,0.6)', tension: 0.2, fill: false }
+      ]
+    },
+    options: Object.assign({}, base, {
+      plugins: { legend: { display: true, position: 'bottom', labels: { color: muted, font: { size: 10 }, boxWidth: 12, padding: 8 } } },
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10}} },
+        y: { min:77, max:84, grid:{color:gridColor}, ticks:{color:muted,font:{size:10},callback:function(v){return '$'+v;}} }
+      }
+    })
+  });
+
+  /* Chart 5: OVX + VIX */
+  var ovxData = [35,33,31,30,28,27,29,31,33,35,34,32,30,28,27,28,30,32,34,36,35,33,31,29,28,27,28,30,32,34,33,31,30,28,27,28,30,32,33,35,34,32,30,28,27,28,30,31,33,34,33,31,30,28,27,28,29,31,32,33,32,30,29,28,27,28,29,30,31,29,28,27,28,29,30,31,29,28.4];
+  var vixData = [22,21,20,19,18,17,18,20,22,24,23,21,19,18,17,18,20,21,23,24,23,21,19,18,17,18,19,21,22,23,22,20,19,18,17,18,20,21,22,23,22,20,19,18,17,18,19,20,21,22,21,20,19,18,17,18,19,20,21,22,21,19,18,17,16,17,18,19,20,19,18,17,18,19,20,19,18,18.2];
+  new Chart(document.getElementById('chart-vix'), {
+    type: 'line',
+    data: {
+      labels: wtiLabels,
+      datasets: [
+        { label: 'OVX', data: ovxData, borderColor: '#378ADD', borderWidth: 2, pointRadius: 0, backgroundColor: 'rgba(55,138,221,0.06)', fill: true, tension: 0.3, yAxisID: 'y' },
+        { label: 'VIX', data: vixData, borderColor: '#BA7517', borderWidth: 1.5, borderDash: [4,3], pointRadius: 0, fill: false, tension: 0.3, yAxisID: 'y2' }
+      ]
+    },
+    options: Object.assign({}, base, {
+      plugins: { legend: { display: true, position: 'bottom', labels: { color: muted, font: { size: 10 }, boxWidth: 12, padding: 8 } } },
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10},maxRotation:0} },
+        y: { min:20, max:42, position:'left', grid:{color:gridColor}, ticks:{color:'#378ADD',font:{size:10}}, title:{display:true,text:'OVX',color:'#378ADD',font:{size:9}} },
+        y2: { min:12, max:28, position:'right', grid:{drawOnChartArea:false}, ticks:{color:'#BA7517',font:{size:10}}, title:{display:true,text:'VIX',color:'#BA7517',font:{size:9}} }
+      }
+    })
+  });
+
+  /* Chart 6: COT net position */
+  var cotData = [280,310,340,360,380,350,320,290,260,240,260,290,320,350,370,340,310,280,250,230,250,280,310,340,360,330,300,270,240,220,200,180,200,230,260,290,310,280,250,220,190,170,190,220,250,280,260,230,200,170,150,130];
+  var cotLabels = cotData.map(function(_,i){ return i%8===0 ? months18[Math.floor(i/4)] : ''; });
+  new Chart(document.getElementById('chart-cot'), {
+    type: 'bar',
+    data: {
+      labels: cotLabels,
+      datasets: [{
+        data: cotData,
+        backgroundColor: cotData.map(function(v){ return v>=0 ? 'rgba(55,138,221,0.55)' : 'rgba(163,45,45,0.55)'; }),
+        borderWidth: 0, borderRadius: 2
+      }]
+    },
+    options: Object.assign({}, base, {
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10},maxRotation:0} },
+        y: { grid:{color:gridColor}, ticks:{color:muted,font:{size:10},callback:function(v){return v+'k';}} }
+      }
+    })
+  });
+}
+
+var _chartsLoaded = false;
+function onChartsTab(){
+  if(!_chartsLoaded){
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+    s.onload = function(){ initCharts(); _chartsLoaded = true; };
+    document.head.appendChild(s);
+  } else {
+    initCharts();
+  }
+}
+
+window.addEventListener('resize', function(){
+  var tab = document.getElementById('tab-charts');
+  if(tab && tab.classList.contains('active') && _chartsLoaded) initCharts();
+});
+</script>
+
+<script>
+var pages=['dashboard','history','signals','data-monitor','model-monitor','train','settings'];
+var pageTitles={dashboard:'Dashboard',history:'History',signals:'Signals','data-monitor':'Data Monitor','model-monitor':'Model Monitor',train:'Training Control',settings:'Settings'};
+var currentRole='researcher';
+var currentDashTab='overview';
+
+function goPage(p,el){
+  pages.forEach(function(id){
+    var pg=document.getElementById('page-'+id);
+    if(pg)pg.classList.toggle('active',id===p);
+    var nav=document.getElementById('nav-'+id);
+    if(nav)nav.classList.toggle('active',id===p);
+  });
+  document.getElementById('page-title').textContent=pageTitles[p]||p;
+  closeDrawer();
+}
+
+function switchRole(label,role){
+  currentRole=role;
+  ['trader','risk','researcher','ds'].forEach(function(r){
+    var btn=document.getElementById('rp-'+r);
+    if(btn)btn.classList.toggle('active',r===role);
+    var v=document.getElementById('view-'+r);
+    if(v)v.classList.toggle('active',r===role);
+  });
+  document.getElementById('sb-role-label').textContent=label;
+  var dsGroup=document.getElementById('ds-nav-group');
+  if(dsGroup)dsGroup.style.display=role==='ds'?'block':'none';
+  var agentBtn=document.getElementById('agent-bubble-btn');
+  if(agentBtn)agentBtn.style.display=role==='ds'?'flex':'none';
+  var isOps=(role==='trader'||role==='risk');
+  // EIA/Regime/Returns tabs dimmed for ops; charts tab always accessible for all
+  ['dt-eia-btn','dt-regime-btn','dt-returns-btn'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el){el.style.opacity=isOps?'0.5':'1';el.style.fontWeight=isOps?'400':'';}
+  });
+  // Charts tab always full opacity
+  var chartsBtn=document.getElementById('dt-charts-btn');
+  if(chartsBtn){chartsBtn.style.opacity='1';chartsBtn.style.fontWeight='';}
+  // For ops: bounce back to overview only if on a non-charts detail tab
+  if(isOps&&currentDashTab!=='overview'&&currentDashTab!=='charts'){
+    switchDashTab('overview',document.querySelector('.dash-tab'));
+  }
+  if(role!=='ds'){goPage('dashboard',document.getElementById('nav-dashboard'));}
+}
+
+function switchDashTab(tab,el){
+  currentDashTab=tab;
+  document.querySelectorAll('.dash-tab').forEach(function(b){b.classList.remove('active');});
+  if(el)el.classList.add('active');
+  document.querySelectorAll('.dtab-content').forEach(function(c){c.classList.remove('active');});
+  var t=document.getElementById('tab-'+tab);
+  if(t)t.classList.add('active');
+  // Only navigate to dashboard page if not already there
+  var pg=document.getElementById('page-dashboard');
+  if(pg&&!pg.classList.contains('active')){
+    goPage('dashboard',document.getElementById('nav-dashboard'));
+  }
+  if(tab==='charts') onChartsTab();
+}
+
+function openDrawer(id){
+  var dates={'0701':'July 1, 2026','0630':'June 30, 2026','0627':'June 27, 2026'};
+  document.getElementById('d-date').textContent=dates[id]||id;
+  document.getElementById('d-overlay').classList.add('open');
+  document.getElementById('d-drawer').classList.add('open');
+  switchDTab('summary',document.querySelector('.dtab'));
+}
+function closeDrawer(){
+  document.getElementById('d-overlay').classList.remove('open');
+  document.getElementById('d-drawer').classList.remove('open');
+}
+function switchDTab(tab,btn){
+  ['summary','regime','features','outcome'].forEach(function(t){
+    var el=document.getElementById('dt-'+t);
+    if(el)el.style.display=t===tab?'block':'none';
+  });
+  document.querySelectorAll('.dtab').forEach(function(b){b.classList.toggle('active',b===btn);});
+}
+
+var trainRunning=false;
+function startTrainSim(){
+  if(trainRunning)return;
+  trainRunning=true;
+  document.getElementById('train-start-btn').style.display='none';
+  var runBtn=document.getElementById('train-running-btn');
+  runBtn.style.display='inline-flex';
+  var log=document.getElementById('train-log');
+  log.innerHTML='';
+  var lines=[
+    '<span class="log-muted">[00:00]</span> Loading feature matrix... 14 features × 3,456 samples',
+    '<span class="log-muted">[00:01]</span> Data leakage check... <span class="log-ok">Passed ✓</span>',
+    '<span class="log-muted">[00:04]</span> Fold 1/5 Brier: 0.214',
+    '<span class="log-muted">[00:06]</span> Fold 2/5 Brier: 0.208',
+    '<span class="log-muted">[00:08]</span> Fold 3/5 Brier: 0.221',
+    '<span class="log-muted">[00:10]</span> Fold 4/5 Brier: 0.216',
+    '<span class="log-muted">[00:12]</span> Fold 5/5 Brier: 0.212',
+    '<span class="log-muted">[00:13]</span> OOS Brier: <span class="log-ok">0.198 ✓</span> · MLflow: <span class="log-hi">b7d4e2a9</span>',
+  ];
+  var i=0;
+  var t=setInterval(function(){
+    if(i<lines.length){log.innerHTML+=(i>0?'<br>':'')+lines[i];i++;}
+    else{clearInterval(t);trainRunning=false;runBtn.style.display='none';document.getElementById('train-start-btn').style.display='inline-flex';document.getElementById('train-start-btn').textContent='Retrain';document.getElementById('compare-card').style.display='block';}
+  },380);
+}
+
+(function(){switchRole('Researcher','researcher');})();
+</script>
+
+<!-- DS Agent bubble + panel -->
+<style>
+  #agent-bubble-btn{position:fixed;bottom:24px;right:24px;width:48px;height:48px;border-radius:50%;background:var(--fill-accent);border:none;color:white;cursor:pointer;display:none;align-items:center;justify-content:center;font-size:20px;z-index:200;transition:opacity .15s;}
+  #agent-bubble-btn:hover{opacity:.88;}
+  #agent-panel{position:fixed;right:0;top:0;bottom:0;width:360px;min-width:280px;max-width:780px;background:var(--surface-2);border-left:0.5px solid var(--border);z-index:199;flex-direction:column;display:none;}
+  #ap-drag{position:absolute;left:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:10;background:transparent;}
+  #ap-drag:hover,#ap-drag.dragging{background:var(--border-accent);}
+  .ap-head{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .ap-head-actions{margin-left:auto;display:flex;align-items:center;gap:4px;}
+  .ap-icon-btn{width:26px;height:26px;border-radius:5px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:14px;display:flex;align-items:center;justify-content:center;}
+  .ap-icon-btn:hover{background:var(--surface-1);color:var(--text-primary);}
+  .ap-messages{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;}
+  .ap-input-area{border-top:0.5px solid var(--border);padding:10px 12px;flex-shrink:0;background:var(--surface-1);}
+  .ap-input-row{display:flex;gap:8px;align-items:flex-end;}
+  .ap-input-row textarea{flex:1;border:0.5px solid var(--border-strong);border-radius:var(--radius);padding:7px 10px;font-size:12px;font-family:var(--font);background:var(--surface-2);color:var(--text-primary);resize:none;min-height:34px;max-height:120px;line-height:1.5;outline:none;}
+  .ap-send{width:32px;height:32px;border-radius:var(--radius);background:var(--fill-accent);border:none;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+  .ap-msg-agent{display:flex;gap:8px;align-items:flex-start;}
+  .ap-msg-user{display:flex;justify-content:flex-end;}
+  .ap-bubble-agent{background:var(--surface-1);border:0.5px solid var(--border);border-radius:3px 10px 10px 10px;padding:8px 12px;font-size:12px;line-height:1.75;color:var(--text-secondary);max-width:92%;}
+  .ap-bubble-user{background:var(--bg-accent);border:0.5px solid var(--border-accent);border-radius:10px 3px 10px 10px;padding:8px 12px;font-size:12px;line-height:1.75;color:var(--text-accent);max-width:92%;}
+  .ap-av{width:22px;height:22px;border-radius:50%;background:var(--bg-pro);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;margin-top:1px;}
+  .ap-tool{background:var(--surface-0);border:0.5px solid var(--border);border-radius:5px;padding:7px 10px;margin-top:6px;font-size:11px;font-family:var(--mono);}
+  .ap-tool-label{font-size:10px;color:var(--text-pro);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+  .ap-tool-name{color:var(--text-pro);font-weight:500;}
+  .ap-tool-result{color:var(--text-success);margin-top:4px;}
+  .ap-quick{display:flex;flex-direction:column;gap:5px;padding:0 12px 10px;}
+  .ap-quick button{text-align:left;padding:6px 10px;font-size:12px;border:0.5px solid var(--border);border-radius:var(--radius);background:var(--surface-1);color:var(--text-secondary);cursor:pointer;font-family:var(--font);line-height:1.5;}
+  .ap-quick button:hover{background:var(--surface-0);color:var(--text-primary);}
+</style>
+
+<button id="agent-bubble-btn" onclick="toggleAgent()" aria-label="DS Agent">
+  <i class="ti ti-message-circle" aria-hidden="true"></i>
+</button>
+
+<div id="agent-panel">
+  <div id="ap-drag"></div>
+  <div class="ap-head">
+    <div class="ap-av"><i class="ti ti-robot" style="font-size:13px;color:var(--text-pro)" aria-hidden="true"></i></div>
+    <div><div style="font-size:13px;font-weight:500">DS Agent</div><div style="font-size:11px;color:var(--text-muted)" id="ap-status">Online · Ready</div></div>
+    <div class="ap-head-actions">
+      <button class="ap-icon-btn" onclick="toggleFullpage()" title="Fullpage" id="ap-expand-btn"><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button>
+      <button class="ap-icon-btn" onclick="toggleAgent()" title="Close" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+  </div>
+  <div class="ap-messages" id="ap-msgs">
+    <div class="ap-msg-agent">
+      <div class="ap-av"><i class="ti ti-robot" style="font-size:13px;color:var(--text-pro)" aria-hidden="true"></i></div>
+      <div class="ap-bubble-agent">Hi Xuemei. The following issues were detected:<br><br>· <strong style="color:var(--text-warning)">Returns model PSI 0.22</strong> — exceeds threshold 0.20<br>· 2 new signal candidates found (IC 0.31 / 0.28)<br><br>Shall I evaluate the signals and schedule retraining?<div class="ap-tool"><div class="ap-tool-label">⚙ <span class="ap-tool-name">compute_psi</span> · Auto-detected</div><div class="ap-tool-result">Returns model PSI 0.22 → exceeds threshold 0.20</div></div></div>
+    </div>
+  </div>
+  <div class="ap-quick" id="ap-quick">
+    <button onclick="apSend('Evaluate signals first, then retrain returns model')">Evaluate signals first, then retrain returns model</button>
+    <button onclick="apSend('Retrain directly without adding new signals')">Retrain directly without adding new signals</button>
+    <button onclick="apSend('Analyse AIS VLCC signal IC stability')">Analyse AIS VLCC signal IC stability</button>
+  </div>
+  <div class="ap-input-area">
+    <div class="ap-input-row">
+      <textarea id="ap-input" rows="1" placeholder="Describe what you want to do..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();apSend();}" oninput="autoGrow(this)"></textarea>
+      <button class="ap-send" onclick="apSend()"><i class="ti ti-send" aria-hidden="true"></i></button>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Enter to send · Shift+Enter for newline</div>
+  </div>
+</div>
+
+<script>
+var agentOpen=false,agentFullpage=false;
+function toggleAgent(){
+  agentOpen=!agentOpen;
+  var panel=document.getElementById('agent-panel');
+  panel.style.display=agentOpen?'flex':'none';
+  document.getElementById('agent-bubble-btn').querySelector('i').className=agentOpen?'ti ti-x':'ti ti-message-circle';
+}
+function toggleFullpage(){
+  agentFullpage=!agentFullpage;
+  var panel=document.getElementById('agent-panel');
+  var btn=document.getElementById('ap-expand-btn').querySelector('i');
+  var drag=document.getElementById('ap-drag');
+  if(agentFullpage){
+    panel._savedWidth=panel.style.width||'360px';
+    panel.style.position='fixed';
+    panel.style.left=document.querySelector('.sidebar').offsetWidth+'px';
+    panel.style.right='0';panel.style.top='46px';panel.style.width='auto';panel.style.zIndex='150';
+    btn.className='ti ti-arrows-minimize';drag.style.display='none';
+    document.getElementById('ap-status').textContent='Fullpage mode';
+  } else {
+    panel.style.position='fixed';panel.style.left='';panel.style.right='0';panel.style.top='0';
+    panel.style.width=panel._savedWidth||'360px';panel.style.zIndex='199';
+    btn.className='ti ti-arrows-maximize';drag.style.display='';
+    document.getElementById('ap-status').textContent='Online · Ready';
+  }
+}
+(function(){
+  var drag=document.getElementById('ap-drag');
+  var panel=document.getElementById('agent-panel');
+  var startX,startW;
+  drag.addEventListener('mousedown',function(e){
+    startX=e.clientX;startW=panel.offsetWidth;drag.classList.add('dragging');
+    document.body.style.userSelect='none';document.body.style.cursor='col-resize';
+    function onMove(e){var dx=startX-e.clientX;panel.style.width=Math.min(780,Math.max(280,startW+dx))+'px';}
+    function onUp(){drag.classList.remove('dragging');document.body.style.userSelect='';document.body.style.cursor='';document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
+    document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);e.preventDefault();
+  });
+})();
+function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
+
+function gateHtml(title,detail,actionId,confirmLabel,cancelLabel){
+  var id = actionId;
+  return '<div class="ap-gate" style="margin-top:10px;padding:10px;background:var(--bg-warning);border:0.5px solid var(--border-warning);border-radius:var(--radius)">' +
+    '<div style="font-size:11px;font-weight:500;color:var(--text-warning);margin-bottom:7px">⚠ Confirm action — ' + title + '</div>' +
+    '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;line-height:1.75">' + detail + '</div>' +
+    '<div style="display:flex;gap:6px">' +
+    '<button data-action="' + id + '" onclick="apConfirmBtn(this)" style="padding:5px 14px;font-size:12px;border-radius:var(--radius);background:var(--fill-accent);color:var(--on-accent);border:none;cursor:pointer;font-family:var(--font)">' + confirmLabel + '</button>' +
+    '<button onclick="apCancel(this)" style="padding:5px 14px;font-size:12px;border-radius:var(--radius);background:var(--bg-danger);color:var(--text-danger);border:0.5px solid var(--border-danger);cursor:pointer;font-family:var(--font)">' + cancelLabel + '</button>' +
+    '</div></div>';
+}
+function toolHtml(name,args,result){
+  return '<div class="ap-tool"><div class="ap-tool-label">⚙ <span class="ap-tool-name">'+name+'</span></div>'+args+'<div class="ap-tool-result">'+result+'</div></div>';
+}
+function appendAgentMsg(html){
+  var msgs=document.getElementById('ap-msgs');
+  var d=document.createElement('div');d.className='ap-msg-agent';
+  d.innerHTML='<div class="ap-av"><i class="ti ti-robot" style="font-size:13px;color:var(--text-pro)" aria-hidden="true"></i></div><div class="ap-bubble-agent">'+html+'</div>';
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;
+}
+function apConfirmBtn(btn){
+  apConfirm(btn.getAttribute('data-action'), btn);
+}
+function apConfirm(actionId,btn){
+  var gate=btn.closest('.ap-gate');
+  gate.querySelectorAll('button').forEach(function(b){b.disabled=true;b.style.opacity='0.5';});
+  var ok=document.createElement('div');ok.style.cssText='font-size:11px;color:var(--text-success);margin-top:6px;font-family:var(--mono)';ok.textContent='✓ Confirmed';gate.appendChild(ok);
+  setTimeout(function(){executeAction(actionId);},400);
+}
+function apCancel(btn){
+  var gate=btn.closest('.ap-gate');
+  gate.querySelectorAll('button').forEach(function(b){b.disabled=true;b.style.opacity='0.5';});
+  var no=document.createElement('div');no.style.cssText='font-size:11px;color:var(--text-muted);margin-top:6px;font-family:var(--mono)';no.textContent='✗ Cancelled';gate.appendChild(no);
+}
+function executeAction(actionId){
+  if(actionId==='add_feature'){
+    appendAgentMsg(toolHtml('add_to_feature_registry','Writing config/features.yaml','✓ New feature added (total: 15)')+'<br>Feature added. Retraining required to take effect.'+gateHtml('Start returns model retraining','· Model: Returns (TabPFN v2.3)<br>· Features: 15 (including new)<br>· Folds: 5, gap=20d<br>· Estimated time: ~15 minutes','run_training','Confirm training ✓','Later'));
+  } else if(actionId==='run_training'){
+    appendAgentMsg(toolHtml('check_leakage','gap=20d, 5-fold, Bonferroni α=0.0125','✓ No data leakage')+toolHtml('run_training','Returns · TabPFN · 15 features','Fold 1-5 Brier: 0.214/0.208/0.221/0.212/0.196<br>OOS Brier: 0.198 ← vs old 0.240, improvement 17.5% ✓ · MLflow: b7d4e2a9')+'<br>Training complete. Deploy?'+gateHtml('Replace production model','· Current v2.3 (Brier 0.240) will be replaced<br>· New v2.4 (Brier 0.198, PSI 0.04)<br>· MLflow run_id: b7d4e2a9','deploy','Confirm deploy ✓','Skip deploy'));
+  } else if(actionId==='deploy'){
+    var msgs=document.getElementById('ap-msgs');
+    var d=document.createElement('div');d.className='ap-msg-agent';
+    d.innerHTML='<div class="ap-av" style="background:var(--bg-success)"><i class="ti ti-check" style="font-size:13px;color:var(--text-success)" aria-hidden="true"></i></div><div class="ap-bubble-agent" style="background:var(--bg-success);border-color:var(--border-success)">'+toolHtml('deploy_model','returns_v2.4.joblib → production service','✓ Deployed · model_versions table updated')+'<strong style="color:var(--text-success)">All done.</strong><br>· Added feature sat_tank_fill_me (total: 15)<br>· Brier: 0.240 → <strong>0.198</strong>（−17.5%）<br>· PSI: 0.22 → <strong>0.04</strong></div>';
+    msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;
+  }
+}
+function apSend(text){
+  var input=document.getElementById('ap-input');
+  var msg=text||input.value.trim();if(!msg)return;
+  input.value='';input.style.height='auto';
+  document.getElementById('ap-quick').style.display='none';
+  var msgs=document.getElementById('ap-msgs');
+  var uDiv=document.createElement('div');uDiv.className='ap-msg-user';
+  uDiv.innerHTML='<div class="ap-bubble-user">'+esc(msg)+'</div>';
+  msgs.appendChild(uDiv);msgs.scrollTop=msgs.scrollHeight;
+  var typingDiv=document.createElement('div');typingDiv.className='ap-msg-agent';typingDiv.id='ap-typing';
+  typingDiv.innerHTML='<div class="ap-av"><i class="ti ti-robot" style="font-size:13px;color:var(--text-pro)" aria-hidden="true"></i></div><div class="ap-bubble-agent" style="color:var(--text-muted);font-style:italic">Thinking...</div>';
+  msgs.appendChild(typingDiv);msgs.scrollTop=msgs.scrollHeight;
+  setTimeout(function(){
+    var t=document.getElementById('ap-typing');if(t)t.remove();
+    var r=getAgentReply(msg);
+    var aDiv=document.createElement('div');aDiv.className='ap-msg-agent';
+    aDiv.innerHTML='<div class="ap-av"><i class="ti ti-robot" style="font-size:13px;color:var(--text-pro)" aria-hidden="true"></i></div><div class="ap-bubble-agent">'+r+'</div>';
+    msgs.appendChild(aDiv);msgs.scrollTop=msgs.scrollHeight;
+  },900);
+}
+function getAgentReply(msg){
+  var m=msg.toLowerCase();
+  if(m.includes('evaluate_signal')||m.includes('evaluate_first')){
+    return 'Starting evaluation of satellite tank fill rate signal.'+
+      toolHtml('fetch_data_sample','sat_tank_fill_middle_east · 2019-01-01 ~ 2025-06-30','✓ Coverage 94.2% · 6.5yr history · 3d publication lag')+
+      toolHtml('compute_ic','target=regime_label · lag 5d/10d/20d · Bonferroni α=0.0125','IC=0.31/0.29/0.28 · p&lt;0.01 · All pass ✓')+
+      toolHtml('compute_oos_decay','train_end=2022-12-31 / oos_start=2023-01-01','Train IC 0.33 → OOS IC 0.27 · Decay 18.2% &lt; 30% ✓')+
+      toolHtml('compute_feature_correlation','vs existing 14 features','Max correlation 0.42 &lt; 0.5 ✓ No redundancy')+
+      '<br>Satellite tank fill rate passed all evaluation gates — recommended for feature pool.'+
+      gateHtml('Modify features.yaml','Will append entry:<br><code style="font-family:var(--mono);background:var(--surface-1);padding:2px 5px;border-radius:3px">sat_tank_fill_me · bearish_if_positive: true</code>','add_feature','Confirm add ✓','Cancel');
+  }
+  if(m.includes('direct_retrain')||m.includes('no_new_signal')){
+    return 'Understood. Retraining with current 14 features.'+toolHtml('check_sample_size','3,456 samples · 5-fold','✓ Meets minimum sample size')+toolHtml('check_leakage','gap=20days','✓ No data leakage')+'Checks passed.'+gateHtml('Start retraining','· Model: Returns (TabPFN v2.3)<br>· Features: 14<br>· Folds: 5, gap=20d','run_training','Confirm training ✓','Cancel');
+  }
+  if(m.includes('ais')||m.includes('vlcc')){
+    return 'Evaluating AIS VLCC vessel count (Persian Gulf):'+toolHtml('compute_ic','ais_vlcc_count · lag 5d/10d/20d','IC=0.28/0.26/0.25 · All significant ✓')+toolHtml('compute_oos_decay','OOS decay analysis','Decay 22.6% &lt; threshold 30% ✓')+toolHtml('compute_feature_correlation','vs existing 14 features','Max correlation 0.38 &lt; 0.5 ✓ No redundancy')+'IC stable — recommended for feature pool. Proceed?';
+  }
+  if(m.includes('yes')||m.includes('proceed')||m.includes('add')||m.includes('yes')||m.includes('proceed')||m.includes('add')){
+    return 'Adding AIS VLCC signal to feature pool.'+gateHtml('Modify features.yaml','Will append entry:<br><code style="font-family:var(--mono);background:var(--surface-1);padding:2px 5px;border-radius:3px">ais_vlcc_count · source: ais</code>','add_feature','Confirm add ✓','Cancel');
+  }
+  return 'Understood. What should I do first — data fetch, IC computation, or queue for training?';
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OilSignalyst — DS Agent</title>
+<style>
+  :root {
+    --bg-page: #F7F6F2;
+    --surface-0: #F7F6F2;
+    --surface-1: #F1EFE8;
+    --surface-2: #FFFFFF;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.14);
+    --text-primary: #2C2C2A;
+    --text-secondary: #5F5E5A;
+    --text-muted: #888780;
+    --text-danger: #A32D2D;
+    --text-success: #3B6D11;
+    --text-warning: #854F0B;
+    --text-accent: #185FA5;
+    --text-pro: #534AB7;
+    --bg-danger: #FCEBEB;
+    --bg-success: #EAF3DE;
+    --bg-warning: #FAEEDA;
+    --bg-accent: #E6F1FB;
+    --bg-pro: #EEEDFE;
+    --border-danger: #F09595;
+    --border-success: #97C459;
+    --border-warning: #EF9F27;
+    --border-accent: #85B7EB;
+    --fill-accent: #378ADD;
+    --on-accent: #FFFFFF;
+    --radius: 8px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--surface-0); color: var(--text-primary); font-family: var(--font); font-size: 13px; line-height: 1.5; height: 100vh; display: flex; flex-direction: column; }
+  .page-head { padding: 14px 16px 12px; border-bottom: 0.5px solid var(--border); background: var(--surface-2); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .page-title { font-size: 14px; font-weight: 500; }
+  .page-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .role-badge { font-size: 11px; background: var(--bg-pro); color: var(--text-pro); padding: 2px 8px; border-radius: 20px; margin-left: auto; }
+  .chat-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { display: flex; gap: 8px; align-items: flex-start; }
+  .msg-av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+  .av-agent { background: var(--bg-pro); border: 0.5px solid var(--border-accent); }
+  .av-user { background: var(--bg-accent); border: 0.5px solid var(--border-accent); }
+  .msg-body { flex: 1; min-width: 0; }
+  .msg-name { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  .bubble { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 3px 10px 10px 10px; padding: 10px 13px; font-size: 12px; line-height: 1.75; color: var(--text-secondary); }
+  .bubble-user { background: var(--bg-accent); border-color: var(--border-accent); border-radius: 10px 3px 10px 10px; color: var(--text-accent); }
+  /* Tool call block */
+  .tool-call { background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-top: 8px; font-size: 11px; }
+  .tool-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .tool-label .tool-icon { width: 14px; height: 14px; background: var(--bg-pro); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+  .tool-name { color: var(--text-pro); font-family: var(--mono); font-weight: 500; }
+  .tool-code { font-family: var(--mono); color: var(--text-secondary); font-size: 11px; line-height: 1.7; background: var(--surface-0); border-radius: 4px; padding: 6px 8px; margin-top: 6px; }
+  .tool-result { margin-top: 6px; padding: 6px 8px; background: var(--bg-success); border: 0.5px solid var(--border-success); border-radius: 4px; font-family: var(--mono); font-size: 11px; color: var(--text-success); line-height: 1.7; }
+  .tool-result.warn { background: var(--bg-warning); border-color: var(--border-warning); color: var(--text-warning); }
+  /* Confirm gate */
+  .confirm-gate { background: var(--surface-2); border: 0.5px solid var(--border-warning); border-radius: var(--radius); padding: 12px 14px; margin-top: 8px; }
+  .confirm-title { font-size: 12px; font-weight: 500; color: var(--text-warning); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .confirm-detail { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.75; }
+  .confirm-detail code { font-family: var(--mono); background: var(--surface-1); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+  .confirm-btns { display: flex; gap: 8px; }
+  .btn { padding: 6px 14px; font-size: 12px; border: 0.5px solid var(--border-strong); background: var(--surface-2); color: var(--text-primary); border-radius: var(--radius); cursor: pointer; font-family: var(--font); }
+  .btn:hover { background: var(--surface-1); }
+  .btn-primary { background: var(--fill-accent); color: var(--on-accent); border-color: var(--fill-accent); }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-danger { background: var(--bg-danger); color: var(--text-danger); border-color: var(--border-danger); }
+  /* Input area */
+  .input-area { padding: 12px 16px; border-top: 0.5px solid var(--border); background: var(--surface-2); flex-shrink: 0; }
+  .input-row { display: flex; gap: 8px; align-items: flex-end; background: var(--surface-1); border: 0.5px solid var(--border-strong); border-radius: var(--radius); padding: 8px 12px; }
+  .input-row textarea { flex: 1; border: none; background: none; font-family: var(--font); font-size: 13px; color: var(--text-primary); resize: none; outline: none; line-height: 1.5; min-height: 20px; max-height: 100px; }
+  .input-row textarea::placeholder { color: var(--text-muted); }
+  .send-btn { width: 30px; height: 30px; border-radius: 6px; background: var(--fill-accent); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
+  .send-btn:hover { opacity: 0.88; }
+  .input-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .hint-btn { background: none; border: 0.5px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--text-secondary); cursor: pointer; font-family: var(--font); }
+  .hint-btn:hover { background: var(--surface-1); }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 1.5px solid var(--border-strong); border-top-color: var(--fill-accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .streaming { color: var(--text-muted); font-style: italic; }
+  .tag { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 20px; font-size: 10px; font-weight: 500; }
+  .t-green { background: var(--bg-success); color: var(--text-success); }
+  .t-yellow { background: var(--bg-warning); color: var(--text-warning); }
+  .t-red { background: var(--bg-danger); color: var(--text-danger); }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div>
+    <div class="page-title">DS Agent</div>
+    <div class="page-sub">Data science assistant · Analyse · Retrain · Add signals</div>
+  </div>
+  <span class="role-badge">DS Role</span>
+</div>
+
+<div class="chat-area" id="chat">
+
+  <!-- Message 1: Agent initiates -->
+  <div class="msg">
+    <div class="msg-av av-agent">🤖</div>
+    <div class="msg-body">
+      <div class="msg-name">Agent</div>
+      <div class="bubble">
+        Hi Xuemei. The following issues were detected:<br><br>
+        · <strong style="color:var(--text-warning)">Returns model PSI 0.22</strong>，exceeds threshold 0.20 — retraining recommended<br>
+        · Signal Scanner found <strong>2 new signal candidates</strong>Worth evaluating<br>
+        · Satellite tank fill rate IC=0.31 (Recommended)<br>
+        · AIS VLCC vessel count IC=0.28 (Recommended)<br><br>
+        Would you like to evaluate the new signals first, or start retraining directly?
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 2: User -->
+  <div class="msg" style="flex-direction:row-reverse">
+    <div class="msg-av av-user" style="border-radius:50%">XM</div>
+    <div class="msg-body" style="align-items:flex-end;display:flex;flex-direction:column">
+      <div class="msg-name" style="text-align:right">Xuemei</div>
+      <div class="bubble bubble-user">
+        Evaluate the satellite signal first — check IC curve stability before deciding to add it.
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 3: Agent with tool calls -->
+  <div class="msg">
+    <div class="msg-av av-agent">🤖</div>
+    <div class="msg-body">
+      <div class="msg-name">Agent</div>
+      <div class="bubble">
+        OK, I'll evaluate the satellite tank fill rate signal.
+        <div class="tool-call">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">fetch_data_sample</span>
+          </div>
+          <div class="tool-code">signal = "sat_tank_fill_middle_east"<br>start = "2019-01-01"<br>end = "2025-06-30"<br>check_coverage = True</div>
+          <div class="tool-result">
+            ✓ Data fetch complete<br>
+            Coverage: 94.2% (gaps mainly in 2020 Q1-Q2 due to cloud cover)<br>
+            Frequency: Weekly<br>
+            History length: 6.5 years<br>
+            publication lag: ~3 days
+          </div>
+        </div>
+
+        <div class="tool-call" style="margin-top:8px">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">compute_ic</span>
+          </div>
+          <div class="tool-code">signal = "sat_tank_fill_middle_east"<br>target = "regime_label"<br>lags = [5, 10, 20]<br>method = "spearman"<br>bonferroni_alpha = 0.05 / 4  # 4 candidate signals</div>
+          <div class="tool-result">
+            lag 5d:  IC=0.31, p=0.003 ✓ significant<br>
+            lag 10d: IC=0.29, p=0.006 ✓ significant<br>
+            lag 20d: IC=0.28, p=0.008 ✓ significant<br>
+            Bonferroni α=0.0125, 3/3 lags pass
+          </div>
+        </div>
+
+        <div class="tool-call" style="margin-top:8px">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">compute_oos_decay</span>
+          </div>
+          <div class="tool-code">signal = "sat_tank_fill_middle_east"<br>train_end = "2022-12-31"<br>oos_start = "2023-01-01"</div>
+          <div class="tool-result">
+            Train IC: 0.33<br>
+            OOS IC:   0.27<br>
+            OOS decay: 18.2% ← below threshold 30% ✓
+          </div>
+        </div>
+
+        <div class="tool-call" style="margin-top:8px">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">compute_feature_correlation</span>
+          </div>
+          <div class="tool-code">signal = "sat_tank_fill_middle_east"<br>existing_features = ["crude_inv_dev", "spec_net_pct", ...]</div>
+          <div class="tool-result">
+            vs crude_inv_dev: 0.42 (within threshold 0.5)<br>
+            Max correlation with existing features: 0.38<br>
+            No highly correlated existing features ✓
+          </div>
+        </div>
+
+        Overall, satellite tank fill rate passed all evaluation gates: IC significant (Bonferroni-corrected), low OOS decay, no redundancy with existing features.
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 4: User -->
+  <div class="msg" style="flex-direction:row-reverse">
+    <div class="msg-av av-user" style="border-radius:50%">XM</div>
+    <div class="msg-body" style="align-items:flex-end;display:flex;flex-direction:column">
+      <div class="msg-name" style="text-align:right">Xuemei</div>
+      <div class="bubble bubble-user">
+        Adding it to the feature pool and scheduling a retraining run to address the PSI drift.
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 5: Agent with confirm gate -->
+  <div class="msg">
+    <div class="msg-av av-agent">🤖</div>
+    <div class="msg-body">
+      <div class="msg-name">Agent</div>
+      <div class="bubble">
+        I am ready to execute the following two steps — please confirm:
+
+        <div class="confirm-gate" id="gate-1">
+          <div class="confirm-title">⚠ Confirm action 1/2 — Modify features.yaml</div>
+          <div class="confirm-detail">
+            Will append the following entry to <code>config/features.yaml</code>：<br><br>
+            <code style="display:block;padding:8px;background:var(--surface-1);border-radius:4px;margin-top:6px">
+              - name: sat_tank_fill_me<br>
+              &nbsp;&nbsp;source: satellite_middle_east<br>
+              &nbsp;&nbsp;transform: raw<br>
+              &nbsp;&nbsp;bearish_if_positive: true<br>
+              &nbsp;&nbsp;window: 1
+            </code>
+          </div>
+          <div class="confirm-btns">
+            <button class="btn btn-primary" onclick="confirmStep(1)">Confirm add ✓</button>
+            <button class="btn btn-danger" onclick="cancelStep(1)">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 6: After confirm -->
+  <div class="msg" id="msg-after-confirm" style="display:none">
+    <div class="msg-av av-agent">🤖</div>
+    <div class="msg-body">
+      <div class="msg-name">Agent</div>
+      <div class="bubble">
+        <div class="tool-call">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">add_to_feature_registry</span>
+          </div>
+          <div class="tool-code">feature = "sat_tank_fill_me"<br>config = { source: "satellite_middle_east", bearish_if_positive: true }</div>
+          <div class="tool-result">✓ features.yaml updated, 1 new feature added (total: 15)</div>
+        </div>
+
+        Feature added. Step 2 — retrain returns model:
+
+        <div class="confirm-gate" id="gate-2">
+          <div class="confirm-title">⚠ Confirm action 2/2 — Retrain returns model</div>
+          <div class="confirm-detail">
+            Training will run with the following config:<br><br>
+            · Model: <code>returns</code>(Returns model · TabPFN · 4-class)<br>
+            · Features: 15 (including new sat_tank_fill_me)<br>
+            · Training set: 2010-01-01 ~ 2023-12-31<br>
+            · TimeSeriesSplit: 5-fold, gap=20d<br>
+            · Bonferroni α = 0.05/4 = 0.0125<br><br>
+            If the new OOS Brier improves on 0.24, it will be auto-deployed.
+          </div>
+          <div class="confirm-btns">
+            <button class="btn btn-primary" onclick="confirmStep(2)">Confirm training ✓</button>
+            <button class="btn btn-danger" onclick="cancelStep(2)">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 7: Training in progress -->
+  <div class="msg" id="msg-training" style="display:none">
+    <div class="msg-av av-agent">🤖</div>
+    <div class="msg-body">
+      <div class="msg-name">Agent</div>
+      <div class="bubble">
+        <div class="tool-call">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">run_training</span>
+            <span class="spinner"></span>
+            <span class="streaming">Training...</span>
+          </div>
+          <div class="tool-code" id="training-log">
+            [00:00] Loading feature matrix... 15 features × 3,456 samples<br>
+            [00:01] Data leakage check... <span style="color:var(--text-success)">Passed ✓</span><br>
+            [00:03] TimeSeriesSplit 5-fold, gap=20d...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message 8: Training done -->
+  <div class="msg" id="msg-done" style="display:none">
+    <div class="msg-av av-agent">🤖</div>
+    <div class="msg-body">
+      <div class="msg-name">Agent</div>
+      <div class="bubble">
+        <div class="tool-call">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">compare_model_performance</span>
+          </div>
+          <div class="tool-result">
+            Old (v2.3): OOS Brier = 0.240, PSI = 0.22<br>
+            New (v2.4): OOS Brier = 0.198 ✓, PSI = 0.04 ✓<br>
+            Improvement: −17.5% (Brier) ← significant improvement
+          </div>
+        </div>
+        <div class="tool-call" style="margin-top:8px">
+          <div class="tool-label">
+            <div class="tool-icon">⚙</div>
+            <span>Tool calls</span>
+            <span class="tool-name">deploy_model</span>
+          </div>
+          <div class="tool-result">
+            ✓ returns_v2.4.joblib deployed as active production version<br>
+            model_versions table updated<br>
+            MLflow run_id: b7d4e2a9
+          </div>
+        </div>
+
+        Training complete! New returns model auto-deployed:<br><br>
+        · OOS Brier <strong style="color:var(--text-success)">0.198</strong>(old: 0.240, improvement 17.5%)<br>
+        · PSI reset to <strong style="color:var(--text-success)">0.04</strong>(old: 0.22)<br>
+        · New feature <code style="font-family:var(--mono);font-size:11px;background:var(--surface-1);padding:1px 5px;border-radius:3px">sat_tank_fill_me</code> SHAP contribution 9.2%<br><br>
+        Tomorrow's Dashboard will show updated forecasts.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Input area -->
+<div class="input-area">
+  <div class="input-row">
+    <textarea id="input" placeholder="Describe what you want to do, e.g. analyse AIS signal IC stability..." rows="1" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+    <button class="send-btn" onclick="send()">↑</button>
+  </div>
+  <div class="input-hint">
+    <span style="color:var(--text-muted)">Quick actions:</span>
+    <button class="hint-btn" onclick="fillInput('Analyse AIS VLCC signal and evaluate for feature pool')">Evaluate AIS signal</button>
+    <button class="hint-btn" onclick="fillInput('Retrain all three models with latest data')">Full retrain</button>
+    <button class="hint-btn" onclick="fillInput('Explain today's Regime forecast drivers')">Explain today's forecast</button>
+  </div>
+</div>
+
+<script>
+function confirmStep(step) {
+  var gate = document.getElementById('gate-' + step);
+  gate.innerHTML = '<div class="tool-result">✓ Confirmed</div>';
+  if (step === 1) {
+    setTimeout(function() {
+      document.getElementById('msg-after-confirm').style.display = 'flex';
+      scrollBottom();
+    }, 400);
+  } else if (step === 2) {
+    setTimeout(function() {
+      document.getElementById('msg-training').style.display = 'flex';
+      scrollBottom();
+      simulateTraining();
+    }, 400);
+  }
+}
+
+function cancelStep(step) {
+  var gate = document.getElementById('gate-' + step);
+  gate.innerHTML = '<div class="tool-result warn">✗ Action cancelled</div>';
+}
+
+function simulateTraining() {
+  var log = document.getElementById('training-log');
+  var lines = [
+    '[00:11] Fold 1/5 Brier: 0.214',
+    '[00:13] Fold 2/5 Brier: 0.208',
+    '[00:15] Fold 3/5 Brier: 0.201',
+    '[00:17] Fold 4/5 Brier: 0.196',
+    '[00:19] Fold 5/5 Brier: 0.192',
+    '[00:20] Mean Brier (CV): <span style="color:var(--text-success)">0.202</span>',
+    '[00:21] OOS Brier: <span style="color:var(--text-success)">0.198 ✓ Better than old version 0.24</span>',
+    '[00:21] Writing calibration curve to MLflow...',
+    '[00:22] Writing model to data/models/returns_v2.4.joblib'
+  ];
+  var i = 0;
+  function addLine() {
+    if (i < lines.length) {
+      log.innerHTML += '<br>' + lines[i++];
+      scrollBottom();
+      setTimeout(addLine, 350);
+    } else {
+      setTimeout(function() {
+        document.getElementById('msg-done').style.display = 'flex';
+        scrollBottom();
+      }, 500);
+    }
+  }
+  setTimeout(addLine, 800);
+}
+
+function scrollBottom() {
+  var chat = document.getElementById('chat');
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+}
+
+function fillInput(text) {
+  document.getElementById('input').value = text;
+  document.getElementById('input').focus();
+}
+
+function send() {
+  var val = document.getElementById('input').value.trim();
+  if (!val) return;
+  document.getElementById('input').value = '';
+  document.getElementById('input').style.height = 'auto';
+  // In a real implementation this would call the Agent API
+  // For prototype, just show a placeholder response
+  var chat = document.getElementById('chat');
+  var userMsg = document.createElement('div');
+  userMsg.className = 'msg';
+  userMsg.style.flexDirection = 'row-reverse';
+  userMsg.innerHTML = `
+    <div class="msg-av av-user" style="border-radius:50%">XM</div>
+    <div class="msg-body" style="align-items:flex-end;display:flex;flex-direction:column">
+      <div class="msg-name" style="text-align:right">Xuemei</div>
+      <div class="bubble bubble-user">${val}</div>
+    </div>`;
+  chat.appendChild(userMsg);
+  scrollBottom();
+}
+</script>
+</body>
+</html>
