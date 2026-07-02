@@ -5,6 +5,9 @@ import { useModelStatus } from '@/hooks/useModelStatus';
 import AlertBanner from '@/components/shared/AlertBanner';
 import DashTabBar from './DashTabBar';
 import OverviewTab from './tabs/Overview';
+import EIATab from './tabs/EIATab';
+import RegimeTab from './tabs/RegimeTab';
+import ReturnsTab from './tabs/ReturnsTab';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<DashTab>('overview');
@@ -32,9 +35,9 @@ export default function Dashboard() {
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
-        {activeTab === 'eia' && <div className="text-text-muted text-[12px]">EIA Forecast tab — CP3</div>}
-        {activeTab === 'regime' && <div className="text-text-muted text-[12px]">Regime tab — CP3</div>}
-        {activeTab === 'returns' && <div className="text-text-muted text-[12px]">Return Dist. tab — CP3</div>}
+        {activeTab === 'eia' && <EIATab />}
+        {activeTab === 'regime' && <RegimeTab />}
+        {activeTab === 'returns' && <ReturnsTab />}
         {activeTab === 'charts' && <div className="text-text-muted text-[12px]">Market Data tab — CP4</div>}
       </div>
     </div>
