@@ -6,19 +6,10 @@ import App from './App.tsx'
 
 const queryClient = new QueryClient()
 
-async function bootstrap() {
-  if (import.meta.env.DEV) {
-    const { worker } = await import('./mocks/browser')
-    await worker.start({ onUnhandledRequest: 'bypass' })
-  }
-
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </StrictMode>,
-  )
-}
-
-bootstrap()
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </StrictMode>,
+)
