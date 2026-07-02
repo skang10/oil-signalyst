@@ -7,9 +7,9 @@ from sqlalchemy.orm import selectinload
 from api.dependencies import CurrentUser, DbSession
 from core.models.regime import dominant_regime
 from core.postprocess.report_assembler import assemble_daily_report
-from core.postprocess.stress_test import run_stress_test
+from core.postprocess.stress_test import get_r3_max_drawdown, run_stress_test
 from db.crud import get_recent_predictions
-from db.models import FeatureSnapshot, Prediction
+from db.models import FeatureSnapshot, Prediction, User
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 VALID_ROLES = {"trader", "risk", "researcher", "ds"}
@@ -17,7 +17,6 @@ VALID_ROLES = {"trader", "risk", "researcher", "ds"}
 
 @router.get("/daily/{role}")
 async def get_daily_report(role: str, db: DbSession, user: CurrentUser) -> dict:
-    del user
     if role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Unknown report role: {role}")
 
@@ -34,7 +33,7 @@ async def get_daily_report(role: str, db: DbSession, user: CurrentUser) -> dict:
 
     snapshot = await _get_snapshot(db, prediction)
     full = await assemble_daily_report(prediction, snapshot)
-    return _filter_by_role(full, role)
+    return await _filter_by_role(full, role, user)
 
 
 @router.get("/stress")
@@ -83,7 +82,7 @@ async def _get_snapshot(db: DbSession, prediction: Prediction) -> FeatureSnapsho
     return row.scalar_one_or_none()
 
 
-def _filter_by_role(report: dict, role: str) -> dict:
+async def _filter_by_role(report: dict, role: str, user: User) -> dict:
     base_keys = [
         "date",
         "price",
@@ -109,7 +108,18 @@ def _filter_by_role(report: dict, role: str) -> dict:
             "ovx": report["ovx"],
         }
     if role == "risk":
-        return {**base, "var_95": report["var_95"]}
+        decision = report["decision"]
+        exposure_barrels = user.exposure_barrels or 100_000
+        hedge_ratio = decision.get("hedge_ratio", 0.0)
+        return {
+            **base,
+            "var_95": report["var_95"],
+            "cvar_95": decision.get("cvar_95", 0.0),
+            "current_exposure_mbbls": round(exposure_barrels / 1_000_000, 4),
+            "hedge_ratio": hedge_ratio,
+            "recommended_hedge_ratio": hedge_ratio,
+            "r3_historical_max_drawdown": await get_r3_max_drawdown(),
+        }
     if role == "researcher":
         return {
             **base,

@@ -79,16 +79,24 @@ def sample_report() -> dict:
             "stop_loss": 70.0,
             "stop_loss_pct": 0.0667,
             "expected_ret": 0.05,
+            "cvar_95": -0.09,
+            "hedge_ratio": 0.4,
         },
         "brent_wti_spread": 3.5,
         "ovx": 20.0,
         "cot_net_percentile": 60.0,
         "price_5d_history": [70.0, 71.0, 72.0, 73.0, 75.0],
+        "var_95": 0.3,
     }
 
 
-def test_trader_role_exposes_all_new_fields(sample_report):
-    result = _filter_by_role(sample_report, "trader")
+class _FakeUser:
+    exposure_barrels = 250_000
+
+
+@pytest.mark.asyncio
+async def test_trader_role_exposes_all_new_fields(sample_report):
+    result = await _filter_by_role(sample_report, "trader", _FakeUser())
 
     assert result["signal"] == "LONG"
     assert result["kelly_position"] == 0.3
@@ -99,3 +107,22 @@ def test_trader_role_exposes_all_new_fields(sample_report):
     assert result["brent_wti_spread"] == 3.5
     assert result["cot_net_percentile"] == 60.0
     assert result["ovx"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_risk_role_exposes_all_new_fields(sample_report, monkeypatch):
+    import api.routes.reports as reports_module
+
+    async def fake_r3_drawdown():
+        return -0.42
+
+    monkeypatch.setattr(reports_module, "get_r3_max_drawdown", fake_r3_drawdown)
+
+    result = await _filter_by_role(sample_report, "risk", _FakeUser())
+
+    assert result["var_95"] == 0.3
+    assert result["cvar_95"] == -0.09
+    assert result["current_exposure_mbbls"] == 0.25
+    assert result["hedge_ratio"] == 0.4
+    assert result["recommended_hedge_ratio"] == 0.4
+    assert result["r3_historical_max_drawdown"] == -0.42

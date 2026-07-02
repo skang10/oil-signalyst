@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import pandas as pd
+from sqlalchemy import select
 
 from core.config_paths import FEATURES_DIR
 from core.data.registry import DataRegistry
@@ -11,8 +12,13 @@ from core.models.model_registry import ModelRegistry
 from core.models.regime import dominant_regime, predict_regime
 from core.models.regime_labels import build_regime_series
 from core.models.returns import predict_returns
+from db.database import get_db
+from db.models import Prediction
 
 logger = get_logger(__name__)
+
+R3_DRAWDOWN_FALLBACK = -0.38  # historical reference: 2014 OPEC price war
+R3_DRAWDOWN_MIN_OUTCOMES = 20
 
 STRESS_SCENARIOS = {
     "2020_covid": date(2020, 3, 16),
@@ -61,6 +67,32 @@ def _actual_forward_return(target_date: date, registry: DataRegistry) -> float |
     start_price = wti.iloc[start_idx]
     end_price = wti.iloc[start_idx + FORWARD_HORIZON_DAYS]
     return float(end_price / start_price - 1)
+
+
+async def get_r3_max_drawdown() -> float:
+    """Worst observed realized return among predictions whose dominant regime
+    was R3 (derived from regime_probs at read time - there is no stored
+    dominant_regime column). Falls back to a historical reference (the 2014
+    OPEC price war) when too few R3 outcomes exist yet, which is expected
+    early on since outcome_backfill needs real elapsed time to fill in
+    actual_return.
+    """
+    async with get_db() as db:
+        rows = await db.execute(
+            select(Prediction.regime_probs, Prediction.actual_return).where(
+                Prediction.actual_return.isnot(None)
+            )
+        )
+        records = rows.all()
+
+    r3_returns = [
+        actual_return
+        for regime_probs, actual_return in records
+        if dominant_regime(regime_probs) == "R3"
+    ]
+    if len(r3_returns) < R3_DRAWDOWN_MIN_OUTCOMES:
+        return R3_DRAWDOWN_FALLBACK
+    return round(min(r3_returns), 4)
 
 
 async def run_stress_test() -> dict:
