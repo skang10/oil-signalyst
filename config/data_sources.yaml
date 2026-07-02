@@ -29,7 +29,7 @@ sources:
 
   cushing_inventory:
     type: eia
-    series_id: "PET.WCUOK1.W"
+    series_id: "PET.W_EPC0_SAX_YCUOK_MBBL.W"
     freq: W
     release_day: 2
     lag_days: 0
