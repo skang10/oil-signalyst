@@ -72,6 +72,13 @@ export const dailyReportFixture: DailyReport = {
     ],
     switch_trigger:
       'Geopolitical escalation or OPEC+ emergency production cut meeting -> R3 -> R1 (Supply Squeeze Bull)',
+    shap_drivers: [
+      { name: 'curve_slope_zscore', contribution: 0.18, direction: 'bearish' },
+      { name: 'crude_inv_dev', contribution: 0.16, direction: 'bearish' },
+      { name: 'spec_net_pct', contribution: 0.11, direction: 'bearish' },
+      { name: 'ovx', contribution: 0.09, direction: 'bearish' },
+      { name: 'copper_ret_20d', contribution: 0.07, direction: 'bullish' },
+    ],
   },
 
   returns: {

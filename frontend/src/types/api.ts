@@ -57,6 +57,12 @@ export interface DailyReport {
       direction: 'bullish' | 'bearish' | 'neutral';
     }[];
     switch_trigger: string;
+    /**
+     * Not in spec §9 (only eia.shap_drivers is typed there) - added for
+     * ResearcherView/Model Monitor's "SHAP Feature Importance (Regime)"
+     * card, which the HTML prototype requires but the spec's type omits.
+     */
+    shap_drivers: { name: string; contribution: number; direction: 'bullish' | 'bearish' }[];
   };
 
   returns: {

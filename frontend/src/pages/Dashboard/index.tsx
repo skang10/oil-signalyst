@@ -4,6 +4,7 @@ import { ROLE_PERMISSIONS, type DashTab } from '@/types/roles';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import AlertBanner from '@/components/shared/AlertBanner';
 import DashTabBar from './DashTabBar';
+import OverviewTab from './tabs/Overview';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<DashTab>('overview');
@@ -30,7 +31,7 @@ export default function Dashboard() {
             {alertModel.metrics.psi.toFixed(2)} exceeds alert threshold. Retraining recommended.
           </AlertBanner>
         )}
-        {activeTab === 'overview' && <div className="text-text-muted text-[12px]">Overview tab — CP2</div>}
+        {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
         {activeTab === 'eia' && <div className="text-text-muted text-[12px]">EIA Forecast tab — CP3</div>}
         {activeTab === 'regime' && <div className="text-text-muted text-[12px]">Regime tab — CP3</div>}
         {activeTab === 'returns' && <div className="text-text-muted text-[12px]">Return Dist. tab — CP3</div>}

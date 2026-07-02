@@ -18,3 +18,17 @@ export function formatMB(value: number, digits = 1): string {
 export function formatUsd(value: number, digits = 2): string {
   return `$${value.toFixed(digits)}`
 }
+
+/** Last N business days (Mon-Fri) ending at `endDate` (inclusive), formatted M/D. */
+export function lastBusinessDayLabels(endDate: string, n: number): string[] {
+  const labels: string[] = []
+  const cursor = new Date(`${endDate}T00:00:00Z`)
+  while (labels.length < n) {
+    const day = cursor.getUTCDay()
+    if (day !== 0 && day !== 6) {
+      labels.unshift(`${cursor.getUTCMonth() + 1}/${cursor.getUTCDate()}`)
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+  }
+  return labels
+}
