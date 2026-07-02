@@ -11,9 +11,16 @@ const QUICK_ACTIONS = [
   { label: "Explain today's forecast", fill: "Explain today's Regime forecast drivers" },
 ];
 
-export default function AgentPanel({ onClose }: { onClose: () => void }) {
+export default function AgentPanel({
+  onClose,
+  fullpage,
+  onToggleFullpage,
+}: {
+  onClose: () => void;
+  fullpage: boolean;
+  onToggleFullpage: () => void;
+}) {
   const { messages, sendMessage, confirmGate, cancelGate } = useAgentEngine();
-  const [fullpage, setFullpage] = useState(false);
   const { width, onMouseDown } = useDragResize(360);
   const [input, setInput] = useState('');
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -40,8 +47,11 @@ export default function AgentPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed top-0 bottom-0 right-0 bg-surface-2 border-l border-border flex flex-col z-[199]"
-      style={fullpage ? { left: 192, top: 46, width: 'auto' } : { width, minWidth: 280, maxWidth: 780 }}
+      className={cn(
+        'relative h-full bg-surface-2 border-l border-border flex flex-col shrink-0',
+        fullpage && 'flex-1'
+      )}
+      style={fullpage ? undefined : { width, minWidth: 280, maxWidth: 780 }}
     >
       {!fullpage && (
         <div
@@ -62,7 +72,7 @@ export default function AgentPanel({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             title="Fullpage"
-            onClick={() => setFullpage((f) => !f)}
+            onClick={onToggleFullpage}
             className="w-[26px] h-[26px] rounded-[5px] border-none bg-none cursor-pointer text-text-muted flex items-center justify-center hover:bg-surface-1 hover:text-text-primary"
           >
             {fullpage ? <IconArrowsMinimize size={15} stroke={1.75} /> : <IconArrowsMaximize size={15} stroke={1.75} />}

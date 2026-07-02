@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import { IconBell, IconRefresh } from '@tabler/icons-react';
+import { IconBell, IconRefresh, IconRobot } from '@tabler/icons-react';
 import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
 import { useModelStatus } from '@/hooks/useModelStatus';
@@ -20,7 +20,15 @@ function pageTitle(pathname: string): string {
   return PAGE_TITLES.find((p) => pathname.startsWith(p.prefix))?.title ?? 'Dashboard';
 }
 
-export default function Topbar() {
+export default function Topbar({
+  showAgent,
+  agentOpen,
+  onToggleAgent,
+}: {
+  showAgent: boolean;
+  agentOpen: boolean;
+  onToggleAgent: () => void;
+}) {
   const location = useLocation();
   const { role } = useRole();
   const { data: report } = useReport(role);
@@ -81,6 +89,20 @@ export default function Topbar() {
       >
         <IconRefresh size={16} stroke={1.75} />
       </button>
+      {showAgent && (
+        <button
+          type="button"
+          title="DS Agent"
+          aria-label="DS Agent"
+          onClick={onToggleAgent}
+          className={cn(
+            'w-7 h-7 rounded-default border border-border bg-none flex items-center justify-center cursor-pointer shrink-0 hover:bg-surface-1',
+            agentOpen ? 'bg-accent-bg text-accent-text border-accent-border' : 'text-text-secondary'
+          )}
+        >
+          <IconRobot size={16} stroke={1.75} />
+        </button>
+      )}
     </div>
   );
 }
