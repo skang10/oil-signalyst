@@ -95,7 +95,19 @@ def _filter_by_role(report: dict, role: str) -> dict:
     ]
     base = {key: report[key] for key in base_keys}
     if role == "trader":
-        return base
+        decision = report["decision"]
+        return {
+            **base,
+            "signal": decision.get("direction", "FLAT"),
+            "kelly_position": decision.get("kelly_position", 0.0),
+            "stop_loss_price": decision.get("stop_loss"),
+            "stop_loss_pct": decision.get("stop_loss_pct", 0.0),
+            "expected_return": decision.get("expected_ret", 0.0),
+            "price_5d_history": report["price_5d_history"],
+            "brent_wti_spread": report["brent_wti_spread"],
+            "cot_net_percentile": report["cot_net_percentile"],
+            "ovx": report["ovx"],
+        }
     if role == "risk":
         return {**base, "var_95": report["var_95"]}
     if role == "researcher":
