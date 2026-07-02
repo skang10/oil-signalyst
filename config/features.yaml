@@ -4,29 +4,44 @@ features:
     transform: zscore
     window: 252
     bearish_if_positive: false
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Futures Curve"
 
   - name: brent_wti_spread
     source_a: brent
     source_b: wti
     transform: ratio_diff
     bearish_if_positive: false
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Futures Curve"
 
   - name: crude_inv_dev
     source: crude_inventory
     transform: seasonal_dev
     seasons: 52
     bearish_if_positive: true
+    meta_source: "EIA API"
+    frequency: "Weekly"
+    category: "Inventory"
 
   - name: crude_inv_chg_4w
     source: crude_inventory
     transform: pct_change
     window: 4
     bearish_if_positive: true
+    meta_source: "EIA API"
+    frequency: "Weekly"
+    category: "Inventory"
 
   - name: ovx
     source: ovx
     transform: raw
     bearish_if_positive: true
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Volatility"
 
   - name: rvol_20d
     source: wti
@@ -34,24 +49,36 @@ features:
     window: 20
     annualize: true
     bearish_if_positive: true
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Volatility"
 
   - name: ret_5d
     source: wti
     transform: pct_change
     window: 5
     bearish_if_positive: false
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Price Momentum"
 
   - name: ret_20d
     source: wti
     transform: pct_change
     window: 20
     bearish_if_positive: false
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Price Momentum"
 
   - name: ret_60d
     source: wti
     transform: pct_change
     window: 60
     bearish_if_positive: false
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Price Momentum"
 
   - name: spec_net_pct
     source_a: cot_wti_spec_long
@@ -59,6 +86,9 @@ features:
     transform: net_position_pct
     window: 104
     bearish_if_positive: false
+    meta_source: "CFTC COT"
+    frequency: "Weekly"
+    category: "Positioning"
 
   - name: spec_net_chg
     source_a: cot_wti_spec_long
@@ -66,20 +96,32 @@ features:
     transform: net_position_chg
     window: 1
     bearish_if_positive: false
+    meta_source: "CFTC COT"
+    frequency: "Weekly"
+    category: "Positioning"
 
   - name: dxy_ret_20d
     source: dxy
     transform: pct_change
     window: 20
     bearish_if_positive: true
+    meta_source: "FRED"
+    frequency: "Daily"
+    category: "Macro"
 
   - name: copper_ret_20d
     source: copper
     transform: pct_change
     window: 20
     bearish_if_positive: false
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Macro"
 
   - name: vix
     source: vix
     transform: raw
     bearish_if_positive: true
+    meta_source: "Yahoo Finance"
+    frequency: "Daily"
+    category: "Macro"

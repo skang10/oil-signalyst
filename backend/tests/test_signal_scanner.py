@@ -6,14 +6,14 @@ from core.signal_scanner import (
     IC_LAGS_DAYS,
     _coverage,
     _ic,
-    _load_candidates,
     _max_correlation_with_active_features,
     _status,
+    load_candidates,
 )
 
 
 def test_load_candidates_returns_explicit_config_not_every_column():
-    candidates = _load_candidates()
+    candidates = load_candidates()
 
     assert len(candidates) > 0
     names = {c["name"] for c in candidates}
@@ -82,7 +82,7 @@ def test_max_correlation_with_active_features_picks_strongest_match():
 
 
 def test_bonferroni_correction_scales_with_total_tests():
-    candidates = _load_candidates()
+    candidates = load_candidates()
     n_tests = len(candidates) * len(IC_LAGS_DAYS)
     raw_p = 0.01
 

@@ -25,7 +25,7 @@ BONFERRONI_ALPHA = 0.05
 MIN_COVERAGE_FOR_CANDIDATE = 0.80
 
 
-def _load_candidates() -> list[dict]:
+def load_candidates() -> list[dict]:
     with open(CANDIDATE_SIGNALS_YAML) as f:
         return yaml.safe_load(f)["candidates"]
 
@@ -82,7 +82,7 @@ async def run_signal_scan() -> list[dict]:
     candidate evaluation reuses years of history and doesn't need daily
     re-evaluation.
     """
-    candidates = _load_candidates()
+    candidates = load_candidates()
     n_tests = len(candidates) * len(IC_LAGS_DAYS)
 
     registry = DataRegistry()
