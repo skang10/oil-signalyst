@@ -8,6 +8,7 @@ import OverviewTab from './tabs/Overview';
 import EIATab from './tabs/EIATab';
 import RegimeTab from './tabs/RegimeTab';
 import ReturnsTab from './tabs/ReturnsTab';
+import ChartsTab from './tabs/ChartsTab';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<DashTab>('overview');
@@ -38,7 +39,7 @@ export default function Dashboard() {
         {activeTab === 'eia' && <EIATab />}
         {activeTab === 'regime' && <RegimeTab />}
         {activeTab === 'returns' && <ReturnsTab />}
-        {activeTab === 'charts' && <div className="text-text-muted text-[12px]">Market Data tab — CP4</div>}
+        {activeTab === 'charts' && <ChartsTab />}
       </div>
     </div>
   );

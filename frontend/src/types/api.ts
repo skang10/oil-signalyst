@@ -131,28 +131,41 @@ export interface HistoryPrediction {
   regime_dominant: 'R1' | 'R2' | 'R3' | 'R4';
   signal: 'LONG' | 'SHORT' | 'FLAT';
   expected_return: number;
+  downside_prob: number;
+  eia_forecast_mb: number;
   actual_return: number | null;
 }
 
 export interface HistoryResponse {
   predictions: HistoryPrediction[];
-  rolling_accuracy: number;
+  rolling_accuracy: {
+    regime_directional_acc: number;
+    eia_directional_acc: number;
+    returns_brier: number;
+  };
 }
 
 export interface HistoryDetail {
   date: string;
+  wti_price: number;
+  model_version: string;
   summary: {
-    wti_price: number;
     signal: 'LONG' | 'SHORT' | 'FLAT';
-    kelly_position: number;
     expected_return: number;
+    downside_prob: number;
+    eia_forecast_mb: number;
+    risk_recommendation: string;
   };
-  regime: DailyReport['regime'];
-  features: { name: string; value: number | string }[];
+  regime: {
+    probabilities: Record<'R1' | 'R2' | 'R3' | 'R4', number>;
+    dominant: 'R1' | 'R2' | 'R3' | 'R4';
+    duration_weeks: number;
+    switch_probability_4w: number;
+  };
+  features: { name: string; widthPct: number; value: number }[];
   outcome: {
+    eia_actual_mb: number | null;
     actual_return: number | null;
-    predicted_return: number;
-    hit: boolean | null;
   };
 }
 
