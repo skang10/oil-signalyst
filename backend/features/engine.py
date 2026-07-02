@@ -38,6 +38,12 @@ class FeatureEngine:
         logger.info("Feature matrix built", extra={"rows": len(df), "columns": len(df.columns)})
         return df
 
+    def apply_transform(self, feature: dict, raw: pd.DataFrame) -> pd.Series:
+        """Public entry point for computing a single feature's transform
+        against already-fetched raw source data, reused by the signal
+        scanner to evaluate candidate signals with the same vocabulary."""
+        return self._apply(feature, raw)
+
     def _apply(self, feature: dict, raw: pd.DataFrame) -> pd.Series:
         transform = feature["transform"]
 

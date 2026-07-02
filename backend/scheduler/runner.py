@@ -4,6 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from core.config import settings
 from core.logging import get_logger
+from core.signal_scanner import run_signal_scan
 from scheduler.jobs import run_daily_pipeline
 
 logger = get_logger(__name__)
@@ -28,6 +29,15 @@ async def _run() -> None:
                 "timezone": "UTC",
             },
         )
+        scheduler.add_job(
+            run_signal_scan,
+            "cron",
+            day_of_week="sun",
+            hour=3,
+            id="signal_scanner",
+            replace_existing=True,
+        )
+        logger.info("Signal scanner scheduled", extra={"day_of_week": "sun", "hour": 3})
 
     scheduler.start()
     logger.info("Scheduler running")

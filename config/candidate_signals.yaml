@@ -1,0 +1,55 @@
+candidates:
+  - name: cushing_inv_dev
+    source: cushing_inventory
+    transform: seasonal_dev
+    seasons: 52
+    mechanism: >
+      Cushing hub inventory deviation from its seasonal norm; a
+      storage-constraint/congestion proxy distinct from national crude stocks.
+
+  - name: cushing_inv_chg_4w
+    source: cushing_inventory
+    transform: pct_change
+    window: 4
+    mechanism: >
+      4-week change in Cushing inventory; captures build/draw momentum at the
+      WTI delivery hub specifically, rather than nationwide inventory.
+
+  - name: gasoline_inv_dev
+    source: gasoline_inventory
+    transform: seasonal_dev
+    seasons: 52
+    mechanism: >
+      Gasoline inventory deviation from its seasonal norm; a downstream
+      demand-side proxy for refined product pull-through.
+
+  - name: gasoline_inv_chg_4w
+    source: gasoline_inventory
+    transform: pct_change
+    window: 4
+    mechanism: >
+      4-week change in gasoline inventory; refined-product demand momentum.
+
+  - name: distillate_inv_dev
+    source: distillate_inventory
+    transform: seasonal_dev
+    seasons: 52
+    mechanism: >
+      Distillate (diesel/heating oil) inventory deviation from its seasonal
+      norm; an industrial and heating demand proxy.
+
+  - name: distillate_inv_chg_4w
+    source: distillate_inventory
+    transform: pct_change
+    window: 4
+    mechanism: >
+      4-week change in distillate inventory; industrial/heating demand
+      momentum.
+
+  - name: natural_gas_ret_20d
+    source: natural_gas
+    transform: pct_change
+    window: 20
+    mechanism: >
+      20-day natural gas return; energy-complex cross-commodity co-movement
+      proxy (gas-to-oil substitution and shared macro demand drivers).

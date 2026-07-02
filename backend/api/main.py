@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.routes import models, reports, training, users
+from api.routes import models, reports, signals, training, users
 from api.routes.health import router as health_router
 from core.config_paths import CFTC_RAW_DIR, DATA_DIR, FEATURES_DIR, LOGS_DIR, MODELS_DIR, RAW_DIR
 from core.logging import get_logger
@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(models.router)
     app.include_router(training.router)
+    app.include_router(signals.router)
     app.include_router(users.router)
     return app
 
