@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import useSWR, { mutate } from 'swr';
 import { useEffect } from 'react';
-import { api, BASE } from '@/lib/api';
+import { api, BASE, getAccessToken } from '@/lib/api';
 import { swrKeys } from '@/lib/swr-keys';
 import type { TrainJob, TrainParams } from '@/types/api';
 
@@ -25,12 +25,16 @@ export function useTrainStatus(jobId: string | null) {
  * sentinel). Closes explicitly on that sentinel rather than letting the
  * stream end naturally - EventSource auto-reconnects by default when a
  * connection closes, which would replay the whole log from the top.
+ *
+ * Token goes as a query param, not a header - EventSource can't set
+ * Authorization, same as useAgentStream.ts's stream endpoint.
  */
 export function useTrainLog(jobId: string | null, onLine: (line: string) => void) {
   useEffect(() => {
     if (!jobId) return;
 
-    const source = new EventSource(`${BASE}${swrKeys.trainLog(jobId)}`);
+    const token = getAccessToken();
+    const source = new EventSource(`${BASE}${swrKeys.trainLog(jobId)}?token=${encodeURIComponent(token ?? '')}`);
     source.onmessage = (event) => {
       if (event.data.startsWith('[done:') || event.data === '[job not found]') {
         source.close();

@@ -2,14 +2,15 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.dependencies import CurrentUser, DbSession
+from auth.jwt import JWTError, decode_access_token
 from core.models.trainer import run_full_training_with_log
-from db.database import get_db
-from db.models import TrainJob
+from db.database import AsyncSessionLocal, get_db
+from db.models import TrainJob, User
 
 router = APIRouter(prefix="/api/train", tags=["training"])
 
@@ -97,13 +98,25 @@ async def get_training_status(job_id: str, db: DbSession) -> dict:
 
 
 @router.get("/log/{job_id}")
-async def stream_training_log(job_id: str, user: CurrentUser) -> StreamingResponse:
+async def stream_training_log(job_id: str, token: str) -> StreamingResponse:
     """SSE stream of TrainJob.log_lines. Opens a fresh DB session per poll
     rather than reusing one long-lived session across the whole stream -
     SQLAlchemy's identity map would otherwise keep returning the same cached
     row and never observe updates committed by the background training task
-    in a different session."""
-    del user
+    in a different session.
+
+    Auth via query param, not the Authorization header CurrentUser expects:
+    the browser's native EventSource API (frontend/src/hooks/useTraining.ts's
+    useTrainLog) can't attach custom headers, so it can't send a Bearer
+    token. Same tradeoff as GET /api/agent/stream/{session_id} - see that
+    route's docstring."""
+    try:
+        payload = decode_access_token(token)
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+    async with AsyncSessionLocal() as db:
+        if await db.get(User, int(payload["sub"])) is None:
+            raise HTTPException(status_code=401, detail="User not found")
 
     async def event_generator():
         sent_count = 0
