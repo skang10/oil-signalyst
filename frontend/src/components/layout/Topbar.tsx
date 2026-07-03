@@ -3,6 +3,8 @@ import { IconBell, IconRefresh, IconRobot } from '@tabler/icons-react';
 import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
 import { useModelStatus } from '@/hooks/useModelStatus';
+import { usePriceTicker } from '@/hooks/usePriceTicker';
+import { usePriceStore } from '@/lib/price-store';
 import RolePill from './RolePill';
 import { cn, formatUsd } from '@/lib/utils';
 
@@ -34,17 +36,23 @@ export default function Topbar({
   const { data: report } = useReport(role);
   const { data: modelStatus } = useModelStatus();
 
+  usePriceTicker(); // establishes the WS connection once; updates the store below
+  const { price: wsPrice, changePct: wsChangePct } = usePriceStore();
+  // Prefer the WebSocket tick (30s granularity) once connected; fall back to
+  // the daily report's price (already real, just less frequent) until the
+  // first WS message arrives or if the socket is disconnected.
+  const price = wsPrice ?? report?.wti_price;
+  const changePct = wsChangePct ?? report?.wti_change_pct;
+
   return (
     <div className="h-[46px] shrink-0 bg-surface-2 border-b border-border flex items-center px-4 gap-[10px]">
       <div className="text-[13px] font-medium flex-1">{pageTitle(location.pathname)}</div>
 
-      {report && (
+      {price != null && changePct != null && (
         <div className="text-[12px] text-text-secondary whitespace-nowrap">
-          WTI <strong className={report.wti_change_pct < 0 ? 'text-danger' : 'text-success'}>
-            {formatUsd(report.wti_price)}
-          </strong>{' '}
-          <span className={cn('text-[11px]', report.wti_change_pct < 0 ? 'text-danger' : 'text-success')}>
-            {report.wti_change_pct < 0 ? '▼' : '▲'} {(Math.abs(report.wti_change_pct) * 100).toFixed(1)}%
+          WTI <strong className={changePct < 0 ? 'text-danger' : 'text-success'}>{formatUsd(price)}</strong>{' '}
+          <span className={cn('text-[11px]', changePct < 0 ? 'text-danger' : 'text-success')}>
+            {changePct < 0 ? '▼' : '▲'} {(Math.abs(changePct) * 100).toFixed(1)}%
           </span>
         </div>
       )}

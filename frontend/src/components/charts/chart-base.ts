@@ -13,3 +13,13 @@ export const baseOptions: Partial<ChartOptions<'line' | 'bar'>> = {
     y: { grid: { color: GRID_COLOR }, ticks: { color: MUTED, font: { size: 10 } } },
   },
 };
+
+/**
+ * Real daily series (~18 months = ~365-547 points depending on trading-day
+ * gaps) are too dense to label every point on the x-axis - show a label
+ * only every `every`th point, blank string otherwise, same convention the
+ * old mock data used (MONTHS_18 every 8th point).
+ */
+export function sparseLabels(dates: string[], every = 22): string[] {
+  return dates.map((d, i) => (i % every === 0 ? d : ''));
+}

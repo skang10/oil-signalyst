@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Chart, type ChartConfiguration } from 'chart.js';
 
-export function useChart(buildConfig: () => ChartConfiguration) {
+export function useChart(buildConfig: () => ChartConfiguration, deps: readonly unknown[] = []) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -9,7 +9,7 @@ export function useChart(buildConfig: () => ChartConfiguration) {
     const chart = new Chart(canvasRef.current, buildConfig());
     return () => chart.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, deps);
 
   return canvasRef;
 }
