@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     fred_api_key: str = ""
     anthropic_api_key: str = ""
     tabpfn_api_key: str = ""
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
     db_url: str = DEFAULT_DB_URL
     env: str = "local"
     log_level: str = "INFO"

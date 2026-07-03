@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import auth, market, models, reports, signals, training, users, ws
+from api.routes import agent, auth, market, models, reports, signals, training, users, ws
 from api.routes.health import router as health_router
 from core.config_paths import CFTC_RAW_DIR, DATA_DIR, FEATURES_DIR, LOGS_DIR, MODELS_DIR, RAW_DIR
 from core.logging import get_logger
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router)
     app.include_router(market.router)
     app.include_router(ws.router)
+    app.include_router(agent.router)
     return app
 
 

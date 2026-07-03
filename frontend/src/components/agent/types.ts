@@ -10,7 +10,7 @@ export interface ToolCall {
   streaming?: boolean;
 }
 
-export type GateAction = 'add_feature' | 'run_training';
+export type GateAction = 'add_to_feature_registry' | 'run_training' | 'deploy_model';
 
 export interface ConfirmGateState {
   step: string;
@@ -20,6 +20,8 @@ export interface ConfirmGateState {
   cancelLabel: string;
   actionId: GateAction;
   status: 'pending' | 'confirmed' | 'cancelled';
+  /** Backend AgentTurn.id this gate resolves to on confirm/cancel. */
+  turnId: number;
 }
 
 export interface AgentMessage {

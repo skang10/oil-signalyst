@@ -122,6 +122,30 @@ class TrainJob(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class AgentTurn(Base):
+    """One turn in a DS Agent conversation (user message, assistant
+    response/tool-call request, or tool result)."""
+
+    __tablename__ = "agent_turns"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    role = Column(String(16), nullable=False)  # 'user' | 'assistant' | 'tool'
+    content = Column(JSON, nullable=True)  # text content (str or None)
+    tool_calls = Column(JSON, nullable=True)  # set on role='assistant': OpenAI's
+    # [{"id","type","function":{"name","arguments"}}] array, verbatim - must
+    # precede any role='tool' message answering it (core/agent/client.py)
+    tool_call_id = Column(String(64), nullable=True)  # set on role='tool': links
+    # this result back to the specific entry in the preceding assistant
+    # turn's tool_calls (a turn can request >1 tool call in parallel)
+    tool_name = Column(String(64), nullable=True)
+    tool_input = Column(JSON, nullable=True)
+    tool_result = Column(JSON, nullable=True)
+    status = Column(String(16), nullable=False, default="complete")  # 'pending' | 'confirmed' | 'cancelled' | 'complete'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class SystemLog(Base):
     __tablename__ = "system_logs"
 

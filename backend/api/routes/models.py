@@ -1,17 +1,15 @@
-from datetime import UTC, datetime
-
 from fastapi import APIRouter
-from sqlalchemy import desc, select, text
+from sqlalchemy import desc, select
 
 from api.dependencies import CurrentUser, DbSession
-from core.models.model_registry import ModelRegistry
 from core.postprocess.data_monitor import (
     data_source_status,
     feature_coverage_7d,
     feature_missing_rates,
 )
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD
-from db.models import FeatureSnapshot, ModelVersion, TrainJob
+from core.services.deploy_service import do_deploy
+from db.models import FeatureSnapshot, ModelVersion
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -69,54 +67,10 @@ async def get_model_status(db: DbSession) -> dict:
 
 @router.post("/{model_type}/deploy")
 async def deploy_model(model_type: str, job_id: str, db: DbSession, user: CurrentUser) -> dict:
-    """Explicitly (re-)promotes the model_type version trained by job_id to
-    active.
-
-    `user` requires real auth for this endpoint (Phase 4) - the single most
-    destructive route in the API (swaps the live production model) had no
-    authentication at all before, not even the old X-User-Id header check.
-
-    Note: run_full_training() already auto-activates each newly trained
-    model as soon as it finishes (see trainer.py::_save_model) - there is no
-    staged "candidate, not yet live" state in this system. So under normal
-    operation this endpoint is a no-op confirmation for the most recent job.
-    Its real utility is rollback: promoting a specific *older* completed
-    job's version back to active after a later training run has since
-    superseded it, and re-invalidating the ModelRegistry cache.
-    """
-    job = await db.get(TrainJob, job_id)
-    if not job or job.status != "complete":
-        return {"error": "job not complete or not found"}
-
-    version = (job.result or {}).get("versions", {}).get(model_type)
-    if not version:
-        return {"error": f"no trained version for model_type '{model_type}' in this job"}
-
-    row = await db.execute(
-        select(ModelVersion).where(
-            ModelVersion.model_type == model_type, ModelVersion.version == version
-        )
-    )
-    target = row.scalar_one_or_none()
-    if not target:
-        return {"error": "target model version not found"}
-
-    # Exclude target's own row from the bulk deactivation: a raw UPDATE
-    # doesn't refresh the already-loaded `target` ORM object's in-memory
-    # state, so if it touched target's row too, the *next* line
-    # (target.is_active = True) would look like a no-op change (still True
-    # in Python's view) and never get flushed, leaving zero active rows for
-    # this model_type.
-    await db.execute(
-        text(
-            "UPDATE model_versions SET is_active = 0 "
-            "WHERE model_type = :model_type AND id != :target_id"
-        ),
-        {"model_type": model_type, "target_id": target.id},
-    )
-    target.is_active = True
-    target.deployed_at = datetime.now(UTC).replace(tzinfo=None)
-    db.add(target)
-
-    ModelRegistry.invalidate(model_type)
-    return {"status": "deployed", "version": target.version, "model_type": model_type}
+    """Requires real auth (Phase 4) - the single most destructive route in
+    the API (swaps the live production model) had no authentication at all
+    before, not even the old X-User-Id header check. Logic lives in
+    core/services/deploy_service.py::do_deploy(), shared with the DS
+    Agent's deploy_model tool (core/agent/tool_handlers.py)."""
+    del user
+    return await do_deploy(model_type, job_id, db)

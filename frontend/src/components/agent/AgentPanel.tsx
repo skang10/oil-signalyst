@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconRobot, IconArrowsMaximize, IconArrowsMinimize, IconX, IconSend } from '@tabler/icons-react';
-import { useAgentEngine } from './agent-mock-engine';
+import { useAgentStream } from '@/hooks/useAgentStream';
 import { useDragResize } from '@/hooks/useDragResize';
 import AgentMessage from './AgentMessage';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,7 @@ export default function AgentPanel({
   fullpage: boolean;
   onToggleFullpage: () => void;
 }) {
-  const { messages, sendMessage, confirmGate, cancelGate } = useAgentEngine();
+  const { messages, sendMessage, confirmGate, cancelGate } = useAgentStream();
   const { width, onMouseDown } = useDragResize(360);
   const [input, setInput] = useState('');
   const messagesRef = useRef<HTMLDivElement>(null);

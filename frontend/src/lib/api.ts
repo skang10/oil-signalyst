@@ -9,6 +9,11 @@ let accessToken: string | null = null;
 export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
+// Exposed read-only for the one route that can't use the Authorization
+// header (EventSource can't set custom headers - see useAgentStream.ts).
+export function getAccessToken(): string | null {
+  return accessToken;
+}
 
 let refreshInFlight: Promise<boolean> | null = null;
 
