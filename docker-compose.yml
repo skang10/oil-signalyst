@@ -1,4 +1,13 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
   api:
     build:
       context: ./backend
@@ -31,7 +40,10 @@ services:
       - ./logs:/app/logs
     env_file:
       - .env
-    command: uv run python scheduler/runner.py
+    # Run as a module, not a script (`python scheduler/runner.py`) - a
+    # direct script invocation puts scheduler/ itself on sys.path instead
+    # of /app, so `from core.config import settings` fails to resolve.
+    command: uv run python -m scheduler.runner
     depends_on:
       migrate:
         condition: service_completed_successfully

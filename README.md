@@ -29,3 +29,14 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+Starts `frontend` (nginx, reverse-proxying `/api` and `/ws` to `api` so the
+whole stack is same-origin - no CORS config needed), `api`, `scheduler`,
+and a one-shot `migrate` job. Reachable at `http://localhost:5173`. Requires
+a populated `.env` at the repo root (see `.env.example`).
