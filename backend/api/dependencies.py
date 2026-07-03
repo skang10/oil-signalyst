@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.crud import get_user
+from auth.jwt import JWTError, decode_access_token
 from db.database import AsyncSessionLocal
 from db.models import User
 
@@ -24,11 +24,18 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 async def get_current_user(
     db: DbSession,
-    x_user_id: Annotated[int, Header(alias="X-User-Id")] = 1,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> User:
-    user = await get_user(db, x_user_id)
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    token = authorization.removeprefix("Bearer ")
+    try:
+        payload = decode_access_token(token)
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+    user = await db.get(User, int(payload["sub"]))
     if user is None:
-        raise HTTPException(status_code=404, detail=f"User {x_user_id} not found")
+        raise HTTPException(status_code=401, detail="User not found")
     return user
 
 

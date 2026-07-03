@@ -34,6 +34,9 @@ class User(Base):
     alert_downside_threshold = Column(Float, default=0.45)
     alert_regime_threshold = Column(Float, default=0.30)
     alert_eia_threshold = Column(Float, default=1.5)
+    hashed_password = Column(String(256), nullable=True)
+    refresh_token = Column(String(512), nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

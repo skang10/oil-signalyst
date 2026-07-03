@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 from sqlalchemy import desc, select, text
 
-from api.dependencies import DbSession
+from api.dependencies import CurrentUser, DbSession
 from core.models.model_registry import ModelRegistry
 from core.postprocess.data_monitor import (
     data_source_status,
@@ -68,9 +68,13 @@ async def get_model_status(db: DbSession) -> dict:
 
 
 @router.post("/{model_type}/deploy")
-async def deploy_model(model_type: str, job_id: str, db: DbSession) -> dict:
+async def deploy_model(model_type: str, job_id: str, db: DbSession, user: CurrentUser) -> dict:
     """Explicitly (re-)promotes the model_type version trained by job_id to
     active.
+
+    `user` requires real auth for this endpoint (Phase 4) - the single most
+    destructive route in the API (swaps the live production model) had no
+    authentication at all before, not even the old X-User-Id header check.
 
     Note: run_full_training() already auto-activates each newly trained
     model as soon as it finishes (see trainer.py::_save_model) - there is no

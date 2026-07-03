@@ -53,9 +53,41 @@ async def get_user(db: AsyncSession, user_id: int) -> User | None:
 
 
 async def get_or_create_default_user(db: AsyncSession) -> User:
+    from auth.password import hash_password
+    from core.config import settings
+
     user = await get_user(db, 1)
     if user is None:
-        user = User(id=1, name="Default User", role="researcher")
+        user = User(
+            id=1,
+            name="Xuemei",
+            # ds, not researcher: this is the one local account for the
+            # whole tool, and Phase 4's role pill (D17) only previews other
+            # roles for an authenticated ds user - anything else would
+            # permanently lock the sole account out of DS Workbench
+            # (Data/Model Monitor, Training Control) and the pill itself.
+            role="ds",
+            email="xuemei@local",
+            hashed_password=hash_password(settings.default_user_password),
+        )
         db.add(user)
+        await db.flush()
+    elif not user.hashed_password:
+        # One-time migration for a pre-Phase-4 row (no registration flow
+        # exists - this is the one local account) so login works without a
+        # manual migration step. Gated on hashed_password being unset so
+        # this never re-fires once done - in particular, role must not be
+        # reset on every startup, since a user changing their own role to
+        # "researcher" later via Settings (PUT /api/users/me/config) is a
+        # legitimate action this must not silently override.
+        if user.name == "Default User":
+            user.name = "Xuemei"
+        if user.role == "researcher":
+            user.role = "ds"
+        user.email = user.email or "xuemei@local"
+        user.hashed_password = hash_password(settings.default_user_password)
+        db.add(user)
+        if dirty:
+            db.add(user)
         await db.flush()
     return user

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import market, models, reports, signals, training, users, ws
+from api.routes import auth, market, models, reports, signals, training, users, ws
 from api.routes.health import router as health_router
 from core.config_paths import CFTC_RAW_DIR, DATA_DIR, FEATURES_DIR, LOGS_DIR, MODELS_DIR, RAW_DIR
 from core.logging import get_logger
@@ -32,12 +32,16 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         # Vite dev server only - this is a local single-user dev tool with no
-        # deployed frontend origin yet.
+        # deployed frontend origin yet. allow_credentials is required for the
+        # httpOnly refresh_token cookie (api/routes/auth.py) to round-trip
+        # cross-origin between :5173 and :8000.
         allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     app.include_router(health_router)
+    app.include_router(auth.router)
     app.include_router(reports.router)
     app.include_router(models.router)
     app.include_router(training.router)

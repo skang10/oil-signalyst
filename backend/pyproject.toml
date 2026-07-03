@@ -28,6 +28,8 @@ dependencies = [
     "numba>=0.60.0",
     "mlflow>=2.15.0",
     "matplotlib>=3.9.0",
+    "python-jose[cryptography]>=3.5.0",
+    "bcrypt>=5.0.0",
 ]
 
 [project.optional-dependencies]

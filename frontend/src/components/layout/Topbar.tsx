@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { IconBell, IconRefresh, IconRobot } from '@tabler/icons-react';
+import { useAuth } from '@/context/AuthContext';
 import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
 import { useModelStatus } from '@/hooks/useModelStatus';
@@ -32,6 +33,7 @@ export default function Topbar({
   onToggleAgent: () => void;
 }) {
   const location = useLocation();
+  const { user } = useAuth();
   const { role } = useRole();
   const { data: report } = useReport(role);
   const { data: modelStatus } = useModelStatus();
@@ -80,7 +82,9 @@ export default function Topbar({
         })}
       </div>
 
-      <RolePill />
+      {/* D17: the pill is a ds-only "view as" preview override, not a
+          general role switcher - real role comes from the JWT (user.role). */}
+      {user?.role === 'ds' && <RolePill />}
 
       <button
         type="button"

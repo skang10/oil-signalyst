@@ -8,12 +8,12 @@ from db.models import ModelVersion, TrainJob
 
 
 @pytest.mark.asyncio
-async def test_deploy_reports_error_for_incomplete_job():
+async def test_deploy_reports_error_for_incomplete_job(auth_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/models/regime/deploy",
             params={"job_id": "does-not-exist"},
-            headers={"X-User-Id": "1"},
+            headers=auth_headers,
         )
     assert response.status_code == 200
     assert "error" in response.json()
@@ -79,14 +79,14 @@ async def seeded_regime_versions():
 
 
 @pytest.mark.asyncio
-async def test_deploy_leaves_exactly_one_active_row_per_model_type(seeded_regime_versions):
+async def test_deploy_leaves_exactly_one_active_row_per_model_type(seeded_regime_versions, auth_headers):
     job_id = seeded_regime_versions
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/models/regime/deploy",
             params={"job_id": job_id},
-            headers={"X-User-Id": "1"},
+            headers=auth_headers,
         )
     assert response.status_code == 200
     assert response.json()["status"] == "deployed"

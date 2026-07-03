@@ -7,10 +7,21 @@ import {
   IconActivity,
   IconPlayerPlay,
   IconSettings,
+  IconLogout,
 } from '@tabler/icons-react';
+import { useAuth } from '@/context/AuthContext';
 import { useRole } from '@/context/RoleContext';
 import { ROLE_PERMISSIONS, ROLE_LABELS, type SidebarPage } from '@/types/roles';
 import { cn } from '@/lib/utils';
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 interface NavItem {
   page: SidebarPage;
@@ -76,9 +87,11 @@ function NavRow({ item }: { item: NavItem }) {
 }
 
 export default function Sidebar() {
+  const { user, logout } = useAuth();
   const { role } = useRole();
   const visibleMain = MAIN_NAV.filter((item) => ROLE_PERMISSIONS.pages[item.page].includes(role));
   const showDsGroup = ROLE_PERMISSIONS.pages['data-monitor'].includes(role);
+  const name = user?.name ?? '';
 
   return (
     <div className="w-[192px] shrink-0 bg-surface-2 border-r border-border flex flex-col">
@@ -111,12 +124,21 @@ export default function Sidebar() {
       <div className="mt-auto p-[10px_6px] border-t border-border">
         <div className="flex items-center gap-[9px] px-[10px] py-[7px] rounded-default">
           <div className="w-[26px] h-[26px] rounded-full bg-accent-bg border border-accent-border flex items-center justify-center text-[10px] font-medium text-accent-text shrink-0">
-            XM
+            {initials(name || '?')}
           </div>
-          <div>
-            <div className="text-[12px] font-medium">Xuemei</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-medium truncate">{name}</div>
             <div className="text-[11px] text-text-muted">{ROLE_LABELS[role]}</div>
           </div>
+          <button
+            type="button"
+            title="Log out"
+            aria-label="Log out"
+            onClick={() => logout()}
+            className="w-6 h-6 rounded-default border-none bg-none cursor-pointer text-text-muted flex items-center justify-center shrink-0 hover:bg-surface-2 hover:text-text-primary"
+          >
+            <IconLogout size={14} stroke={1.75} />
+          </button>
         </div>
       </div>
     </div>

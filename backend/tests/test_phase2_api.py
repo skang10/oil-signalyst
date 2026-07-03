@@ -6,7 +6,7 @@ from api.main import app
 
 
 @pytest.mark.asyncio
-async def test_training_start_returns_202(monkeypatch):
+async def test_training_start_returns_202(monkeypatch, auth_headers):
     async def fake_run_full_training_with_log(
         job_id=None, triggered_by_user_id=None, model_types=None, cutoff_date=None
     ):
@@ -18,12 +18,12 @@ async def test_training_start_returns_202(monkeypatch):
     )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/api/train/start", headers={"X-User-Id": "1"})
+        response = await client.post("/api/train/start", headers=auth_headers)
     assert response.status_code in (202, 404)
 
 
 @pytest.mark.asyncio
-async def test_unknown_report_role_returns_400():
+async def test_unknown_report_role_returns_400(auth_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/reports/daily/badrole", headers={"X-User-Id": "1"})
+        response = await client.get("/api/reports/daily/badrole", headers=auth_headers)
     assert response.status_code in (400, 404)

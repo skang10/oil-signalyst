@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     pipeline_cron_hour: int = 22
     pipeline_cron_minute: int = 0
+    # Local single-user dev defaults - override both via .env for anything
+    # beyond that. jwt_secret needs 32+ random bytes in any shared/deployed
+    # setting; default_user_password seeds the one local account on first
+    # run (db/crud.py::get_or_create_default_user) since there's no
+    # registration flow.
+    jwt_secret: str = "dev-only-insecure-default-secret-change-me-32bytes"
+    default_user_password: str = "oilsignalyst"
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
