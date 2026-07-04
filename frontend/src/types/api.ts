@@ -133,8 +133,39 @@ export interface TrainJob {
     old_metrics?: Record<string, number | null>;
     new_metrics?: Record<string, number | null>;
     improvement_pct?: number | null;
+    versions?: Record<string, string>;
     error?: string;
   };
+  // Present only when fetched with ?include_log=true (history detail panel).
+  log_lines?: string[];
+}
+
+export type TrainTriggerSource = 'manual' | 'auto:psi' | 'auto:sunday' | 'agent';
+export type TrainTriggerFilter = 'manual' | 'auto' | 'agent';
+
+/** One row of GET /api/train/jobs - list counterpart to TrainJob. */
+export interface TrainJobSummary {
+  job_id: string;
+  status: TrainJob['status'];
+  model_types: string[];
+  trigger_source: TrainTriggerSource;
+  triggered_by_name: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  // Null when nothing is comparable: failed/running jobs, or a first-ever
+  // training where every old metric is null.
+  summary: { improved: number; of: number } | null;
+  // 'live': every version this job trained is still active; 'partial': some
+  // are; 'superseded': none are; 'none': job produced no versions.
+  deploy_state: 'live' | 'partial' | 'superseded' | 'none';
+  error: string | null;
+  log_tail: string[];
+}
+
+export interface TrainJobsResponse {
+  total: number;
+  jobs: TrainJobSummary[];
 }
 
 export interface TrainParams {

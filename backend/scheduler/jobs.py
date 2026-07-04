@@ -139,6 +139,7 @@ async def _maybe_auto_retrain(target_date: date) -> None:
                     status="running",
                     model_types=model_types,
                     triggered_by=user_id,
+                    trigger_source=f"auto:{mode}",
                     started_at=datetime.now(UTC).replace(tzinfo=None),
                     log_lines=[f"Auto-retrain: {trigger}"],
                 )

@@ -122,6 +122,10 @@ class TrainJob(Base):
     result = Column(JSON, nullable=True)
     log_lines = Column(JSON, default=list)
     triggered_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # 'manual' | 'auto:psi' | 'auto:sunday' | 'agent' - triggered_by alone
+    # can't distinguish these (auto-retrain and the DS Agent both run as a
+    # real user id), and the Training History UI badges runs by source.
+    trigger_source = Column(String(20), nullable=False, default="manual", server_default="manual")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

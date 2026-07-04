@@ -3,7 +3,7 @@ import Card from '@/components/shared/Card';
 import { useDeployModel } from '@/hooks/useTraining';
 import type { TrainJob } from '@/types/api';
 
-const METRIC_LABEL: Record<string, string> = {
+export const METRIC_LABEL: Record<string, string> = {
   returns_brier: 'Return Dist. Brier',
   regime_accuracy: 'Regime Accuracy',
   eia_mae: 'EIA MAE',

@@ -9,5 +9,8 @@ export const swrKeys = {
   stressTest: () => '/api/reports/stress',
   signalEvaluation: (name: string) => `/api/signals/evaluate/${name}`,
   trainStatus: (jobId: string) => `/api/train/status/${jobId}`,
+  trainStatusFull: (jobId: string) => `/api/train/status/${jobId}?include_log=true`,
+  trainJobs: (limit: number, trigger?: string) =>
+    `/api/train/jobs?limit=${limit}&offset=0${trigger ? `&trigger=${trigger}` : ''}`,
   trainLog: (jobId: string) => `/api/train/log/${jobId}`,
 };

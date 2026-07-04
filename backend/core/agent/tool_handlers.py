@@ -207,7 +207,7 @@ async def _run_training(model_types: list[str], gap_days: int = 20, n_splits: in
 
     job_id = str(uuid.uuid4())[:8]
     async with get_db() as db:
-        db.add(TrainJob(id=job_id, status="queued", model_types=model_types))
+        db.add(TrainJob(id=job_id, status="queued", model_types=model_types, trigger_source="agent"))
 
     import asyncio
 

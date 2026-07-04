@@ -3,7 +3,29 @@ import useSWR, { mutate } from 'swr';
 import { useEffect } from 'react';
 import { api, BASE, getAccessToken } from '@/lib/api';
 import { swrKeys } from '@/lib/swr-keys';
-import type { TrainJob, TrainParams } from '@/types/api';
+import type { TrainJob, TrainJobsResponse, TrainParams, TrainTriggerFilter } from '@/types/api';
+
+/** Revalidates every mounted training-history list (any filter/limit key). */
+export function refreshTrainJobs() {
+  mutate((key) => typeof key === 'string' && key.startsWith('/api/train/jobs'));
+}
+
+export function useTrainJobs(limit: number, trigger?: TrainTriggerFilter) {
+  const key = swrKeys.trainJobs(limit, trigger);
+  // Slow poll keeps the list fresh for runs started elsewhere (DS Agent,
+  // scheduler auto-retrain); runs started on this page refresh instantly
+  // via refreshTrainJobs().
+  return useSWR<TrainJobsResponse>(key, () => api.get<TrainJobsResponse>(key), {
+    refreshInterval: 15_000,
+  });
+}
+
+/** Full record incl. persisted log - for the history detail panel. */
+export function useTrainJobDetail(jobId: string | null) {
+  return useSWR<TrainJob>(jobId ? swrKeys.trainStatusFull(jobId) : null, () =>
+    api.get<TrainJob>(swrKeys.trainStatusFull(jobId!))
+  );
+}
 
 export function useStartTraining() {
   return useMutation({
@@ -57,6 +79,8 @@ export function useDeployModel() {
       // Deploy invalidates useModelStatus's SWR cache (D14) so the PSI
       // banner updates immediately - React Query's cache is unrelated here.
       mutate(swrKeys.modelStatus());
+      // Deploy also flips which history rows count as 'live'.
+      refreshTrainJobs();
     },
   });
 }
