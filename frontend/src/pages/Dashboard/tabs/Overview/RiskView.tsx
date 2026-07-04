@@ -3,7 +3,7 @@ import Card from '@/components/shared/Card';
 import MetricCard from '@/components/shared/MetricCard';
 import TagBadge from '@/components/shared/TagBadge';
 import DistChart from '@/components/shared/DistChart';
-import { STRESS_SCENARIOS } from '@/lib/stress-scenarios';
+import StressTestCard from '@/components/shared/StressTestCard';
 
 export default function RiskView({ report }: { report: DailyReport }) {
   const risk = report.risk!;
@@ -71,25 +71,12 @@ export default function RiskView({ report }: { report: DailyReport }) {
           </div>
         </Card>
 
-        <Card>
-          <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
-            Stress Test (Historical Extremes)
-          </div>
-          {STRESS_SCENARIOS.map((s) => (
-            <div key={s.label} className="flex items-center gap-[10px] p-[8px_10px] bg-surface-1 rounded-default text-[12px] mb-[6px]">
-              <span className="flex-1 text-text-secondary">{s.label}</span>
-              <span className={`font-medium ${s.pct < 0 ? 'text-danger' : 'text-success'}`}>
-                {s.pct > 0 ? '+' : ''}
-                {Math.round(s.pct * 100)}%
-              </span>
-              <TagBadge kind="green">Alerted ✓</TagBadge>
-            </div>
-          ))}
+        <StressTestCard title="Stress Test (Historical Extremes)">
           <div className="mt-2 p-[7px_10px] bg-surface-1 rounded-default text-[11px] text-text-muted">
             Max drawdown in R3 regime: <strong className="text-danger">{Math.round(risk.r3_historical_max_drawdown * 100)}%</strong>{' '}
             (2014 OPEC price war)
           </div>
-        </Card>
+        </StressTestCard>
       </div>
 
       <div className="grid grid-cols-2 gap-[10px]">

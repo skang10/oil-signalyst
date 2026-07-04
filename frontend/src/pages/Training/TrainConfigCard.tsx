@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import Card from '@/components/shared/Card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Slider } from '@/components/ui/slider';
 import type { TrainParams } from '@/types/api';
 
 const MODEL_OPTIONS: { type: string; label: string }[] = [
@@ -24,8 +23,6 @@ export default function TrainConfigCard({
   // cutoff too close to today, so any hardcoded "recent" default would
   // reliably fail.
   const [cutoffDate, setCutoffDate] = useState('');
-  const [folds, setFolds] = useState(5);
-  const [gapDays, setGapDays] = useState(20);
 
   function toggle(type: string, checked: boolean) {
     setSelected((prev) => {
@@ -62,23 +59,10 @@ export default function TrainConfigCard({
         />
       </div>
 
-      <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
-        <span className="text-text-secondary">TimeSeriesSplit Folds</span>
-        <div className="flex items-center gap-2 w-[120px]">
-          <Slider value={[folds]} onValueChange={(v) => setFolds(Array.isArray(v) ? v[0] : v)} min={3} max={10} step={1} className="w-20" />
-          <span className="font-medium font-mono text-[12px]">{folds}</span>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-center py-[7px] text-[12px]">
-        <span className="text-text-secondary">Validation Gap (leakage prevention)</span>
-        <div className="flex items-center gap-2 w-[150px]">
-          <Slider value={[gapDays]} onValueChange={(v) => setGapDays(Array.isArray(v) ? v[0] : v)} min={5} max={60} step={5} className="w-20" />
-          <span className="font-medium font-mono text-[12px]">{gapDays}</span>
-          <span className="text-[11px] text-text-muted">days</span>
-        </div>
-      </div>
-
+      {/* The old TimeSeriesSplit-folds / validation-gap sliders were removed:
+          the backend trains a single train/val split and silently ignored
+          both knobs (api/routes/training.py::TrainStartRequest), so the
+          controls only pretended to configure anything. */}
       <button
         type="button"
         disabled={isPending || selected.size === 0}
@@ -86,8 +70,6 @@ export default function TrainConfigCard({
           onSubmit({
             model_types: Array.from(selected),
             cutoff_date: cutoffDate || undefined,
-            cv_folds: folds,
-            gap_days: gapDays,
           })
         }
         className="mt-3 px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-surface-2 border border-border-strong hover:bg-surface-1 disabled:opacity-50"

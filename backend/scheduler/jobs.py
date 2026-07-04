@@ -1,8 +1,9 @@
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import desc, select, text
 
 from core.config_paths import FEATURES_DIR
 from core.data.registry import DataRegistry
@@ -11,14 +12,15 @@ from core.logging import get_logger
 from core.models.eia import predict_eia
 from core.models.model_registry import ModelRegistry
 from core.models.regime import predict_regime
+from core.models.trainer import run_full_training_with_log
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
-from core.postprocess.drift_monitor import compute_and_store_psi
+from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_and_store_psi
 from core.postprocess.outcome_backfill import backfill_outcomes
 from core.postprocess.shap_explainer import explain_prediction
 from db.crud import get_feature_snapshot_by_date, get_or_create_default_user, get_prediction_by_date
 from db.database import get_db
-from db.models import FeatureSnapshot, Prediction, SystemLog
+from db.models import FeatureSnapshot, Prediction, SystemLog, TrainJob
 from features.engine import FeatureEngine
 
 logger = get_logger(__name__)
@@ -64,6 +66,7 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
             registry,
         )
         await backfill_outcomes(target_date)
+        await _maybe_auto_retrain(target_date)
 
         logger.info(
             "Pipeline complete",
@@ -87,6 +90,78 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
             )
         logger.error("Pipeline failed", extra={"date": str(target_date), "error": str(exc)})
         raise
+
+
+async def _maybe_auto_retrain(target_date: date) -> None:
+    """Honors the Training page's auto-trigger mode (users.retrain_mode):
+    'psi' retrains when the day's max feature PSI breaches the user's alert
+    threshold, 'sunday' retrains on Sundays, 'manual' (default) never does.
+    Creates a real TrainJob row so the run shows up in the Training page's
+    status/log endpoints exactly like a manually started job. Deploy stays
+    manual either way - auto-retrain only produces the old-vs-new comparison.
+    Failures are logged, never propagated - a broken retrain must not mark
+    the already-successful daily pipeline as failed."""
+    try:
+        async with get_db() as db:
+            user = await get_or_create_default_user(db)
+            mode = user.retrain_mode or "manual"
+            psi_threshold = user.alert_psi_threshold or PSI_RETRAIN_THRESHOLD
+            user_id = user.id
+
+        if mode == "psi":
+            async with get_db() as db:
+                row = await db.execute(
+                    select(FeatureSnapshot).order_by(desc(FeatureSnapshot.date)).limit(1)
+                )
+                snapshot = row.scalar_one_or_none()
+            psi_scores = snapshot.psi_scores if snapshot else None
+            max_psi = max(psi_scores.values()) if psi_scores else None
+            if max_psi is None or max_psi <= psi_threshold:
+                return
+            trigger = f"PSI breach ({round(max_psi, 3)} > {psi_threshold})"
+        elif mode == "sunday":
+            if target_date.weekday() != 6:
+                return
+            trigger = "Sunday schedule"
+        else:
+            return
+
+        job_id = str(uuid.uuid4())[:8]
+        model_types = ["regime", "eia", "returns"]
+        logger.info(
+            "Auto-retrain triggered",
+            extra={"mode": mode, "trigger": trigger, "job_id": job_id},
+        )
+        async with get_db() as db:
+            db.add(
+                TrainJob(
+                    id=job_id,
+                    status="running",
+                    model_types=model_types,
+                    triggered_by=user_id,
+                    started_at=datetime.now(UTC).replace(tzinfo=None),
+                    log_lines=[f"Auto-retrain: {trigger}"],
+                )
+            )
+
+        try:
+            result = await run_full_training_with_log(
+                job_id=job_id, triggered_by_user_id=user_id, model_types=model_types
+            )
+            status, result_payload = "complete", result
+        except Exception as exc:
+            status, result_payload = "failed", {"error": str(exc)}
+            logger.error("Auto-retrain failed", extra={"job_id": job_id, "error": str(exc)})
+
+        async with get_db() as db:
+            job = await db.get(TrainJob, job_id)
+            if job:
+                job.status = status
+                job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                job.result = result_payload
+                db.add(job)
+    except Exception as exc:
+        logger.error("Auto-retrain check failed", extra={"error": str(exc)})
 
 
 async def _ensure_feature_snapshot(

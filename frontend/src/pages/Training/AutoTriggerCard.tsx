@@ -1,15 +1,22 @@
-import { useState } from 'react';
 import Card from '@/components/shared/Card';
+import { useRole, type RetrainMode } from '@/context/RoleContext';
 import { cn } from '@/lib/utils';
 
-const MODES = [
+const MODES: { key: RetrainMode; label: string }[] = [
   { key: 'psi', label: 'Trigger on PSI threshold breach' },
   { key: 'sunday', label: 'Auto every Sunday' },
   { key: 'manual', label: 'Manual only' },
 ];
 
+/**
+ * Persisted for real (users.retrain_mode via PUT /api/users/me/config) and
+ * honored by the scheduler's daily pipeline (scheduler/jobs.py::
+ * _maybe_auto_retrain) - previously this card was pure local state that
+ * configured nothing.
+ */
 export default function AutoTriggerCard() {
-  const [mode, setMode] = useState('psi');
+  const { userConfig, setUserConfig } = useRole();
+  const mode = userConfig.retrain_mode;
 
   return (
     <Card>
@@ -28,11 +35,14 @@ export default function AutoTriggerCard() {
               type="radio"
               name="retrain-mode"
               checked={mode === m.key}
-              onChange={() => setMode(m.key)}
+              onChange={() => setUserConfig({ ...userConfig, retrain_mode: m.key })}
               style={{ accentColor: 'var(--fill-accent)' }}
             />
           </label>
         ))}
+      </div>
+      <div className="mt-2 text-[11px] text-text-muted">
+        Checked after each daily pipeline run · PSI mode uses your alert threshold ({userConfig.alert_psi_threshold})
       </div>
     </Card>
   );

@@ -13,11 +13,18 @@ const MODEL_LABEL: Record<ModelStatus['models'][number]['type'], string> = {
   returns: 'Returns Model',
 };
 
+// metrics.primary / metrics.psi are null until first recorded (types/api.ts) -
+// show a placeholder instead of crashing on null.toFixed().
+function fmt(value: number | null, digits: number, scale = 1): string {
+  return value === null ? '—' : (value * scale).toFixed(digits);
+}
+
 function metricText(m: ModelStatus['models'][number]): string {
-  if (m.psi_alert) return `PSI ${m.metrics.psi.toFixed(2)} — Alerts`;
-  if (m.type === 'regime') return `Acc ${(m.metrics.primary * 100).toFixed(1)}% · PSI ${m.metrics.psi.toFixed(2)}`;
-  if (m.type === 'eia') return `MAE ${m.metrics.primary.toFixed(1)} MB · PSI ${m.metrics.psi.toFixed(2)}`;
-  return `Brier ${m.metrics.primary.toFixed(3)} · PSI ${m.metrics.psi.toFixed(2)}`;
+  const psi = `PSI ${fmt(m.metrics.psi, 2)}`;
+  if (m.psi_alert) return `${psi} — Alerts`;
+  if (m.type === 'regime') return `Acc ${fmt(m.metrics.primary, 1, 100)}% · ${psi}`;
+  if (m.type === 'eia') return `MAE ${fmt(m.metrics.primary, 1)} MB · ${psi}`;
+  return `Brier ${fmt(m.metrics.primary, 3)} · ${psi}`;
 }
 
 export default function DSView() {

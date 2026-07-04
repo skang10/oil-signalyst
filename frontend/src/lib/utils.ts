@@ -15,8 +15,8 @@ export function formatMB(value: number, digits = 1): string {
   return `${sign}${value.toFixed(digits)}`
 }
 
-export function formatUsd(value: number, digits = 2): string {
-  return `$${value.toFixed(digits)}`
+export function formatUsd(value: number | null | undefined, digits = 2): string {
+  return value == null ? '$—' : `$${value.toFixed(digits)}`
 }
 
 /** ISO date (YYYY-MM-DD) -> short month label, e.g. "Nov '25". */

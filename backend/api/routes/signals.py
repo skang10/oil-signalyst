@@ -2,7 +2,7 @@ import yaml
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import desc, select
 
-from api.dependencies import DbSession
+from api.dependencies import CurrentUser, DbSession
 from core.config_paths import FEATURES_YAML
 from core.postprocess.signal_charts import build_signal_charts
 from db.models import ModelVersion, SignalEvaluation
@@ -33,16 +33,18 @@ def _lifecycle_status(signal_name: str, scan_status: str, active_names: set[str]
 
 
 @router.get("")
-async def get_signals(db: DbSession) -> dict:
+async def get_signals(db: DbSession, user: CurrentUser) -> dict:
     """Combined view for the Signals page: currently-active features plus
     candidates under evaluation, in the single shape the frontend expects."""
+    del user
     active = await _active_signals(db)
     active_names = {a["name"] for a in active}
     return {"active": active, "candidates": await _candidate_signals(db, active_names)}
 
 
 @router.get("/candidates")
-async def get_candidate_signals(db: DbSession) -> list[dict]:
+async def get_candidate_signals(db: DbSession, user: CurrentUser) -> list[dict]:
+    del user
     active = await _active_signals(db)
     return await _candidate_signals(db, {a["name"] for a in active})
 
@@ -75,7 +77,8 @@ async def _candidate_signals(db: DbSession, active_names: set[str]) -> list[dict
 
 
 @router.get("/evaluate/{signal_name}")
-async def get_signal_evaluation(signal_name: str, db: DbSession) -> dict:
+async def get_signal_evaluation(signal_name: str, db: DbSession, user: CurrentUser) -> dict:
+    del user
     row = await db.execute(
         select(SignalEvaluation)
         .where(SignalEvaluation.signal_name == signal_name)
@@ -119,7 +122,8 @@ async def get_signal_evaluation(signal_name: str, db: DbSession) -> dict:
 
 
 @router.get("/active")
-async def get_active_signals(db: DbSession) -> list[dict]:
+async def get_active_signals(db: DbSession, user: CurrentUser) -> list[dict]:
+    del user
     return await _active_signals(db)
 
 

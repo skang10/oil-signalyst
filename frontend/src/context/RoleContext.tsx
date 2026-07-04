@@ -1,30 +1,37 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Role } from '@/types/roles';
 import { api } from '@/lib/api';
 import { useAuth } from './AuthContext';
 
+export type RetrainMode = 'manual' | 'psi' | 'sunday';
+
+/**
+ * Field names deliberately mirror the backend's User columns /
+ * UserConfigUpdate schema (api/routes/users.py) 1:1 - the previous
+ * frontend-shaped config ({forecastHorizon, alerts: {...}}) was silently
+ * dropped field-by-field by Pydantic on PUT, so "Save Settings" persisted
+ * nothing.
+ */
 export interface UserConfig {
   name: string;
   role: Role;
-  commodity: 'WTI' | 'Brent';
-  forecastHorizon: number;
-  alerts: {
-    downside_risk_threshold: number;
-    psi_threshold: number;
-    eia_surprise_threshold: number;
-  };
+  horizon_days: number;
+  exposure_barrels: number;
+  alert_downside_threshold: number;
+  alert_psi_threshold: number;
+  alert_eia_threshold: number;
+  retrain_mode: RetrainMode;
 }
 
 export const DEFAULT_CONFIG: UserConfig = {
   name: 'Xuemei',
   role: 'researcher',
-  commodity: 'WTI',
-  forecastHorizon: 20,
-  alerts: {
-    downside_risk_threshold: 0.45,
-    psi_threshold: 0.2,
-    eia_surprise_threshold: 1.5,
-  },
+  horizon_days: 20,
+  exposure_barrels: 100_000,
+  alert_downside_threshold: 0.45,
+  alert_psi_threshold: 0.2,
+  alert_eia_threshold: 1.5,
+  retrain_mode: 'manual',
 };
 
 interface RoleContextValue {
@@ -51,6 +58,30 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const role = authenticatedRole === 'ds' ? (viewAsRole ?? authenticatedRole) : authenticatedRole;
 
   const [userConfig, setUserConfigState] = useState<UserConfig>(DEFAULT_CONFIG);
+
+  // Hydrate from the persisted profile so Settings round-trips instead of
+  // resetting to DEFAULT_CONFIG on every reload.
+  useEffect(() => {
+    if (!user) return;
+    api
+      .get<Partial<Record<keyof UserConfig, unknown>>>('/api/users/me')
+      .then((me) => {
+        setUserConfigState({
+          name: (me.name as string) ?? DEFAULT_CONFIG.name,
+          role: (me.role as Role) ?? DEFAULT_CONFIG.role,
+          horizon_days: (me.horizon_days as number) ?? DEFAULT_CONFIG.horizon_days,
+          exposure_barrels: (me.exposure_barrels as number) ?? DEFAULT_CONFIG.exposure_barrels,
+          alert_downside_threshold:
+            (me.alert_downside_threshold as number) ?? DEFAULT_CONFIG.alert_downside_threshold,
+          alert_psi_threshold:
+            (me.alert_psi_threshold as number) ?? DEFAULT_CONFIG.alert_psi_threshold,
+          alert_eia_threshold:
+            (me.alert_eia_threshold as number) ?? DEFAULT_CONFIG.alert_eia_threshold,
+          retrain_mode: (me.retrain_mode as RetrainMode) ?? DEFAULT_CONFIG.retrain_mode,
+        });
+      })
+      .catch(console.error);
+  }, [user]);
 
   function setRole(r: Role) {
     if (authenticatedRole === 'ds') setViewAsRole(r);

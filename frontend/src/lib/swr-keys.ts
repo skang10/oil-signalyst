@@ -6,6 +6,7 @@ export const swrKeys = {
   history: () => '/api/reports/history',
   historyDetail: (date: string) => `/api/reports/history/${date}`,
   signals: () => '/api/signals',
+  stressTest: () => '/api/reports/stress',
   signalEvaluation: (name: string) => `/api/signals/evaluate/${name}`,
   trainStatus: (jobId: string) => `/api/train/status/${jobId}`,
   trainLog: (jobId: string) => `/api/train/log/${jobId}`,

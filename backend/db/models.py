@@ -34,6 +34,9 @@ class User(Base):
     alert_downside_threshold = Column(Float, default=0.45)
     alert_regime_threshold = Column(Float, default=0.30)
     alert_eia_threshold = Column(Float, default=1.5)
+    alert_psi_threshold = Column(Float, default=0.2)
+    # 'manual' | 'psi' | 'sunday' - honored by scheduler/jobs.py::_maybe_auto_retrain
+    retrain_mode = Column(String(10), default="manual")
     hashed_password = Column(String(256), nullable=True)
     refresh_token = Column(String(512), nullable=True)
     last_login_at = Column(DateTime, nullable=True)

@@ -147,7 +147,13 @@ async def stream_response(session_id: str, token: str) -> StreamingResponse:
             if not task.done():
                 task.cancel()
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    # X-Accel-Buffering: same nginx anti-buffering escape hatch as
+    # /api/train/log/{job_id} - see that route's comment.
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/confirm/{turn_id}")

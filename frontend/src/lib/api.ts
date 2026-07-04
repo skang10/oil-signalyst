@@ -43,7 +43,16 @@ async function request<T>(path: string, init?: RequestInit, _retried = false): P
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const res = await fetch(`${BASE}${path}`, { ...init, headers: { ...headers, ...init?.headers } });
+  // credentials: 'include' so the httpOnly refresh_token cookie round-trips
+  // in the cross-origin dev setup (:5173 -> :8000). Without it, fetch's
+  // default 'same-origin' mode silently *discards* the Set-Cookie on the
+  // login response, so silent refresh 401s and every reload forced a fresh
+  // login. Same-origin (Docker/nginx) is unaffected.
+  const res = await fetch(`${BASE}${path}`, {
+    credentials: 'include',
+    ...init,
+    headers: { ...headers, ...init?.headers },
+  });
 
   if (res.status === 401 && !_retried) {
     const refreshed = await tryRefresh();
@@ -63,6 +72,7 @@ export const api = {
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
 
 export { BASE };

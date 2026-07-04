@@ -32,7 +32,7 @@ export default function TrainingPage() {
 
       {alertModel && (
         <AlertBanner>
-          {alertModel.type[0].toUpperCase() + alertModel.type.slice(1)} model PSI {alertModel.metrics.psi.toFixed(2)} exceeds threshold
+          {alertModel.type[0].toUpperCase() + alertModel.type.slice(1)} model PSI {(alertModel.metrics.psi ?? 0).toFixed(2)} exceeds threshold
           0.20 — retraining recommended
         </AlertBanner>
       )}
@@ -41,6 +41,12 @@ export default function TrainingPage() {
         <TrainConfigCard onSubmit={handleStart} isPending={isPending} />
         <AutoTriggerCard />
       </div>
+
+      {job?.status === 'failed' && (
+        <AlertBanner>
+          Training job {job.job_id} failed{job.result?.error ? ` — ${job.result.error}` : ''}
+        </AlertBanner>
+      )}
 
       <TrainLogCard lines={logLines} />
 

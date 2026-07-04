@@ -12,12 +12,15 @@ const CATEGORY_TAG: Record<string, TagKind> = {
   Inventory: 'green',
   Positioning: 'purple',
   Volatility: 'yellow',
+  'Price Momentum': 'blue',
   Macro: 'muted',
 };
 
 export default function DataMonitorPage() {
-  const { data: modelStatus } = useModelStatus();
+  const { data: modelStatus, error } = useModelStatus();
   const { data: signals } = useSignals();
+  if (error)
+    return <div className="p-[18px] text-text-muted text-[12px]">Data monitor unavailable — {String(error)}</div>;
   if (!modelStatus) return <div className="p-[18px] text-text-muted text-[12px]">Loading...</div>;
 
   const normalCount = modelStatus.data_sources.filter((s) => s.status === 'ok').length;
@@ -130,7 +133,7 @@ export default function DataMonitorPage() {
                 <td className="p-[6px_8px] text-text-secondary">{f.source}</td>
                 <td className="p-[6px_8px] text-text-secondary">{f.frequency}</td>
                 <td className="p-[6px_8px]">
-                  <TagBadge kind={CATEGORY_TAG[f.category]}>{f.category}</TagBadge>
+                  <TagBadge kind={CATEGORY_TAG[f.category] ?? 'muted'}>{f.category}</TagBadge>
                 </td>
               </tr>
             ))}

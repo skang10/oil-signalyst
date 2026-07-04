@@ -86,7 +86,7 @@ async def start_training(
 async def get_training_status(job_id: str, db: DbSession) -> dict:
     job = await db.get(TrainJob, job_id)
     if not job:
-        return {"error": "not found"}
+        raise HTTPException(status_code=404, detail="Train job not found")
     return {
         "job_id": job.id,
         "status": job.status,
@@ -135,4 +135,12 @@ async def stream_training_log(job_id: str, token: str) -> StreamingResponse:
                 break
             await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    # X-Accel-Buffering tells nginx (the Docker stack's reverse proxy,
+    # frontend/nginx.conf) not to buffer this response - with default
+    # proxy_buffering, SSE frames only reach the browser when a proxy buffer
+    # fills, which freezes the live log view.
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

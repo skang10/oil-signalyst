@@ -90,11 +90,15 @@ export interface ModelStatus {
   models: {
     type: 'regime' | 'eia' | 'returns';
     version: string;
-    deployed_at: string;
-    mlflow_run_id: string;
+    // Nullable: deployed_at/mlflow_run_id are unset for never-deployed
+    // versions, metrics.primary when the training run didn't record the
+    // primary metric, metrics.psi until the first PSI computation has been
+    // persisted (see api/routes/models.py).
+    deployed_at: string | null;
+    mlflow_run_id: string | null;
     metrics: {
-      primary: number;
-      psi: number;
+      primary: number | null;
+      psi: number | null;
     };
     psi_alert: boolean;
   }[];
@@ -122,27 +126,31 @@ export interface TrainJob {
   started_at: string | null;
   completed_at: string | null;
   result?: {
-    old_metrics: Record<string, number>;
-    new_metrics: Record<string, number>;
-    improvement_pct: number;
+    // Metric values are null when they have no backing: old_metrics on the
+    // first-ever training of a model type (no prior active version),
+    // improvement_pct whenever "returns" isn't among the trained types.
+    // A failed job's result carries only `error`.
+    old_metrics?: Record<string, number | null>;
+    new_metrics?: Record<string, number | null>;
+    improvement_pct?: number | null;
+    error?: string;
   };
 }
 
 export interface TrainParams {
   model_types: string[];
   cutoff_date?: string;
-  cv_folds: number;
-  gap_days: number;
 }
 
 export interface HistoryPrediction {
   date: string;
-  wti_price: number;
+  wti_price: number | null;
   regime_dominant: 'R1' | 'R2' | 'R3' | 'R4';
   signal: 'LONG' | 'SHORT' | 'FLAT';
   expected_return: number;
   downside_prob: number;
-  eia_forecast_mb: number;
+  // Null when the stored prediction has no EIA forecast component.
+  eia_forecast_mb: number | null;
   actual_return: number | null;
 }
 
@@ -157,13 +165,13 @@ export interface HistoryResponse {
 
 export interface HistoryDetail {
   date: string;
-  wti_price: number;
-  model_version: string;
+  wti_price: number | null;
+  model_version: string | null;
   summary: {
     signal: 'LONG' | 'SHORT' | 'FLAT';
     expected_return: number;
     downside_prob: number;
-    eia_forecast_mb: number;
+    eia_forecast_mb: number | null;
     risk_recommendation: string;
   };
   regime: {
@@ -200,7 +208,10 @@ export interface SignalsResponse {
     name: string;
     source: string;
     frequency: string;
-    category: 'Futures Curve' | 'Inventory' | 'Positioning' | 'Volatility' | 'Macro';
+    // Open string, not a closed union - values come straight from
+    // config/features.yaml's per-feature `category` (live data already
+    // includes 'Price Momentum', which the old union missed).
+    category: string;
   }[];
   candidates: SignalCandidate[];
 }
@@ -222,4 +233,27 @@ export interface SignalEvaluation {
   ic10_series: number[];
   ic20_series: number[];
   oos_years: { year: number; train_ic: number; oos_ic: number }[];
+}
+
+/**
+ * GET /api/reports/stress - real model re-runs against historical extreme
+ * scenarios (core/postprocess/stress_test.py). A scenario either carries the
+ * full prediction comparison or an `error` explaining why it couldn't run
+ * (e.g. no feature snapshot for that date).
+ */
+export interface StressScenario {
+  name: string;
+  date: string;
+  error?: string;
+  actual_return?: number;
+  model_alerted?: boolean;
+  dominant_regime_predicted?: string;
+  dominant_regime_actual?: string;
+  regime_probs?: Record<string, number>;
+  return_dist?: Record<string, number>;
+}
+
+export interface StressTestResponse {
+  scenarios: StressScenario[];
+  error?: string;
 }
