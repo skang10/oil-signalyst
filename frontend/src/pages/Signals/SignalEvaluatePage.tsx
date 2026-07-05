@@ -34,10 +34,18 @@ export default function SignalEvaluatePage() {
   // Selecting a signal from the "All Candidate Signals" list at the bottom
   // keeps this scroll container mounted (only the :name param changes), so
   // without this the new signal's charts render off-screen above the fold.
+  // Handlers also call scrollToTop() directly: clicking Evaluate on the
+  // signal that's already open changes nothing, so the [name] effect alone
+  // never fires for it.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [name]);
+
+  function openSignal(signalName: string) {
+    scrollRef.current?.scrollTo({ top: 0 });
+    navigate(`/signals/evaluate/${signalName}`);
+  }
 
   const canWrite = ROLE_PERMISSIONS.signalWrite.includes(role);
 
@@ -53,7 +61,7 @@ export default function SignalEvaluatePage() {
       <SignalSelectorTabs
         candidates={signals.candidates}
         active={evaluation.name}
-        onSelect={(n) => navigate(`/signals/evaluate/${n}`)}
+        onSelect={openSignal}
       />
 
       <ICStatsRow evaluation={evaluation} />
@@ -120,8 +128,8 @@ export default function SignalEvaluatePage() {
             key={c.name}
             candidate={c}
             active={c.name === evaluation.name}
-            onClick={() => navigate(`/signals/evaluate/${c.name}`)}
-            onEvaluate={() => navigate(`/signals/evaluate/${c.name}`)}
+            onClick={() => openSignal(c.name)}
+            onEvaluate={() => openSignal(c.name)}
           />
         ))}
       </Card>
