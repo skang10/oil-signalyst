@@ -9,6 +9,19 @@ const MODEL_OPTIONS: { type: string; label: string }[] = [
   { type: 'returns', label: 'Return Dist.' },
 ];
 
+// Today minus 90 days: the most recent default that reliably trains.
+// Cutoff is the train/val split, and forward-looking labels need future
+// data past it (returns: ~20 trading days of prices; eia: the next weekly
+// report), so anything much closer to today trips the trainer's
+// "no validation rows" guard. 90 days leaves a ~2-month validation window.
+// Local date parts, not toISOString() - UTC conversion can shift the day.
+function defaultCutoffDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 90);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export default function TrainConfigCard({
   onSubmit,
   isPending,
@@ -17,12 +30,7 @@ export default function TrainConfigCard({
   isPending: boolean;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set(['returns']));
-  // Left unset by default (uses the backend's full historical train/val
-  // split) rather than a fixed recent date - forward-looking labels (eia,
-  // returns) need trailing days of future data that don't exist yet for a
-  // cutoff too close to today, so any hardcoded "recent" default would
-  // reliably fail.
-  const [cutoffDate, setCutoffDate] = useState('');
+  const [cutoffDate, setCutoffDate] = useState(defaultCutoffDate);
 
   function toggle(type: string, checked: boolean) {
     setSelected((prev) => {
