@@ -53,6 +53,9 @@ sources:
     series_id: "DTWEXBGS"
     freq: D
     lag_days: 1
+    # FRED's broad dollar index (H.10) is a daily series but publishes on a
+    # lagged weekly cadence, so ~a week behind is normal, not delayed.
+    max_lag_days: 10
 
   vix:
     type: yahoo

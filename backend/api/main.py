@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,10 +29,22 @@ async def lifespan(app: FastAPI):
     # in-memory cache (core/postprocess/signal_charts.py) so first page views
     # are served warm instead of taking ~4s. Startup itself is not delayed.
     from core.postprocess.signal_charts import refresh_signal_charts
+    from scripts.daily_update import run_daily_update
 
     prewarm_task = asyncio.create_task(refresh_signal_charts())
+
+    # Nothing else refreshes the persisted feature Parquet matrix, so without
+    # a daily job it drifts stale. Run once a day after the US close and the
+    # EIA/COT releases (server-local time) to append the latest rows and warm
+    # the caches. In-process is enough for this single-node local tool.
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(run_daily_update, "cron", hour=22, minute=30, id="daily_update")
+    scheduler.start()
+
     yield
+
     prewarm_task.cancel()
+    scheduler.shutdown(wait=False)
     logger.info("Shutting down oil-signalyst API")
 
 

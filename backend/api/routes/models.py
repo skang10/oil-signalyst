@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter
 from sqlalchemy import desc, select
 
@@ -54,7 +56,7 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
 
     return {
         "models": models_out,
-        "data_sources": data_source_status(),
+        "data_sources": await asyncio.to_thread(data_source_status),
         "feature_coverage_7d": feature_coverage_7d(),
         "feature_missing_rates": feature_missing_rates(),
         "feature_psi": [
