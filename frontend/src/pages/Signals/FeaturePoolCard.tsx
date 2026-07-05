@@ -8,7 +8,7 @@ import { ROLE_PERMISSIONS } from '@/types/roles';
 import { cn } from '@/lib/utils';
 import type { PoolFeature } from '@/types/api';
 
-const GRID = 'grid grid-cols-[1fr_110px_130px_70px_70px_150px_40px] items-center gap-x-2';
+const GRID = 'grid grid-cols-[1fr_110px_130px_70px_70px_210px_40px] items-center gap-x-2';
 
 function StatusBadge({ feature }: { feature: PoolFeature }) {
   if (feature.pool_status === 'live') return <TagBadge kind="green">Live · {feature.used_by.join(', ')}</TagBadge>;
@@ -54,7 +54,7 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
         </div>
       </div>
       <div className="mt-[10px] overflow-x-auto">
-        <div className="min-w-[820px]">
+        <div className="min-w-[880px]">
           <div className={cn(GRID, 'bg-surface-1 text-[10.5px] font-medium text-text-muted uppercase tracking-[0.4px] px-[16px] py-[7px]')}>
             <div>Feature</div>
             <div>Category</div>
@@ -92,7 +92,7 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
                 >
                   {psi == null ? '—' : psi.toFixed(2)}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 whitespace-nowrap">
                   {ghost && <IconAlertTriangle size={13} stroke={1.75} className="text-danger shrink-0" />}
                   <StatusBadge feature={feature} />
                 </div>
