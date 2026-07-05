@@ -1,12 +1,4 @@
 features:
-- name: curve_slope_zscore
-  source: wti
-  transform: zscore
-  window: 252
-  bearish_if_positive: false
-  meta_source: Yahoo Finance
-  frequency: Daily
-  category: Futures Curve
 - name: crude_inv_dev
   source: crude_inventory
   transform: seasonal_dev
@@ -104,14 +96,6 @@ features:
   meta_source: Yahoo Finance
   frequency: Daily
   category: Macro
-- name: gasoline_inv_chg_4w
-  source: gasoline_inventory
-  transform: pct_change
-  bearish_if_positive: true
-  meta_source: EIA API
-  frequency: Weekly
-  category: Inventory
-  window: 4
 - name: brent_wti_spread
   source_a: brent
   source_b: wti
@@ -120,3 +104,36 @@ features:
   meta_source: Yahoo Finance
   frequency: Daily
   category: Futures Curve
+- name: curve_slope_zscore
+  source: wti
+  transform: zscore
+  window: 252
+  bearish_if_positive: false
+  meta_source: Yahoo Finance
+  frequency: Daily
+  category: Futures Curve
+- name: gasoline_inv_chg_4w
+  source: gasoline_inventory
+  transform: pct_change
+  bearish_if_positive: true
+  meta_source: EIA API
+  frequency: Weekly
+  category: Inventory
+  window: 4
+removed:
+- name: natural_gas_ret_20d
+  source: natural_gas
+  transform: pct_change
+  bearish_if_positive: false
+  meta_source: Yahoo Finance
+  frequency: Daily
+  category: Cross-Asset
+  window: 20
+- name: distillate_inv_chg_4w
+  source: distillate_inventory
+  transform: pct_change
+  bearish_if_positive: true
+  meta_source: EIA API
+  frequency: Weekly
+  category: Inventory
+  window: 4
