@@ -4,17 +4,9 @@ import { useSignals } from '@/hooks/useSignals';
 import PageHeader from '@/components/shared/PageHeader';
 import Card from '@/components/shared/Card';
 import MetricCard from '@/components/shared/MetricCard';
-import TagBadge, { type TagKind } from '@/components/shared/TagBadge';
+import TagBadge from '@/components/shared/TagBadge';
+import { CATEGORY_TAG } from '@/lib/categoryColors';
 import { cn } from '@/lib/utils';
-
-const CATEGORY_TAG: Record<string, TagKind> = {
-  'Futures Curve': 'blue',
-  Inventory: 'green',
-  Positioning: 'purple',
-  Volatility: 'yellow',
-  'Price Momentum': 'blue',
-  Macro: 'muted',
-};
 
 export default function DataMonitorPage() {
   const { data: modelStatus, error } = useModelStatus();

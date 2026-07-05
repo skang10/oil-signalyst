@@ -5,6 +5,7 @@ import { useModelStatus } from '@/hooks/useModelStatus';
 import { useAddToPool, useRemoveFromPool } from '@/hooks/useFeaturePool';
 import { useRole } from '@/context/RoleContext';
 import { ROLE_PERMISSIONS } from '@/types/roles';
+import { CATEGORY_TAG } from '@/lib/categoryColors';
 import { cn } from '@/lib/utils';
 import type { PoolFeature } from '@/types/api';
 
@@ -77,7 +78,13 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
                   <div className="truncate">{feature.label}</div>
                   <div className="font-mono text-[10.5px] text-text-muted truncate">{feature.name}</div>
                 </div>
-                <div className="text-text-secondary text-[11.5px]">{feature.category}</div>
+                <div>
+                  {ghost ? (
+                    <span className="text-text-muted text-[11.5px]">—</span>
+                  ) : (
+                    <TagBadge kind={CATEGORY_TAG[feature.category] ?? 'muted'}>{feature.category}</TagBadge>
+                  )}
+                </div>
                 <div className="text-text-muted text-[11px]">
                   {feature.source} · {feature.frequency}
                 </div>
