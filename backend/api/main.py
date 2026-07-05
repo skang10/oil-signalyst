@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -23,7 +24,14 @@ async def lifespan(app: FastAPI):
         await get_or_create_default_user(db)
 
     logger.info("Starting oil-signalyst API")
+    # Fire-and-forget: builds every candidate's Evaluate-page charts into the
+    # in-memory cache (core/postprocess/signal_charts.py) so first page views
+    # are served warm instead of taking ~4s. Startup itself is not delayed.
+    from core.postprocess.signal_charts import refresh_signal_charts
+
+    prewarm_task = asyncio.create_task(refresh_signal_charts())
     yield
+    prewarm_task.cancel()
     logger.info("Shutting down oil-signalyst API")
 
 

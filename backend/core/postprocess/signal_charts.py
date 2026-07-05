@@ -1,7 +1,10 @@
+import asyncio
+
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
+from core.cache import DataFetchCache
 from core.data.registry import DataRegistry
 from core.logging import get_logger
 from core.models.trainer import TRAIN_END, TRAIN_START, VAL_END
@@ -15,6 +18,18 @@ ROLLING_IC_WINDOW_DAYS = 52 * 5  # ~52 trading weeks
 ROLLING_IC_STEP_DAYS = 5  # weekly steps - the 52-week window barely moves day to day
 ROLLING_IC_MIN_OBSERVATIONS = 10
 TRAIN_END_YEAR = pd.Timestamp(TRAIN_END).year
+
+# Shared across requests. A per-request DataRegistry() started with an empty
+# cache, so every Evaluate page view re-downloaded ~15 years of raw source
+# data (~2.7s of the measured ~4.4s page time); the registry's own 4h TTL
+# cache makes repeat fetches free once the instance is shared.
+_REGISTRY = DataRegistry()
+
+# Built chart payloads keyed by signal name. The 24h TTL is a backstop -
+# refresh_signal_charts() proactively rebuilds at API startup and after each
+# daily pipeline run (the only time the underlying data changes), so even
+# the first-ever page view of a candidate is served warm.
+_CHART_CACHE = DataFetchCache(ttl_seconds=24 * 3600)
 
 
 def _find_candidate(signal_name: str) -> dict | None:
@@ -33,23 +48,38 @@ def _ic_mean(signal: pd.Series, target: pd.Series) -> float | None:
 
 
 async def build_signal_charts(signal_name: str) -> dict | None:
-    """Builds the three Signal Evaluate page datasets for a candidate signal.
+    """Builds (or serves cached) Signal Evaluate page datasets for a
+    candidate signal.
 
     Sources history from the backfilled (and daily-pipeline-appended)
     feature Parquet matrix / live DataRegistry fetches rather than
     FeatureSnapshot, consistent with every other historical lookup fixed
     this phase - FeatureSnapshot only holds rows the live pipeline has
     actually produced, not backfilled history.
+
+    Cold builds run in a worker thread: the registry's fetches are
+    synchronous network calls that previously froze the whole event loop
+    (including the /ws/price ticker) for seconds per page view.
     """
+    cached = _CHART_CACHE.get(signal_name)
+    if cached is not None:
+        return cached
+
+    result = await asyncio.to_thread(_build_signal_charts_sync, signal_name)
+    if result is not None:
+        _CHART_CACHE.set(signal_name, result)
+    return result
+
+
+def _build_signal_charts_sync(signal_name: str) -> dict | None:
     candidate = _find_candidate(signal_name)
     if candidate is None:
         return None
 
-    registry = DataRegistry()
-    engine = FeatureEngine(registry=registry)
-    raw = registry.fetch_all(TRAIN_START, VAL_END, source_names=[candidate["source"]])
+    engine = FeatureEngine(registry=_REGISTRY)
+    raw = _REGISTRY.fetch_all(TRAIN_START, VAL_END, source_names=[candidate["source"]])
     signal = engine.apply_transform(candidate, raw).dropna().sort_index()
-    wti = registry.fetch("wti", TRAIN_START, VAL_END).dropna().sort_index()
+    wti = _REGISTRY.fetch("wti", TRAIN_START, VAL_END).dropna().sort_index()
 
     df = pd.concat([signal.rename("signal"), wti.rename("price")], axis=1).dropna()
     if df.empty:
@@ -65,6 +95,25 @@ async def build_signal_charts(signal_name: str) -> dict | None:
         # page's headline stat, not part of that corrected family of tests.
         "ic10": _ic_mean(df["signal"], df["price"].pct_change(10).shift(-10)) or 0.0,
     }
+
+
+async def refresh_signal_charts() -> None:
+    """Rebuilds every candidate's charts in the background so first-ever
+    Evaluate page views are served from cache. Called fire-and-forget at API
+    startup and after each daily pipeline run; builds sequentially (one
+    worker thread at a time) to stay off the external APIs' rate limits.
+    Failures skip the one candidate - the page then just builds it lazily."""
+    _CHART_CACHE.clear()
+    # Data changed (or unknown at startup): drop stale raw-series caches too,
+    # otherwise rebuilt charts would reuse up-to-4h-old source data.
+    _REGISTRY.clear_cache()
+    for candidate in load_candidates():
+        name = candidate["name"]
+        try:
+            await build_signal_charts(name)
+        except Exception as exc:
+            logger.error("Chart prewarm failed", extra={"signal": name, "error": str(exc)})
+    logger.info("Signal charts prewarmed", extra={"candidates": len(load_candidates())})
 
 
 def _price_history(df: pd.DataFrame) -> list[dict]:

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -18,6 +19,7 @@ from core.postprocess.decision_engine import generate_decision
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_and_store_psi
 from core.postprocess.outcome_backfill import backfill_outcomes
 from core.postprocess.shap_explainer import explain_prediction
+from core.postprocess.signal_charts import refresh_signal_charts
 from db.crud import get_feature_snapshot_by_date, get_or_create_default_user, get_prediction_by_date
 from db.database import get_db
 from db.models import FeatureSnapshot, Prediction, SystemLog, TrainJob
@@ -67,6 +69,9 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
         )
         await backfill_outcomes(target_date)
         await _maybe_auto_retrain(target_date)
+        # New market data landed - rebuild the Evaluate-page chart cache in
+        # the background so tomorrow's first page views stay instant.
+        asyncio.create_task(refresh_signal_charts())
 
         logger.info(
             "Pipeline complete",

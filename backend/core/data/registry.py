@@ -31,6 +31,11 @@ class DataRegistry:
             "cftc": CFTCSource(),
         }
 
+    def clear_cache(self) -> None:
+        """Drops all cached raw series - callers refresh after the daily
+        pipeline lands new data (e.g. signal_charts.refresh_signal_charts)."""
+        self._cache.clear()
+
     def fetch(self, name: str, start: str, end: str) -> pd.Series:
         cache_key = f"{name}:{start}:{end}"
         cached = self._cache.get(cache_key)
