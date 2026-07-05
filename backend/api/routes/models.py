@@ -8,6 +8,7 @@ from core.postprocess.data_monitor import (
     data_source_status,
     feature_coverage_7d,
     feature_missing_rates,
+    model_input_freshness,
 )
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD
 from core.services.deploy_service import do_deploy
@@ -54,9 +55,11 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
         for version in versions
     ]
 
+    live_status = await asyncio.to_thread(data_source_status)
     return {
         "models": models_out,
-        "data_sources": await asyncio.to_thread(data_source_status),
+        "data_sources": live_status,
+        "model_input_freshness": await asyncio.to_thread(model_input_freshness, live_status),
         "feature_coverage_7d": feature_coverage_7d(),
         "feature_missing_rates": feature_missing_rates(),
         "feature_psi": [

@@ -108,6 +108,17 @@ export interface ModelStatus {
     lag_hours: number | null;
     last_updated: string;
   }[];
+  /**
+   * Freshness of the persisted feature Parquet matrix the models actually
+   * train/score on, vs the live feeds. Answers "is the model's input current
+   * and consistent with training" (data_sources above answers "are the feeds
+   * alive"). `pipeline_behind` = the daily scheduler has fallen behind.
+   */
+  model_input_freshness: {
+    matrix_as_of: string | null;
+    pipeline_lag_days: number | null;
+    pipeline_behind: boolean;
+  };
   feature_coverage_7d: number;
   /**
    * Not in spec §9's ModelStatus - added for Data Monitor's "Feature Missing

@@ -22,6 +22,7 @@ export default function DataMonitorPage() {
   // "Max lag" tracks anomalous delay among non-ok sources, not the longest
   // *expected* update cadence (e.g. CFTC's normal weekly ~48h isn't a delay).
   const maxLag = delayedSources.length > 0 ? Math.max(...delayedSources.map((s) => s.lag_hours ?? 0)) : 0;
+  const mif = modelStatus.model_input_freshness;
 
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
@@ -62,6 +63,27 @@ export default function DataMonitorPage() {
             <TagBadge kind={s.status === 'ok' ? 'green' : 'yellow'}>{s.status === 'ok' ? 'OK' : 'Delayed'}</TagBadge>
           </div>
         ))}
+      </Card>
+
+      <Card className="mb-3">
+        <div className="flex items-center justify-between gap-[10px]">
+          <div>
+            <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[6px]">Model Input Freshness</div>
+            <div className="text-[12px]">
+              Feature matrix as of <span className="font-mono">{mif.matrix_as_of ?? '—'}</span>
+              <span className="text-text-muted"> · the data the models train &amp; score on</span>
+            </div>
+          </div>
+          <TagBadge kind={mif.pipeline_behind ? 'yellow' : 'green'}>
+            {mif.pipeline_behind ? `Pipeline behind ${mif.pipeline_lag_days}d` : 'In sync'}
+          </TagBadge>
+        </div>
+        {mif.pipeline_behind && (
+          <div className="text-[11px] text-warning mt-[8px]">
+            Live feeds are {mif.pipeline_lag_days} days fresher than the feature matrix — the daily
+            pipeline (<span className="font-mono">scheduler/runner.py</span>) may not be running.
+          </div>
+        )}
       </Card>
 
       <Card className="mb-3">

@@ -26,9 +26,14 @@ WEEKLY_MAX_LAG_DAYS = 14
 
 # Shared across requests so the registry's 4h TTL cache spares the Data
 # Monitor page a full live re-fetch of every source on each view; the daily
-# pipeline (scripts/daily_update.py) clears it when new data lands. Mirrors
-# the shared _REGISTRY in core/postprocess/signal_charts.py.
+# pipeline (scheduler/jobs.py) clears it when new data lands. Mirrors the
+# shared _REGISTRY in core/postprocess/signal_charts.py.
 _REGISTRY = DataRegistry()
+
+# When the freshest live feed leads the persisted feature matrix by more than
+# this many days, the daily pipeline (scheduler/runner.py) is behind: the
+# models are training/scoring on data older than the feeds already offer.
+PIPELINE_LAG_MAX_DAYS = 2
 
 
 def _max_lag_days(cfg: dict) -> int:
@@ -132,3 +137,47 @@ def data_source_status(as_of: date | None = None) -> list[dict]:
             }
         )
     return statuses
+
+
+def model_input_freshness(
+    live_status: list[dict] | None = None,
+    as_of: date | None = None,
+) -> dict:
+    """Freshness of the persisted feature matrix the models actually train and
+    score on (the Parquet), versus the live feeds.
+
+    Complements `data_source_status` (live feed health) by answering the other
+    question - "is the model's input current, and consistent with what training
+    saw?" - with a single honest signal: the matrix's as-of date plus how far
+    the freshest live feed leads it. When the daily pipeline has not run, the
+    feeds stay green while the matrix rots; that gap surfaces as
+    `pipeline_behind`. `live_status` is the already-computed
+    `data_source_status()` result, reused so the page does not re-fetch.
+
+    Deliberately NOT reported per-source: `DataRegistry._align` forward-fills a
+    lagged source within its range, so an engineered feature carries a value on
+    dates past the source's true last print - the Parquet cannot recover raw
+    per-source freshness (that is precisely what the live panel is for).
+    """
+    as_of = as_of or date.today()
+    matrix = _latest_feature_matrix(as_of)
+    if matrix is None or matrix.empty:
+        return {"matrix_as_of": None, "pipeline_lag_days": None, "pipeline_behind": False}
+
+    matrix_as_of = matrix.index.max()
+    live_dates = [
+        pd.Timestamp(row["last_updated"])
+        for row in (live_status or [])
+        if row.get("last_updated")
+    ]
+    freshest_live = max(live_dates) if live_dates else None
+    lag_days = (
+        int((freshest_live.normalize() - matrix_as_of.normalize()).days)
+        if freshest_live is not None
+        else None
+    )
+    return {
+        "matrix_as_of": matrix_as_of.date().isoformat(),
+        "pipeline_lag_days": lag_days,
+        "pipeline_behind": lag_days is not None and lag_days > PIPELINE_LAG_MAX_DAYS,
+    }
