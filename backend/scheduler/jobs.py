@@ -11,6 +11,7 @@ from core.data.registry import DataRegistry
 from core.exceptions import ModelNotFoundError
 from core.logging import get_logger
 from core.models.eia import predict_eia
+from core.models.feature_prep import to_model_matrix
 from core.models.model_registry import ModelRegistry
 from core.models.regime import predict_regime
 from core.models.trainer import run_full_training_with_log
@@ -186,19 +187,28 @@ async def _ensure_feature_snapshot(
     lookback_days = engine.required_lookback_days() + FEATURE_WARMUP_BUFFER_DAYS
     start = str(target_date - timedelta(days=lookback_days))
     features_df = engine.build(start, end)
-    feature_date, selected_features = _select_feature_row(features_df, target_date)
+
+    # engine.build() now leaves a partial tail whenever a weekly source (COT/
+    # EIA) has not printed for the latest days. Complete those rows by carrying
+    # the last known print forward before picking the row the models score, so
+    # the prediction runs on the freshest date instead of stalling ~a week back
+    # on the slowest source. The honest (un-filled) row is what we persist to
+    # parquet, so the Data Monitor still reports the true per-feature coverage.
+    model_df = to_model_matrix(features_df)
+    feature_date, selected_features = _select_feature_row(model_df, target_date)
     feature_dict = {
         key: _to_json_scalar(value)
         for key, value in selected_features.iloc[0].to_dict().items()
     }
 
+    honest_row = features_df.loc[[selected_features.index[0]]]
     parquet_path = FEATURES_DIR / f"features_{feature_date.year}.parquet"
     if parquet_path.exists():
         existing_df = pd.read_parquet(parquet_path)
         existing_df = existing_df[existing_df.index.normalize() != feature_date]
-        updated_df = pd.concat([existing_df, selected_features])
+        updated_df = pd.concat([existing_df, honest_row])
     else:
-        updated_df = selected_features
+        updated_df = honest_row
     updated_df.sort_index().to_parquet(parquet_path)
 
     async with get_db() as db:

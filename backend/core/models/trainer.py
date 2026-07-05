@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from core.config_paths import FEATURES_DIR, MLRUNS_DIR, MODELS_DIR
 from core.logging import get_logger
 from core.models.eia import build_eia_model
+from core.models.feature_prep import to_model_matrix
 from core.models.labels import build_eia_labels, build_regime_labels, build_return_bucket_labels
 from core.models.model_registry import ModelRegistry
 from core.models.regime import build_regime_model, predict_regime_batch
@@ -100,8 +101,8 @@ async def run_full_training(
     val_start = str((pd.Timestamp(cutoff_date) + pd.Timedelta(days=1)).date()) if cutoff_date else VAL_START
     val_end = str(datetime.now(UTC).date()) if cutoff_date else VAL_END
 
-    train_x = load_features(TRAIN_START, train_end)
-    val_x = load_features(val_start, val_end)
+    train_x = to_model_matrix(load_features(TRAIN_START, train_end))
+    val_x = to_model_matrix(load_features(val_start, val_end))
     version = datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S")
     feature_version = FeatureEngine().feature_version
 

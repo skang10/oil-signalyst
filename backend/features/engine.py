@@ -41,7 +41,17 @@ class FeatureEngine:
                     extra={"feature": feature["name"], "error": str(exc)},
                 )
 
-        df = pd.DataFrame(result).dropna()
+        # Keep the matrix from the first fully-formed row onward, INCLUDING any
+        # ragged tail where a slow weekly source (COT/EIA) has not printed for
+        # the latest days. This trims the long leading warmup (sources have very
+        # different history depths, so a plain dropna(how="all") would resurrect
+        # decades of single-column rows) while preserving the fresh tail, so the
+        # matrix stays as current as the fastest source and the Data Monitor can
+        # report honest per-feature coverage. Model consumers complete every row
+        # themselves via core.models.feature_prep.to_model_matrix.
+        df = pd.DataFrame(result).sort_index()
+        complete = df.dropna().index
+        df = df.loc[complete.min():] if len(complete) else df.iloc[0:0]
         logger.info("Feature matrix built", extra={"rows": len(df), "columns": len(df.columns)})
         return df
 
