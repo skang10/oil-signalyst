@@ -46,7 +46,26 @@ export default function DataMonitorPage() {
       </div>
 
       <Card className="mb-3">
-        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Data Source Status</div>
+        <div className="flex items-center justify-between gap-[10px] mb-[10px]">
+          <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium">Data Source Status</div>
+          <div
+            className="flex items-center gap-[7px] text-[11px] text-text-muted"
+            title="Freshness of the feature matrix the models actually train & score on"
+          >
+            <span>
+              Model input <span className="font-mono text-text-secondary">{mif.matrix_as_of ?? '—'}</span>
+            </span>
+            <TagBadge kind={mif.pipeline_behind ? 'yellow' : 'green'}>
+              {mif.pipeline_behind ? `Behind ${mif.pipeline_lag_days}d` : 'In sync'}
+            </TagBadge>
+          </div>
+        </div>
+        {mif.pipeline_behind && (
+          <div className="text-[11px] text-warning mb-[8px]">
+            Feature matrix is {mif.pipeline_lag_days} days behind the live feeds — start the daily
+            pipeline (<span className="font-mono">scheduler/runner.py</span>).
+          </div>
+        )}
         {modelStatus.data_sources.map((s) => (
           <div
             key={s.name}
@@ -63,27 +82,6 @@ export default function DataMonitorPage() {
             <TagBadge kind={s.status === 'ok' ? 'green' : 'yellow'}>{s.status === 'ok' ? 'OK' : 'Delayed'}</TagBadge>
           </div>
         ))}
-      </Card>
-
-      <Card className="mb-3">
-        <div className="flex items-center justify-between gap-[10px]">
-          <div>
-            <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[6px]">Model Input Freshness</div>
-            <div className="text-[12px]">
-              Feature matrix as of <span className="font-mono">{mif.matrix_as_of ?? '—'}</span>
-              <span className="text-text-muted"> · the data the models train &amp; score on</span>
-            </div>
-          </div>
-          <TagBadge kind={mif.pipeline_behind ? 'yellow' : 'green'}>
-            {mif.pipeline_behind ? `Pipeline behind ${mif.pipeline_lag_days}d` : 'In sync'}
-          </TagBadge>
-        </div>
-        {mif.pipeline_behind && (
-          <div className="text-[11px] text-warning mt-[8px]">
-            Live feeds are {mif.pipeline_lag_days} days fresher than the feature matrix — the daily
-            pipeline (<span className="font-mono">scheduler/runner.py</span>) may not be running.
-          </div>
-        )}
       </Card>
 
       <Card className="mb-3">
