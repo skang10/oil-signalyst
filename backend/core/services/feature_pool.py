@@ -30,6 +30,7 @@ from db.models import ModelVersion, PoolFeature
 logger = get_logger(__name__)
 
 _sync_engine = None
+_seed_checked = False
 
 
 def _get_sync_engine():
@@ -47,10 +48,18 @@ def ensure_seeded() -> None:
     """Imports config/features.yaml into pool_features when the table is
     empty (first run after the migration, or a fresh install). The yaml's
     legacy `removed:` archive seeds status='removed' rows so previously
-    removed features stay restorable."""
+    removed features stay restorable. Called from every entry point (sync
+    and async paths both) - the async routes must not depend on the
+    pipeline having touched the pool first. The flag only short-circuits
+    after a successful check, so a failure (e.g. table not migrated yet)
+    retries on the next call."""
+    global _seed_checked
+    if _seed_checked:
+        return
     with Session(_get_sync_engine()) as session:
         existing = session.execute(select(PoolFeature.id).limit(1)).first()
         if existing:
+            _seed_checked = True
             return
         with open(FEATURES_YAML) as f:
             config = yaml.safe_load(f)
@@ -59,6 +68,7 @@ def ensure_seeded() -> None:
         for entry in config.get("removed", []):
             session.add(PoolFeature(name=entry["name"], definition=entry, status="removed"))
         session.commit()
+        _seed_checked = True
         logger.info(
             "Feature pool seeded from features.yaml",
             extra={
@@ -82,6 +92,7 @@ def load_pool_sync() -> list[dict]:
 async def pool_definitions(db: AsyncSession, status: str | None = "active") -> list[dict]:
     """Feature definitions for async API callers. status=None returns all
     rows (metadata lookups need removed features' definitions too)."""
+    ensure_seeded()
     query = select(PoolFeature).order_by(PoolFeature.id)
     if status is not None:
         query = query.where(PoolFeature.status == status)
