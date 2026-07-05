@@ -199,8 +199,8 @@ sequenceDiagram
     J->>F: Build honest feature matrix (lookback = max feature window + buffer)
     F->>D: Read active pool_features (definitions)
     F->>R: fetch_all(required sources)
-    J->>J: to_model_matrix (ffill weekly sources) -> pick freshest complete row
-    J->>D: feature_snapshots = scored (ffilled) vector; parquet append = honest (un-filled) row
+    J->>J: to_model_matrix (ffill weekly sources), pick freshest complete row
+    J->>D: feature_snapshots = scored ffilled vector, parquet append = honest un-filled row
     J->>PSI: compute_and_store_psi(snapshot_id)
     J->>M: get_active("regime") -> predict_regime(vector)
     J->>M: get_active("eia") -> predict_eia(vector)
