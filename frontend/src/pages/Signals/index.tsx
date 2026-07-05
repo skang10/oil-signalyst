@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { IconClockPause } from '@tabler/icons-react';
 import { useSignals } from '@/hooks/useSignals';
 import { useRestoreSignal } from '@/hooks/useFeaturePool';
+import { useRole } from '@/context/RoleContext';
+import { ROLE_PERMISSIONS } from '@/types/roles';
 import PageHeader from '@/components/shared/PageHeader';
 import Card from '@/components/shared/Card';
 import FeaturePoolCard from './FeaturePoolCard';
@@ -11,6 +13,8 @@ export default function SignalsPage() {
   const { data } = useSignals();
   const navigate = useNavigate();
   const restore = useRestoreSignal();
+  const { role } = useRole();
+  const canWrite = ROLE_PERMISSIONS.signalWrite.includes(role);
 
   // Snoozed candidates live in their own section below; the scanner's own
   // 'rejected' verdicts (ignored with no expiry) stay in the main list with
@@ -47,14 +51,16 @@ export default function SignalsPage() {
               <span className="text-[11px] text-text-muted">
                 auto-restores in {c.ignored_days_left}d
               </span>
-              <button
-                type="button"
-                disabled={restore.isPending}
-                onClick={() => restore.mutate(c.name)}
-                className="px-[10px] py-[3px] text-[11px] border border-border-strong bg-surface-2 rounded-default cursor-pointer hover:bg-surface-1 disabled:opacity-50"
-              >
-                Restore now
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  disabled={restore.isPending}
+                  onClick={() => restore.mutate(c.name)}
+                  className="px-[10px] py-[3px] text-[11px] border border-border-strong bg-surface-2 rounded-default cursor-pointer hover:bg-surface-1 disabled:opacity-50"
+                >
+                  Restore now
+                </button>
+              )}
             </div>
           ))}
         </Card>

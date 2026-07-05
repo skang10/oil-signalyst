@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import desc, select
 
-from api.dependencies import CurrentUser, DbSession
+from api.dependencies import CurrentUser, DbSession, DSOnly
 from core.postprocess.data_monitor import (
     data_source_status,
     feature_coverage_7d,
@@ -67,7 +67,7 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
 
 
 @router.post("/{model_type}/deploy")
-async def deploy_model(model_type: str, job_id: str, db: DbSession, user: CurrentUser) -> dict:
+async def deploy_model(model_type: str, job_id: str, db: DbSession, user: DSOnly) -> dict:
     """Requires real auth (Phase 4) - the single most destructive route in
     the API (swaps the live production model) had no authentication at all
     before, not even the old X-User-Id header check. Logic lives in

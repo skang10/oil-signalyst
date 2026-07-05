@@ -1,9 +1,7 @@
 from datetime import timedelta
 
 import pandas as pd
-import yaml
 
-from core.config_paths import FEATURES_YAML
 from core.data.registry import DataRegistry
 from core.logging import get_logger
 from core.models.labels import return_bucket_for_value
@@ -375,9 +373,9 @@ def _price_5d_history(as_of) -> list[float]:
 
 
 def _build_signal_list(features: dict) -> list[dict]:
-    with open(FEATURES_YAML) as file:
-        configs = yaml.safe_load(file)["features"]
-    direction_map = {item["name"]: item.get("bearish_if_positive") for item in configs}
+    from core.services.feature_pool import load_pool_sync
+
+    direction_map = {item["name"]: item.get("bearish_if_positive") for item in load_pool_sync()}
     signals = []
     for name, value in features.items():
         if value is None or not isinstance(value, int | float):

@@ -3,6 +3,8 @@ import Card from '@/components/shared/Card';
 import TagBadge from '@/components/shared/TagBadge';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import { useAddToPool, useRemoveFromPool } from '@/hooks/useFeaturePool';
+import { useRole } from '@/context/RoleContext';
+import { ROLE_PERMISSIONS } from '@/types/roles';
 import { cn } from '@/lib/utils';
 import type { PoolFeature } from '@/types/api';
 
@@ -23,6 +25,9 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
   const { data: modelStatus } = useModelStatus();
   const removeFromPool = useRemoveFromPool();
   const addToPool = useAddToPool();
+  const { role } = useRole();
+  const canRemove = ROLE_PERMISSIONS.poolRemove.includes(role);
+  const canWrite = ROLE_PERMISSIONS.signalWrite.includes(role);
 
   const missingByName = new Map((modelStatus?.feature_missing_rates ?? []).map((m) => [m.name, m.pct]));
   const psiByName = new Map((modelStatus?.feature_psi ?? []).map((p) => [p.name, p.psi]));
@@ -92,7 +97,7 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
                   <StatusBadge feature={feature} />
                 </div>
                 <div className="text-right">
-                  {ghost ? (
+                  {ghost && canWrite ? (
                     <button
                       type="button"
                       title={`Restore ${feature.label} to the feature pool`}
@@ -102,7 +107,7 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
                     >
                       Restore
                     </button>
-                  ) : (
+                  ) : !ghost && canRemove ? (
                     <button
                       type="button"
                       title={`Remove ${feature.label} from the feature pool`}
@@ -112,7 +117,7 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
                     >
                       <IconX size={13} stroke={1.75} />
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );

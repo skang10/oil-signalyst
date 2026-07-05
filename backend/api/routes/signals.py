@@ -1,11 +1,9 @@
 from datetime import UTC, datetime
 
-import yaml
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import desc, select
 
-from api.dependencies import CurrentUser, DbSession
-from core.config_paths import FEATURES_YAML
+from api.dependencies import CurrentUser, DbSession, DSOnly, ResearcherOrDS
 from core.postprocess.signal_charts import build_signal_charts
 from core.services import feature_pool
 from db.models import ModelVersion, SignalEvaluation
@@ -79,7 +77,7 @@ async def get_signals(db: DbSession, user: CurrentUser) -> dict:
 @router.get("/candidates")
 async def get_candidate_signals(db: DbSession, user: CurrentUser) -> list[dict]:
     del user
-    pool_names = {f["name"] for f in feature_pool.load_pool()}
+    pool_names = {f["name"] for f in await feature_pool.pool_definitions(db)}
     return await _candidate_signals(db, pool_names)
 
 
@@ -90,7 +88,7 @@ async def _pool_signals(db: DbSession) -> list[dict]:
     removed from the yaml ('removed_pending_retrain') - those break the
     daily pipeline at predict time until the model is retrained, so they
     must stay visible rather than silently disappearing from the page."""
-    entries = feature_pool.load_pool()
+    entries = await feature_pool.pool_definitions(db)
     live_lists = await feature_pool.live_feature_lists(db)
 
     pool = []
@@ -180,12 +178,11 @@ async def _candidate_signals(db: DbSession, pool_names: set[str]) -> list[dict]:
 
 
 @router.post("/{signal_name}/pool")
-async def add_signal_to_pool(signal_name: str, db: DbSession, user: CurrentUser) -> dict:
-    """Adds a candidate to config/features.yaml (shared logic with the DS
+async def add_signal_to_pool(signal_name: str, db: DbSession, user: ResearcherOrDS) -> dict:
+    """Adds a candidate to the feature pool (shared logic with the DS
     Agent's add_to_feature_registry tool). Takes effect on the next feature
     build; live models are untouched until retrained."""
-    del user
-    result = feature_pool.add_to_pool(signal_name)
+    result = await feature_pool.add_to_pool(db, signal_name, changed_by=user.id)
     if "error" in result:
         raise HTTPException(status_code=409, detail=result["error"])
     # Adding is the strongest possible un-ignore.
@@ -198,13 +195,12 @@ async def add_signal_to_pool(signal_name: str, db: DbSession, user: CurrentUser)
 
 @router.delete("/{signal_name}/pool")
 async def remove_signal_from_pool(
-    signal_name: str, db: DbSession, user: CurrentUser, force: bool = False
+    signal_name: str, db: DbSession, user: DSOnly, force: bool = False
 ) -> dict:
-    """Reverts an add. Guarded: a feature still in a live model's
-    feature_list breaks the daily pipeline at predict time once it stops
-    being computed, so removal of an in-use feature requires force=true
-    (frontend shows a confirm dialog) and a retrain afterwards."""
-    del user
+    """Reverts an add. DS-only and guarded: a feature still in a live
+    model's feature_list breaks the daily pipeline at predict time once it
+    stops being computed, so removal of an in-use feature requires
+    force=true (frontend shows a confirm dialog) and a retrain afterwards."""
     used_by = await feature_pool.models_using(db, signal_name)
     if used_by and not force:
         raise HTTPException(
@@ -218,7 +214,7 @@ async def remove_signal_from_pool(
                 ),
             },
         )
-    result = feature_pool.remove_from_pool(signal_name)
+    result = await feature_pool.remove_from_pool(db, signal_name, changed_by=user.id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     result["was_used_by"] = used_by
@@ -226,7 +222,7 @@ async def remove_signal_from_pool(
 
 
 @router.post("/{signal_name}/ignore")
-async def ignore_signal(signal_name: str, db: DbSession, user: CurrentUser) -> dict:
+async def ignore_signal(signal_name: str, db: DbSession, user: ResearcherOrDS) -> dict:
     """Snoozes a candidate for IGNORE_SNOOZE_DAYS. Nothing is deleted - the
     ignore expires at read time and the signal returns to the candidate list."""
     del user
@@ -239,7 +235,7 @@ async def ignore_signal(signal_name: str, db: DbSession, user: CurrentUser) -> d
 
 
 @router.post("/{signal_name}/restore")
-async def restore_signal(signal_name: str, db: DbSession, user: CurrentUser) -> dict:
+async def restore_signal(signal_name: str, db: DbSession, user: ResearcherOrDS) -> dict:
     """Ends an ignore snooze early - the candidate is immediately back."""
     del user
     evaluation = await _latest_evaluation(db, signal_name)
@@ -267,7 +263,7 @@ async def get_signal_evaluation(signal_name: str, db: DbSession, user: CurrentUs
     if charts is None:
         raise HTTPException(status_code=404, detail="signal not found in candidate config")
 
-    pool_names = {f["name"] for f in feature_pool.load_pool()}
+    pool_names = {f["name"] for f in await feature_pool.pool_definitions(db)}
     days_left = _ignore_days_left(evaluation.ignored_at)
     ic_scores = evaluation.ic_scores or {}
     price_history = charts["price_history"]
@@ -312,8 +308,10 @@ async def _active_signals(db: DbSession) -> list[dict]:
     version = row.scalar_one_or_none()
     active_names = version.feature_list if version else []
 
-    with open(FEATURES_YAML) as f:
-        configs = {fc["name"]: fc for fc in yaml.safe_load(f)["features"]}
+    # All statuses: a live model can still reference a removed feature,
+    # whose display metadata lives on its (kept) pool row.
+    all_defs = await feature_pool.pool_definitions(db, status=None)
+    configs = {fc["name"]: fc for fc in all_defs}
 
     return [
         {

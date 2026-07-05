@@ -25,6 +25,7 @@ interface RolePermissions {
   dashTabs: Record<DashTab, Role[]>;
   dimmedDashTabs: DashTab[];
   signalWrite: Role[];
+  poolRemove: Role[];
   agentPanel: Role[];
 }
 
@@ -46,6 +47,11 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     charts: ['trader', 'risk', 'researcher', 'ds'],
   },
   dimmedDashTabs: ['eia', 'regime', 'returns'],
-  signalWrite: ['ds'],
+  // Adopting/snoozing signals is reversible research work; removing pool
+  // features can break the daily pipeline until retrain, so it stays DS-only.
+  // Enforced server-side too (backend/api/dependencies.py) - these flags
+  // only control what the UI shows.
+  signalWrite: ['researcher', 'ds'],
+  poolRemove: ['ds'],
   agentPanel: ['ds'],
 };

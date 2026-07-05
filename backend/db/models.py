@@ -133,6 +133,25 @@ class TrainJob(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PoolFeature(Base):
+    """One feature-pool entry. Source of truth for pool membership - config/
+    features.yaml is only the first-run seed (core/services/feature_pool.py
+    ::ensure_seeded) and is never written at runtime. `definition` holds the
+    full pipeline definition verbatim (source key, transform, window/seasons,
+    display metadata), so removal keeps everything needed to restore -
+    status flips instead of rows being deleted."""
+
+    __tablename__ = "pool_features"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
+    definition = Column(JSON, nullable=False)
+    status = Column(String(10), nullable=False, default="active")  # 'active' | 'removed'
+    changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class AgentTurn(Base):
     """One turn in a DS Agent conversation (user message, assistant
     response/tool-call request, or tool result)."""

@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 
-from api.dependencies import CurrentUser, DbSession
+from api.dependencies import CurrentUser, DbSession, DSOnly
 from auth.jwt import JWTError, decode_access_token
 from core.models.trainer import run_full_training_with_log
 from db.database import AsyncSessionLocal, get_db
@@ -32,7 +32,7 @@ class TrainStartRequest(BaseModel):
 async def start_training(
     background_tasks: BackgroundTasks,
     db: DbSession,
-    user: CurrentUser,
+    user: DSOnly,
     body: TrainStartRequest = TrainStartRequest(),
 ) -> dict:
     job_id = str(uuid.uuid4())[:8]

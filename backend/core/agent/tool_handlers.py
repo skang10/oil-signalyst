@@ -152,21 +152,25 @@ async def _add_to_feature_registry(
     frequency: str = "Daily",
     category: str = "Other",
 ) -> dict:
-    """Adds a validated candidate to config/features.yaml. `source` here is
-    the human-readable display name (e.g. "EIA API"), not the raw data-source
-    key - the shared service pulls the real technical definition (source key,
-    transform, window) from the candidate's own config. Logic lives in
-    core/services/feature_pool.py, shared with the Signals page's
-    add/remove-pool routes (api/routes/signals.py)."""
+    """Adds a validated candidate to the feature pool (pool_features table).
+    `source` here is the human-readable display name (e.g. "EIA API"), not
+    the raw data-source key - the shared service pulls the real technical
+    definition (source key, transform, window) from the candidate's own
+    config. Logic lives in core/services/feature_pool.py, shared with the
+    Signals page's add/remove-pool routes (api/routes/signals.py).
+    changed_by stays None: agent tool calls carry no request user context."""
     from core.services.feature_pool import add_to_pool
+    from db.database import get_db
 
-    return add_to_pool(
-        signal_name,
-        bearish_if_positive=bearish_if_positive,
-        meta_source=source,
-        frequency=frequency,
-        category=category,
-    )
+    async with get_db() as db:
+        return await add_to_pool(
+            db,
+            signal_name,
+            bearish_if_positive=bearish_if_positive,
+            meta_source=source,
+            frequency=frequency,
+            category=category,
+        )
 
 
 async def _run_training(model_types: list[str], gap_days: int = 20, n_splits: int = 5) -> dict:

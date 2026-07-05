@@ -1,10 +1,10 @@
 import hashlib
+import json
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
-from core.config_paths import FEATURES_YAML
 from core.data.registry import DataRegistry
 from core.logging import get_logger
 
@@ -14,13 +14,20 @@ logger = get_logger(__name__)
 class FeatureEngine:
     def __init__(
         self,
-        feature_config: str | Path = FEATURES_YAML,
+        feature_config: str | Path | None = None,
         registry: DataRegistry | None = None,
     ):
-        with open(feature_config) as file:
-            self.features = yaml.safe_load(file)["features"]
+        if feature_config is not None:
+            # Explicit file path kept for tests/ad-hoc runs against a fixed
+            # feature set; production reads the DB-backed pool.
+            with open(feature_config) as file:
+                self.features = yaml.safe_load(file)["features"]
+        else:
+            from core.services.feature_pool import load_pool_sync
+
+            self.features = load_pool_sync()
         self.registry = registry or DataRegistry()
-        self.feature_version = self._hash_config(feature_config)
+        self.feature_version = self._hash_features(self.features)
 
     def build(self, start: str, end: str) -> pd.DataFrame:
         raw = self.registry.fetch_all(start, end, source_names=self._required_sources())
@@ -82,9 +89,11 @@ class FeatureEngine:
         raise ValueError(f"Unknown transform: {transform}")
 
     @staticmethod
-    def _hash_config(path: str | Path) -> str:
-        with open(path) as file:
-            return hashlib.md5(file.read().encode()).hexdigest()[:8]
+    def _hash_features(features: list[dict]) -> str:
+        # Hash the definitions themselves, not a file - the pool lives in
+        # the DB now, and the version must change exactly when the effective
+        # feature set does.
+        return hashlib.md5(json.dumps(features, sort_keys=True).encode()).hexdigest()[:8]
 
     def required_lookback_days(self) -> int:
         max_days = 0
