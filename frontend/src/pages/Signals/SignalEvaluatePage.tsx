@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRole } from '@/context/RoleContext';
 import { useSignals } from '@/hooks/useSignals';
+import { useAddToPool, useIgnoreSignal } from '@/hooks/useFeaturePool';
 import { useSignalEvaluation } from '@/hooks/useSignalEvaluation';
 import { ROLE_PERMISSIONS } from '@/types/roles';
 import PageHeader from '@/components/shared/PageHeader';
@@ -27,11 +28,15 @@ export default function SignalEvaluatePage() {
   const { data: signals } = useSignals();
   const { data: evaluation } = useSignalEvaluation(name!);
   const [lag, setLag] = useState<Lag>(5);
-  const [actionTaken, setActionTaken] = useState<'added' | 'ignored' | null>(null);
+  const addToPool = useAddToPool();
+  const ignore = useIgnoreSignal();
 
   const canWrite = ROLE_PERMISSIONS.signalWrite.includes(role);
 
   if (!signals || !evaluation) return <div className="p-[18px] text-text-muted text-[12px]">Loading...</div>;
+
+  const inPool = evaluation.status === 'active';
+  const isIgnored = evaluation.ignored_days_left != null;
 
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
@@ -40,10 +45,7 @@ export default function SignalEvaluatePage() {
       <SignalSelectorTabs
         candidates={signals.candidates}
         active={evaluation.name}
-        onSelect={(n) => {
-          navigate(`/signals/evaluate/${n}`);
-          setActionTaken(null);
-        }}
+        onSelect={(n) => navigate(`/signals/evaluate/${n}`)}
       />
 
       <ICStatsRow evaluation={evaluation} />
@@ -110,33 +112,43 @@ export default function SignalEvaluatePage() {
             key={c.name}
             candidate={c}
             active={c.name === evaluation.name}
-            onClick={() => {
-              navigate(`/signals/evaluate/${c.name}`);
-              setActionTaken(null);
-            }}
+            onClick={() => navigate(`/signals/evaluate/${c.name}`)}
             onEvaluate={() => navigate(`/signals/evaluate/${c.name}`)}
           />
         ))}
       </Card>
 
       {canWrite && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             type="button"
-            disabled={actionTaken !== null}
-            onClick={() => setActionTaken('added')}
+            disabled={inPool || isIgnored || addToPool.isPending}
+            onClick={() => addToPool.mutate(evaluation.name)}
             className="px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-accent-fill text-on-accent border border-accent-fill disabled:opacity-50"
           >
-            {actionTaken === 'added' ? 'Added ✓' : `Add "${evaluation.label}" to feature pool ↗`}
+            {inPool
+              ? 'In feature pool ✓'
+              : addToPool.isPending
+                ? 'Adding...'
+                : `Add "${evaluation.label}" to feature pool ↗`}
           </button>
           <button
             type="button"
-            disabled={actionTaken !== null}
-            onClick={() => setActionTaken('ignored')}
+            disabled={inPool || isIgnored || ignore.isPending}
+            onClick={() => ignore.mutate(evaluation.name)}
             className="px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-surface-2 border border-border-strong disabled:opacity-50"
           >
-            {actionTaken === 'ignored' ? 'Ignored' : 'Ignore'}
+            {isIgnored
+              ? `Ignored · auto-restores in ${evaluation.ignored_days_left}d`
+              : ignore.isPending
+                ? 'Ignoring...'
+                : 'Ignore for 30 days'}
           </button>
+          {(addToPool.isError || ignore.isError) && (
+            <span className="text-[11.5px] text-danger">
+              {String((addToPool.error ?? ignore.error) as Error)}
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -6,11 +6,7 @@ A signal that hasn't been through a scan yet returns an honest error."""
 
 import uuid
 
-import yaml
 from sqlalchemy import desc, select
-
-from core.config_paths import FEATURES_YAML
-from core.signal_scanner import CANDIDATE_SIGNALS_YAML
 
 
 async def execute_tool(name: str, tool_input: dict) -> dict:
@@ -156,48 +152,21 @@ async def _add_to_feature_registry(
     frequency: str = "Daily",
     category: str = "Other",
 ) -> dict:
-    """Adds a validated candidate to config/features.yaml. Pulls the real
-    technical definition (source data key, transform, window) from the
-    candidate's own config rather than fabricating one from this tool's
-    simple string params - `source` here is the human-readable display name
-    (e.g. "EIA API", matching what GET /api/signals/active shows), not the
-    raw data-source key the pipeline needs to actually compute the feature.
-    Adding an entry with only display metadata and no transform would look
-    registered but never produce real feature values."""
-    with open(CANDIDATE_SIGNALS_YAML) as f:
-        candidates = {c["name"]: c for c in yaml.safe_load(f)["candidates"]}
-    candidate = candidates.get(signal_name)
-    if not candidate:
-        return {"error": f"'{signal_name}' is not a known candidate signal (not in candidate_signals.yaml)"}
+    """Adds a validated candidate to config/features.yaml. `source` here is
+    the human-readable display name (e.g. "EIA API"), not the raw data-source
+    key - the shared service pulls the real technical definition (source key,
+    transform, window) from the candidate's own config. Logic lives in
+    core/services/feature_pool.py, shared with the Signals page's
+    add/remove-pool routes (api/routes/signals.py)."""
+    from core.services.feature_pool import add_to_pool
 
-    with open(FEATURES_YAML) as f:
-        config = yaml.safe_load(f)
-
-    if any(f["name"] == signal_name for f in config["features"]):
-        return {"error": f"'{signal_name}' is already an active feature"}
-
-    entry = {
-        "name": signal_name,
-        "source": candidate["source"],
-        "transform": candidate["transform"],
-        "bearish_if_positive": bearish_if_positive,
-        "meta_source": source,
-        "frequency": frequency,
-        "category": category,
-    }
-    # Copy over whichever transform-specific parameter the candidate used
-    # (window for pct_change/zscore, seasons for seasonal_dev, etc.) -
-    # transforms take different parameter names, so copy whatever's present
-    # rather than assuming one.
-    for key in ("window", "seasons"):
-        if key in candidate:
-            entry[key] = candidate[key]
-
-    config["features"].append(entry)
-    with open(FEATURES_YAML, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-    return {"status": "added", "signal_name": signal_name, "total_features": len(config["features"])}
+    return add_to_pool(
+        signal_name,
+        bearish_if_positive=bearish_if_positive,
+        meta_source=source,
+        frequency=frequency,
+        category=category,
+    )
 
 
 async def _run_training(model_types: list[str], gap_days: int = 20, n_splits: int = 5) -> dict:

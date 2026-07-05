@@ -108,6 +108,10 @@ class SignalEvaluation(Base):
     coverage = Column(Float)
     status = Column(String(20), default="candidate")
     mechanism = Column(Text)
+    # DS lifecycle snooze, separate from the scanner's scan-quality `status`:
+    # set on ignore, cleared on restore, treated as expired (candidate again)
+    # 30 days later by api/routes/signals.py - rows are never deleted.
+    ignored_at = Column(DateTime, nullable=True)
     evaluated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

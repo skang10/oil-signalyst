@@ -232,6 +232,25 @@ export interface SignalCandidate {
   coverage: number;
   status: 'candidate' | 'active' | 'ignored';
   recommendation: 'add' | 'watch' | 'reject';
+  // Days until an ignore snooze expires and the signal returns to the
+  // candidate list; null when not ignored (or when status is 'ignored' via
+  // the scanner's own 'rejected' verdict, which has no expiry).
+  ignored_days_left: number | null;
+}
+
+/** One managed entry of the feature pool (config/features.yaml), badged
+ * with live-model usage. 'removed_pending_retrain' marks ghost rows: a live
+ * model still depends on the feature but it's gone from the yaml - daily
+ * predictions break until that model is retrained. */
+export interface PoolFeature {
+  name: string;
+  label: string;
+  category: string;
+  source: string;
+  frequency: string;
+  transform: string | null;
+  used_by: string[];
+  pool_status: 'live' | 'pending_retrain' | 'removed_pending_retrain';
 }
 
 export interface SignalsResponse {
@@ -244,6 +263,7 @@ export interface SignalsResponse {
     // includes 'Price Momentum', which the old union missed).
     category: string;
   }[];
+  pool: PoolFeature[];
   candidates: SignalCandidate[];
 }
 
@@ -257,6 +277,7 @@ export interface SignalEvaluation {
   coverage: number;
   status: 'candidate' | 'active' | 'ignored';
   recommendation: 'add' | 'watch' | 'reject';
+  ignored_days_left: number | null;
   price: number[];
   signal: number[];
   dates: string[];
