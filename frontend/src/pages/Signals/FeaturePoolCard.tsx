@@ -2,7 +2,7 @@ import { IconX, IconAlertTriangle } from '@tabler/icons-react';
 import Card from '@/components/shared/Card';
 import TagBadge from '@/components/shared/TagBadge';
 import { useModelStatus } from '@/hooks/useModelStatus';
-import { useRemoveFromPool } from '@/hooks/useFeaturePool';
+import { useAddToPool, useRemoveFromPool } from '@/hooks/useFeaturePool';
 import { cn } from '@/lib/utils';
 import type { PoolFeature } from '@/types/api';
 
@@ -22,6 +22,7 @@ function StatusBadge({ feature }: { feature: PoolFeature }) {
 export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
   const { data: modelStatus } = useModelStatus();
   const removeFromPool = useRemoveFromPool();
+  const addToPool = useAddToPool();
 
   const missingByName = new Map((modelStatus?.feature_missing_rates ?? []).map((m) => [m.name, m.pct]));
   const psiByName = new Map((modelStatus?.feature_psi ?? []).map((p) => [p.name, p.psi]));
@@ -91,7 +92,17 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
                   <StatusBadge feature={feature} />
                 </div>
                 <div className="text-right">
-                  {!ghost && (
+                  {ghost ? (
+                    <button
+                      type="button"
+                      title={`Restore ${feature.label} to the feature pool`}
+                      disabled={addToPool.isPending}
+                      onClick={() => addToPool.mutate(feature.name)}
+                      className="px-[8px] py-[3px] text-[11px] rounded-default border border-success-border bg-success-bg text-success cursor-pointer whitespace-nowrap disabled:opacity-40"
+                    >
+                      Restore
+                    </button>
+                  ) : (
                     <button
                       type="button"
                       title={`Remove ${feature.label} from the feature pool`}

@@ -14,14 +14,28 @@ from core.signal_scanner import CANDIDATE_SIGNALS_YAML
 from db.models import ModelVersion
 
 
-def load_pool() -> list[dict]:
+def _load_config() -> dict:
     with open(FEATURES_YAML) as f:
-        return yaml.safe_load(f)["features"]
+        return yaml.safe_load(f)
 
 
-def _write_pool(features: list[dict]) -> None:
+def _write_config(config: dict) -> None:
     with open(FEATURES_YAML, "w") as f:
-        yaml.dump({"features": features}, f, default_flow_style=False, sort_keys=False)
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+
+def load_pool() -> list[dict]:
+    return _load_config()["features"]
+
+
+def load_removed() -> list[dict]:
+    """Removed entries are archived under a `removed:` sibling key in
+    features.yaml rather than deleted - every yaml consumer reads only
+    `features:` (features/engine.py etc.), so the archive is invisible to
+    the pipeline but lets add_to_pool restore an entry verbatim. Without
+    this, removing an *original* feature (one with no candidate_signals.yaml
+    definition) was unrecoverable from the product."""
+    return _load_config().get("removed", [])
 
 
 def _display_defaults(source_key: str, signal_name: str) -> dict:
@@ -58,15 +72,29 @@ def add_to_pool(
     definition (source key, transform, window/seasons) from
     candidate_signals.yaml. Returns {"error": ...} instead of raising so the
     DS Agent tool can hand the message straight back to the model."""
+    config = _load_config()
+    features = config["features"]
+    if any(f["name"] == signal_name for f in features):
+        return {"error": f"'{signal_name}' is already in the feature pool"}
+
+    # A previously removed entry restores verbatim from the archive - the
+    # only recovery path for original features, which have no candidate
+    # definition to rebuild from.
+    removed = config.get("removed", [])
+    archived = next((e for e in removed if e["name"] == signal_name), None)
+    if archived:
+        config["removed"] = [e for e in removed if e["name"] != signal_name]
+        if not config["removed"]:
+            del config["removed"]
+        features.append(archived)
+        _write_config(config)
+        return {"status": "restored", "signal_name": signal_name, "total_features": len(features)}
+
     with open(CANDIDATE_SIGNALS_YAML) as f:
         candidates = {c["name"]: c for c in yaml.safe_load(f)["candidates"]}
     candidate = candidates.get(signal_name)
     if not candidate:
         return {"error": f"'{signal_name}' is not a known candidate signal (not in candidate_signals.yaml)"}
-
-    features = load_pool()
-    if any(f["name"] == signal_name for f in features):
-        return {"error": f"'{signal_name}' is already in the feature pool"}
 
     defaults = _display_defaults(candidate["source"], signal_name)
     entry = {
@@ -88,20 +116,28 @@ def add_to_pool(
             entry[key] = candidate[key]
 
     features.append(entry)
-    _write_pool(features)
+    _write_config(config)
     return {"status": "added", "signal_name": signal_name, "total_features": len(features)}
 
 
 def remove_from_pool(signal_name: str) -> dict:
-    """Removes an entry from features.yaml. The removed entry is returned so
-    the caller can surface an undo path (re-adding restores it verbatim via
-    candidate config)."""
-    features = load_pool()
-    remaining = [f for f in features if f["name"] != signal_name]
-    if len(remaining) == len(features):
+    """Moves an entry from `features:` to the `removed:` archive - never
+    deletes, so removal is always reversible via add_to_pool."""
+    config = _load_config()
+    features = config["features"]
+    entry = next((f for f in features if f["name"] == signal_name), None)
+    if entry is None:
         return {"error": f"'{signal_name}' is not in the feature pool"}
-    _write_pool(remaining)
-    return {"status": "removed", "signal_name": signal_name, "total_features": len(remaining)}
+    config["features"] = [f for f in features if f["name"] != signal_name]
+    # Replace any stale same-name archive entry rather than accumulating.
+    config["removed"] = [e for e in config.get("removed", []) if e["name"] != signal_name]
+    config["removed"].append(entry)
+    _write_config(config)
+    return {
+        "status": "removed",
+        "signal_name": signal_name,
+        "total_features": len(config["features"]),
+    }
 
 
 async def live_feature_lists(db: AsyncSession) -> dict[str, list[str]]:

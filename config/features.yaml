@@ -7,14 +7,6 @@ features:
   meta_source: Yahoo Finance
   frequency: Daily
   category: Futures Curve
-- name: brent_wti_spread
-  source_a: brent
-  source_b: wti
-  transform: ratio_diff
-  bearish_if_positive: false
-  meta_source: Yahoo Finance
-  frequency: Daily
-  category: Futures Curve
 - name: crude_inv_dev
   source: crude_inventory
   transform: seasonal_dev
@@ -120,3 +112,11 @@ features:
   frequency: Weekly
   category: Inventory
   window: 4
+- name: brent_wti_spread
+  source_a: brent
+  source_b: wti
+  transform: ratio_diff
+  bearish_if_positive: false
+  meta_source: Yahoo Finance
+  frequency: Daily
+  category: Futures Curve
