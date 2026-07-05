@@ -41,6 +41,8 @@ backend/
 │   ├── models/               # Training + inference for the 3 production models
 │   │   ├── trainer.py        # run_full_training[_with_log](model_types, cutoff_date);
 │   │   │                     # canonicalizes model order regime->eia->returns
+│   │   ├── feature_prep.py    # to_model_matrix(): ffill weekly sources forward, drop warmup
+│   │   │                     # gaps - the one path that completes rows before any model
 │   │   ├── regime.py          # TabPFNClassifier wrapper, dominant_regime(), predict_regime[_batch]()
 │   │   ├── eia.py             # TabPFNRegressor wrapper, predict_eia()
 │   │   ├── returns.py         # TabPFNClassifier wrapper, regime-probability feature augmentation
@@ -61,7 +63,7 @@ backend/
 │   │   ├── stress_test.py     # Re-inference over 3 historical crisis scenarios
 │   │   ├── signal_charts.py   # Signal-Evaluate chart series; shared DataRegistry + chart cache
 │   │   │                      # + refresh_signal_charts() prewarm (startup + post-pipeline)
-│   │   ├── data_monitor.py    # Feature coverage + per-source freshness + per-feature missing-rate
+│   │   ├── data_monitor.py    # Live cadence-aware per-source freshness + feature coverage/missing-rate
 │   │   └── outcome_backfill.py# Fills Prediction.actual_return once realized returns exist
 │   │
 │   ├── agent/                 # DS Agent: real OpenAI Chat Completions, multi-step tool use
@@ -79,7 +81,8 @@ backend/
 │
 ├── features/
 │   └── engine.py             # FeatureEngine: reads the DB pool (load_pool_sync), transform
-│                             # vocabulary, feature_version = hash of the definitions
+│                             # vocabulary, feature_version = hash of the definitions;
+│                             # build() keeps the honest partial tail (no all-column dropna)
 │
 ├── db/
 │   ├── models.py             # SQLAlchemy models (see Persistence Model below)
@@ -115,6 +118,68 @@ user is seeded on first run, password from `DEFAULT_USER_PASSWORD`):
   - **`DSOnly`** - remove a pool feature, start training, deploy a model
     (can break the daily pipeline or swap live models).
 
+## Data Ingestion & Feature Freshness
+
+Raw data is **fetched live on demand**, never pre-ingested into a raw store.
+Three layers hold the data at different stages; the same upstream feeds all of
+them, so the only real difference between them is *when* each was captured.
+
+```mermaid
+flowchart LR
+    APIs[Yahoo / EIA / FRED / CFTC] -->|on demand| Reg[DataRegistry]
+    Reg -->|4h in-memory TTL cache| Reg
+    Reg --> Live[Live consumers:<br/>WS ticker, Data-Source-Status,<br/>Signal-Evaluate charts]
+    Reg --> Build[FeatureEngine.build<br/>honest matrix, partial tail]
+    Build --> Parquet[(features_YYYY.parquet<br/>honest, per-year)]
+    Build --> Prep[to_model_matrix<br/>ffill + dropna]
+    Parquet --> Prep
+    Prep --> Models[train / score TabPFN]
+    Prep --> Snap[(feature_snapshots<br/>scored vector)]
+```
+
+**1. Live `DataRegistry` (`core/data/registry.py`).** `fetch`/`fetch_all` call
+the Yahoo/EIA/FRED/CFTC adapters on demand, behind a **4-hour in-memory TTL
+cache** (`core/cache.py`; shared module-level registries in `signal_charts.py`
+and `data_monitor.py` so repeat page views are free). No cron pre-fetch is
+needed - a read is always as fresh as the source. Only CFTC caches to disk
+(`data/raw/cftc/*.parquet`) and only for *past* years; the current year is
+always re-downloaded. `_align` resamples to daily, applies `lag_days`, and
+gates weekly (`freq: W`) series to their `release_day`.
+
+**2. Feature Parquet matrix (`data/features/features_YYYY.parquet`).** The
+materialized output of `FeatureEngine.build()` = the *same* live data run
+through the transform vocabulary, cached to disk for reproducible, offline,
+network-free training. `build()` keeps the matrix **from the first fully-formed
+row through the fresh tail**, deliberately *not* dropping rows where a slow
+weekly source (COT/EIA) has not printed for the latest days. So the matrix
+stays as current as the fastest source, and the parquet is an honest record of
+what was actually observed per date. Written by `scripts/backfill.py`
+(one-time 2010-2024 seed) and appended one row per run by the daily pipeline;
+read back via `trainer.load_features()`.
+
+**3. `feature_snapshots` table.** The single feature vector the models actually
+scored on a given date (see Persistence Model). Sparse - only dates the daily
+pipeline has run.
+
+**Completing rows for a model.** A model cannot be fit or scored on NaN, so
+every model-consuming path funnels the matrix through
+**`core.models.feature_prep.to_model_matrix()`** first: it forward-fills each
+column (a weekly source's last print carries forward intraweek - the value in
+force until its next release) then drops any remaining warmup gaps. Using the
+one helper in both training (`trainer.py`) and serving (`scheduler/jobs.py`)
+keeps the transform identical, so there is no train/serve skew. The daily
+pipeline scores the *ffilled* freshest row but persists the *honest* (un-filled)
+row to parquet, so monitoring still sees the real gaps.
+
+**Freshness reporting is two distinct signals.** The Data Monitor's
+*Data-Source-Status* panel reads the **live** registry and judges each source
+against its own expected cadence (`data_monitor._max_lag_days`: daily ~4d,
+weekly ~14d, per-source `max_lag_days` override) - it answers "are the feeds
+alive?". *Feature Coverage / Missing-rate* reads the **parquet** and answers
+"how complete is what the models consume?". The two diverge whenever the
+parquet lags the live feeds, which is why they are reported separately rather
+than collapsed into one number.
+
 ## Data Flow: Daily Pipeline
 
 ```mermaid
@@ -131,10 +196,11 @@ sequenceDiagram
 
     S->>J: Trigger daily job
     J->>D: Check existing feature_snapshot(date)
-    J->>F: Build feature row (lookback = max feature window + buffer)
+    J->>F: Build honest feature matrix (lookback = max feature window + buffer)
     F->>D: Read active pool_features (definitions)
     F->>R: fetch_all(required sources)
-    J->>D: Upsert feature_snapshots row + append to features_YEAR.parquet
+    J->>J: to_model_matrix (ffill weekly sources) -> pick freshest complete row
+    J->>D: feature_snapshots = scored (ffilled) vector; parquet append = honest (un-filled) row
     J->>PSI: compute_and_store_psi(snapshot_id)
     J->>M: get_active("regime") -> predict_regime(vector)
     J->>M: get_active("eia") -> predict_eia(vector)
@@ -373,9 +439,10 @@ These are deliberate, documented tradeoffs - not gaps to "fix" without re-evalua
 
 - **`config/features.yaml` is a seed, not the runtime source of truth.** The feature pool lives in `pool_features`; the yaml is imported once into an empty table (`ensure_seeded()`) and never written again. Edit the yaml only to change what a *fresh* install seeds.
 - **`FeatureSnapshot` is not a historical data source.** It only holds rows the live daily pipeline has produced going forward; it was never backfilled. Everything needing real history (stress-test dates, COT percentile, price history, signal charts, freshness) reads the backfilled + appended feature Parquet matrix or a live `DataRegistry` fetch instead.
+- **`FeatureEngine.build()` keeps incomplete rows on purpose.** It no longer drops rows missing a slow weekly source, so the parquet stays fresh and the Data Monitor can report honest per-feature coverage. Every model-consuming path must therefore complete rows via `core.models.feature_prep.to_model_matrix()` (ffill + dropna) - feeding the raw matrix straight into a model would pass NaN to TabPFN. See [Data Ingestion & Feature Freshness](#data-ingestion--feature-freshness).
 - **Dominant regime is derived at read time**, never stored (`regime.dominant_regime()`), from `Prediction.regime_probs`.
 - **PSI and COT-percentile lookups have minimum-sample guards** that fall back to neutral values (`0.0` / `50.0`) rather than a meaningless extreme during early ramp-up.
-- **PSI is one global value reused across all 3 models**, since all three draw on the same active feature set. Per-source data freshness is likewise a single shared signal (no persisted per-source raw cache).
+- **PSI is one global value reused across all 3 models**, since all three draw on the same active feature set. (Per-source data freshness, by contrast, is now measured independently per source against each source's expected cadence - see [Data Ingestion & Feature Freshness](#data-ingestion--feature-freshness) - from live `DataRegistry` reads rather than a persisted per-source raw cache.)
 - **`POST /api/models/{type}/deploy` is a no-op under normal operation** - training auto-activates. It exists for explicit rollback.
 - **`POST /api/train/start`'s `cv_folds`/`gap_days` are accepted but not implemented.** This project trains a single fixed train/val split, not real k-fold time-series CV. (The frontend no longer exposes these controls.)
 - **`GET /api/reports/daily/{role}`'s nested `DailyReport` has a handful of static placeholder fields** where no model output exists today, clearly marked in `report_assembler.py::nest_daily_report()`: `eia.breakdown.{gasoline,distillate,cushing}`, `eia.interval_80_*` and the `historical_*`/`consensus_mae` accuracy fields, `regime.switch_trigger`, `returns.condition_description`/`median_return`/`skewness`. Everything else in the contract is real.

@@ -48,6 +48,15 @@ with JWT auth, a real-OpenAI DS Agent with multi-step tool use, and a React
 SPA that consumes it all directly. See `docs/architecture-backend.md` and
 `docs/architecture-frontend.md` for the full detail on each side.
 
+Raw data is fetched **live on demand** through `DataRegistry` (4h TTL cache),
+not pre-ingested. The engineered feature matrix is a per-year Parquet cache of
+that live output; it keeps an honest partial tail (rows missing a not-yet-
+published weekly source), and every model-consuming path completes rows via
+`to_model_matrix` (forward-fill + drop warmup) so no NaN reaches a model. The
+scheduler (`scheduler/runner.py`, its own process / Compose service - **not**
+the API) advances it once a day. See
+[Data Ingestion & Feature Freshness](architecture-backend.md#data-ingestion--feature-freshness).
+
 ## Runtime Containers
 
 ```mermaid
