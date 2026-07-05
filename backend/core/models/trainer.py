@@ -81,6 +81,17 @@ async def run_full_training(
     del triggered_by_user_id
     _init_mlflow()
     selected = model_types or ["regime", "eia", "returns"]
+    # Canonical dependency order, regardless of the order the caller sent:
+    # the returns model consumes regime probabilities as input features
+    # (predict_regime_batch below), so regime must train before returns
+    # whenever both are selected. The frontend sends checkbox-click order,
+    # which crashed returns-first runs with "'NoneType' object has no
+    # attribute 'predict_proba'" - regime_model was still None in the loop.
+    selected = [t for t in ("regime", "eia", "returns") if t in selected]
+    if not selected:
+        raise ValueError(
+            f"No valid model types in {model_types} - expected any of 'regime', 'eia', 'returns'."
+        )
     # cutoff_date shifts the train/val split boundary for a what-if backtest:
     # train up to cutoff, validate on everything since. Real k-fold
     # cross-validation (cv_folds/gap_days) isn't implemented - this project
