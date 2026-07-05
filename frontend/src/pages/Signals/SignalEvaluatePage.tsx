@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRole } from '@/context/RoleContext';
 import { useSignals } from '@/hooks/useSignals';
@@ -31,6 +31,14 @@ export default function SignalEvaluatePage() {
   const addToPool = useAddToPool();
   const ignore = useIgnoreSignal();
 
+  // Selecting a signal from the "All Candidate Signals" list at the bottom
+  // keeps this scroll container mounted (only the :name param changes), so
+  // without this the new signal's charts render off-screen above the fold.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [name]);
+
   const canWrite = ROLE_PERMISSIONS.signalWrite.includes(role);
 
   if (!signals || !evaluation) return <div className="p-[18px] text-text-muted text-[12px]">Loading...</div>;
@@ -39,7 +47,7 @@ export default function SignalEvaluatePage() {
   const isIgnored = evaluation.ignored_days_left != null;
 
   return (
-    <div className="p-[18px] overflow-y-auto flex-1">
+    <div ref={scrollRef} className="p-[18px] overflow-y-auto flex-1">
       <PageHeader title="Signal Evaluation" sub="Select a candidate signal to view IC, OOS decay and historical charts" />
 
       <SignalSelectorTabs
