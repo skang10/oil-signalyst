@@ -51,7 +51,7 @@ export default function FeaturePoolCard({ pool }: { pool: PoolFeature[] }) {
           Feature Pool ({pool.filter((p) => p.pool_status !== 'removed_pending_retrain').length})
         </div>
         <div className="ml-auto text-[11px] text-text-muted">
-          config/features.yaml · additions apply at the next retrain
+          Changes apply at the next retrain
         </div>
       </div>
       <div className="mt-[10px] overflow-x-auto">

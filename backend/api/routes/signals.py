@@ -46,7 +46,7 @@ def _lifecycle_status(
     """"active"/"ignored"/"candidate" is the feature's adoption lifecycle,
     distinct from the scanner's scan-quality status (candidate/watch/
     rejected) - the two get conflated onto one field name by the frontend
-    contract. "active" means membership in the features.yaml pool (the DS's
+    contract. "active" means membership in the feature pool (the DS's
     adoption decision, effective immediately) rather than the live model's
     feature_list, which lags until the next retrain."""
     if signal_name in pool_names:
@@ -61,7 +61,7 @@ def _lifecycle_status(
 @router.get("")
 async def get_signals(db: DbSession, user: CurrentUser) -> dict:
     """Combined view for the Signals page: the managed feature pool
-    (features.yaml + live-model membership), the live-model feature list
+    (pool_features table + live-model membership), the live-model feature list
     (legacy `active` shape), and candidates under evaluation."""
     del user
     active = await _active_signals(db)
@@ -82,10 +82,10 @@ async def get_candidate_signals(db: DbSession, user: CurrentUser) -> list[dict]:
 
 
 async def _pool_signals(db: DbSession) -> list[dict]:
-    """The managed feature pool: every features.yaml entry, badged with
+    """The managed feature pool: every pool_features entry, badged with
     which live models actually use it ('live' vs 'pending_retrain'), plus
     ghost rows for features a live model still depends on but that were
-    removed from the yaml ('removed_pending_retrain') - those break the
+    removed from the pool ('removed_pending_retrain') - those break the
     daily pipeline at predict time until the model is retrained, so they
     must stay visible rather than silently disappearing from the page."""
     entries = await feature_pool.pool_definitions(db)
@@ -110,7 +110,7 @@ async def _pool_signals(db: DbSession) -> list[dict]:
 
     # Regime-probability columns (p_R1..p_R4) are synthesized at training
     # time for the returns model (trainer.py::predict_regime_batch concat),
-    # not features.yaml entries - they'd otherwise show up as scary
+    # not pool_features entries - they'd otherwise show up as scary
     # "removed" ghosts on every install.
     from core.models.regime import REGIME_PROB_COLUMNS
 
