@@ -15,8 +15,8 @@ export function usePriceTicker() {
     function connect() {
       ws = new WebSocket(WS_URL);
       ws.onmessage = (e) => {
-        const { price, change_pct } = JSON.parse(e.data);
-        setPrice(price, change_pct ?? null);
+        const { price, change_pct, brent, spread } = JSON.parse(e.data);
+        setPrice(price, change_pct ?? null, brent ?? null, spread ?? null);
         retryMs = 1000; // reset back-off on a successful message
       };
       ws.onclose = () => {

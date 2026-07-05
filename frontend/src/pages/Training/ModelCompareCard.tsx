@@ -3,16 +3,23 @@ import Card from '@/components/shared/Card';
 import { useDeployModel } from '@/hooks/useTraining';
 import type { TrainJob } from '@/types/api';
 
-const METRIC_LABEL: Record<string, string> = {
+export const METRIC_LABEL: Record<string, string> = {
   returns_brier: 'Return Dist. Brier',
   regime_accuracy: 'Regime Accuracy',
   eia_mae: 'EIA MAE',
 };
 
+// old_metrics values are null on the first-ever training of a model type
+// (no prior active version), improvement_pct when "returns" wasn't trained -
+// see types/api.ts's TrainJob.result.
+function fmtMetric(value: number | null | undefined, digits: number): string {
+  return value == null ? '—' : value.toFixed(digits);
+}
+
 export default function ModelCompareCard({ job }: { job: TrainJob }) {
   const [deployed, setDeployed] = useState(false);
   const deploy = useDeployModel();
-  if (!job.result) return null;
+  if (!job.result?.old_metrics || !job.result.new_metrics) return null;
 
   const { old_metrics, new_metrics, improvement_pct } = job.result;
   const keys = Object.keys(old_metrics);
@@ -35,9 +42,11 @@ export default function ModelCompareCard({ job }: { job: TrainJob }) {
         {keys.map((key) => (
           <Fragment key={key}>
             <div className="p-[8px_10px] border-t border-border text-text-secondary">{METRIC_LABEL[key] ?? key}</div>
-            <div className="p-[8px_10px] border-t border-border text-right text-text-muted">{old_metrics[key].toFixed(3)}</div>
-            <div className="p-[8px_10px] border-t border-border text-right font-medium text-success">{new_metrics[key].toFixed(3)}</div>
-            <div className="p-[8px_10px] border-t border-border text-right text-success">{improvement_pct.toFixed(1)}%</div>
+            <div className="p-[8px_10px] border-t border-border text-right text-text-muted">{fmtMetric(old_metrics[key], 3)}</div>
+            <div className="p-[8px_10px] border-t border-border text-right font-medium text-success">{fmtMetric(new_metrics[key], 3)}</div>
+            <div className="p-[8px_10px] border-t border-border text-right text-success">
+              {improvement_pct == null ? '—' : `${improvement_pct.toFixed(1)}%`}
+            </div>
           </Fragment>
         ))}
       </div>

@@ -34,6 +34,9 @@ class User(Base):
     alert_downside_threshold = Column(Float, default=0.45)
     alert_regime_threshold = Column(Float, default=0.30)
     alert_eia_threshold = Column(Float, default=1.5)
+    alert_psi_threshold = Column(Float, default=0.2)
+    # 'manual' | 'psi' | 'sunday' - honored by scheduler/jobs.py::_maybe_auto_retrain
+    retrain_mode = Column(String(10), default="manual")
     hashed_password = Column(String(256), nullable=True)
     refresh_token = Column(String(512), nullable=True)
     last_login_at = Column(DateTime, nullable=True)
@@ -119,6 +122,10 @@ class TrainJob(Base):
     result = Column(JSON, nullable=True)
     log_lines = Column(JSON, default=list)
     triggered_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # 'manual' | 'auto:psi' | 'auto:sunday' | 'agent' - triggered_by alone
+    # can't distinguish these (auto-retrain and the DS Agent both run as a
+    # real user id), and the Training History UI badges runs by source.
+    trigger_source = Column(String(20), nullable=False, default="manual", server_default="manual")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

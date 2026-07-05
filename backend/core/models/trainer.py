@@ -296,7 +296,10 @@ async def run_full_training_with_log(
     old_returns_brier = (old_metrics_by_type.get("returns") or {}).get("brier")
     new_returns_brier = (new_metrics_by_type.get("returns") or {}).get("brier")
     improvement_pct = None
-    if old_returns_brier:
+    # new_returns_brier is None whenever "returns" isn't among the trained
+    # model types - without the second check this raised TypeError and marked
+    # an otherwise-successful regime/eia-only job as failed.
+    if old_returns_brier and new_returns_brier is not None:
         improvement_pct = round(
             (new_returns_brier - old_returns_brier) / old_returns_brier * 100, 1
         )

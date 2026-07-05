@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { IconCircleCheck, IconAlertTriangle, IconRobot } from '@tabler/icons-react';
 import { useModelStatus } from '@/hooks/useModelStatus';
+import { useTrainJobs } from '@/hooks/useTraining';
 import Card from '@/components/shared/Card';
-import TagBadge from '@/components/shared/TagBadge';
 import LogMono from '@/components/shared/LogMono';
+import { TriggerBadge, TrainStatusBadge } from '@/components/shared/TrainBadges';
 import { cn } from '@/lib/utils';
 import type { ModelStatus } from '@/types/api';
 
@@ -13,11 +14,18 @@ const MODEL_LABEL: Record<ModelStatus['models'][number]['type'], string> = {
   returns: 'Returns Model',
 };
 
+// metrics.primary / metrics.psi are null until first recorded (types/api.ts) -
+// show a placeholder instead of crashing on null.toFixed().
+function fmt(value: number | null, digits: number, scale = 1): string {
+  return value === null ? '—' : (value * scale).toFixed(digits);
+}
+
 function metricText(m: ModelStatus['models'][number]): string {
-  if (m.psi_alert) return `PSI ${m.metrics.psi.toFixed(2)} — Alerts`;
-  if (m.type === 'regime') return `Acc ${(m.metrics.primary * 100).toFixed(1)}% · PSI ${m.metrics.psi.toFixed(2)}`;
-  if (m.type === 'eia') return `MAE ${m.metrics.primary.toFixed(1)} MB · PSI ${m.metrics.psi.toFixed(2)}`;
-  return `Brier ${m.metrics.primary.toFixed(3)} · PSI ${m.metrics.psi.toFixed(2)}`;
+  const psi = `PSI ${fmt(m.metrics.psi, 2)}`;
+  if (m.psi_alert) return `${psi} — Alerts`;
+  if (m.type === 'regime') return `Acc ${fmt(m.metrics.primary, 1, 100)}% · ${psi}`;
+  if (m.type === 'eia') return `MAE ${fmt(m.metrics.primary, 1)} MB · ${psi}`;
+  return `Brier ${fmt(m.metrics.primary, 3)} · ${psi}`;
 }
 
 export default function DSView() {
@@ -74,27 +82,49 @@ export default function DSView() {
         </div>
       </Card>
 
-      <Card>
-        <div className="flex justify-between items-center mb-[10px]">
-          <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium">Last Training Run</div>
-          <TagBadge kind="green">Success</TagBadge>
-        </div>
-        <LogMono
-          lines={[
-            { time: '00:00', content: 'Loading feature matrix... 14 features × 3,456 samples' },
-            { time: '00:01', content: <>Data leakage check... <span className="text-success">Passed ✓</span></> },
-            {
-              time: '00:13',
-              content: (
-                <>
-                  OOS Brier: <span className="text-success">0.211 ✓</span> · MLflow:{' '}
-                  <span className="text-accent-text">a3f2c8d1</span>
-                </>
-              ),
-            },
-          ]}
-        />
-      </Card>
+      <LastTrainingRunCard />
     </>
+  );
+}
+
+/** Latest real train_jobs row (was hardcoded mock log lines before the
+ * history feature landed). */
+function LastTrainingRunCard() {
+  const { data } = useTrainJobs(1);
+  const last = data?.jobs[0];
+
+  return (
+    <Card>
+      <div className="flex justify-between items-center mb-[10px] gap-2">
+        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium">Last Training Run</div>
+        {last && (
+          <div className="flex items-center gap-[6px]">
+            <span className="font-mono text-[11px] text-text-secondary">{last.job_id}</span>
+            <TriggerBadge source={last.trigger_source} name={last.triggered_by_name} />
+            <TrainStatusBadge status={last.status} />
+          </div>
+        )}
+      </div>
+      {!last ? (
+        <div className="font-mono text-[11px] text-text-muted bg-surface-1 rounded-default p-[10px_12px]">
+          // No training runs yet
+        </div>
+      ) : (
+        <>
+          <LogMono lines={last.log_tail.map((l) => ({ content: l }))} />
+          <div className="flex items-center gap-2 mt-[8px] text-[11.5px]">
+            {last.summary && (
+              <span className={cn('font-medium', last.summary.improved > 0 ? 'text-success' : 'text-danger')}>
+                {last.summary.improved > 0 ? '▲' : '▼'} {last.summary.improved}/{last.summary.of} metrics improved
+              </span>
+            )}
+            {last.deploy_state === 'live' && <span className="text-success">● Live</span>}
+            <Link to="/training" className="ml-auto text-accent-text no-underline text-[11px] font-medium">
+              Training Control →
+            </Link>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }

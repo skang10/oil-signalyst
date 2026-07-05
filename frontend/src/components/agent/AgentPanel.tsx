@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconRobot, IconArrowsMaximize, IconArrowsMinimize, IconX, IconSend } from '@tabler/icons-react';
+import { IconRobot, IconArrowsMaximize, IconArrowsMinimize, IconX, IconSend, IconTrash } from '@tabler/icons-react';
 import { useAgentStream } from '@/hooks/useAgentStream';
 import { useDragResize } from '@/hooks/useDragResize';
 import AgentMessage from './AgentMessage';
@@ -20,7 +20,7 @@ export default function AgentPanel({
   fullpage: boolean;
   onToggleFullpage: () => void;
 }) {
-  const { messages, sendMessage, confirmGate, cancelGate } = useAgentStream();
+  const { messages, sendMessage, confirmGate, cancelGate, clearConversation } = useAgentStream();
   const { width, onMouseDown } = useDragResize(360);
   const [input, setInput] = useState('');
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -69,6 +69,17 @@ export default function AgentPanel({
           <div className="text-[11px] text-text-muted">{fullpage ? 'Fullpage mode' : 'Online · Ready'}</div>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              type="button"
+              title="Clear conversation"
+              aria-label="Clear conversation"
+              onClick={clearConversation}
+              className="w-[26px] h-[26px] rounded-[5px] border-none bg-none cursor-pointer text-text-muted flex items-center justify-center hover:bg-surface-1 hover:text-text-primary"
+            >
+              <IconTrash size={15} stroke={1.75} />
+            </button>
+          )}
           <button
             type="button"
             title="Fullpage"

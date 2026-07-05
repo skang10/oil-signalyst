@@ -3,7 +3,6 @@ import { IconBell, IconRefresh, IconRobot } from '@tabler/icons-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
-import { useModelStatus } from '@/hooks/useModelStatus';
 import { usePriceTicker } from '@/hooks/usePriceTicker';
 import { usePriceStore } from '@/lib/price-store';
 import RolePill from './RolePill';
@@ -36,15 +35,17 @@ export default function Topbar({
   const { user } = useAuth();
   const { role } = useRole();
   const { data: report } = useReport(role);
-  const { data: modelStatus } = useModelStatus();
 
   usePriceTicker(); // establishes the WS connection once; updates the store below
-  const { price: wsPrice, changePct: wsChangePct } = usePriceStore();
+  const { price: wsPrice, changePct: wsChangePct, spread: wsSpread } = usePriceStore();
   // Prefer the WebSocket tick (30s granularity) once connected; fall back to
   // the daily report's price (already real, just less frequent) until the
   // first WS message arrives or if the socket is disconnected.
   const price = wsPrice ?? report?.wti_price;
   const changePct = wsChangePct ?? report?.wti_change_pct;
+  // Live Brent-WTI spread from the ticker; fall back to the report's stored
+  // spread (present only for the trader role) until the first WS tick lands.
+  const spread = wsSpread ?? report?.trader?.brent_wti_spread ?? null;
 
   return (
     <div className="h-[46px] shrink-0 bg-surface-2 border-b border-border flex items-center px-4 gap-[10px]">
@@ -56,31 +57,13 @@ export default function Topbar({
           <span className={cn('text-[11px]', changePct < 0 ? 'text-danger' : 'text-success')}>
             {changePct < 0 ? '▼' : '▲'} {(Math.abs(changePct) * 100).toFixed(1)}%
           </span>
+          {spread != null && (
+            <span className="text-[11px] text-text-muted ml-2" title="Brent minus WTI spot spread">
+              B–W {spread < 0 ? '-' : '+'}${Math.abs(spread).toFixed(2)}
+            </span>
+          )}
         </div>
       )}
-
-      <div className="flex items-center gap-[10px]">
-        {modelStatus?.data_sources.map((src) => {
-          const lagLabel = !src.lag_hours ? 'Live' : `${src.lag_hours}h ago`;
-          const recent = (src.lag_hours ?? 0) <= 6;
-          return (
-            <div
-              key={src.name}
-              title={`${src.name} · ${lagLabel}${src.status !== 'ok' ? ' (delayed)' : ''}`}
-              className="flex items-center gap-1 text-[11px] text-text-muted whitespace-nowrap"
-            >
-              <span
-                className={cn(
-                  'w-[6px] h-[6px] rounded-full',
-                  src.status === 'ok' ? 'bg-success' : 'bg-warning',
-                  (src.status !== 'ok' || recent) && 'animate-pulse'
-                )}
-              />
-              <span className={src.status === 'ok' ? undefined : 'text-warning'}>{src.name}</span>
-            </div>
-          );
-        })}
-      </div>
 
       {/* D17: the pill is a ds-only "view as" preview override, not a
           general role switcher - real role comes from the JWT (user.role). */}

@@ -34,9 +34,8 @@ export default function HistoryPage() {
             <span className="flex-1 text-text-secondary">
               Expected {(p.expected_return * 100).toFixed(1)}% · Downside {Math.round(p.downside_prob * 100)}%
             </span>
-            <span className={`text-[11px] ${p.eia_forecast_mb < 0 ? 'text-text-muted' : 'text-success'}`}>
-              EIA {p.eia_forecast_mb > 0 ? '+' : ''}
-              {p.eia_forecast_mb.toFixed(1)} MB
+            <span className={`text-[11px] ${(p.eia_forecast_mb ?? 0) < 0 ? 'text-text-muted' : 'text-success'}`}>
+              EIA {p.eia_forecast_mb == null ? '—' : `${p.eia_forecast_mb > 0 ? '+' : ''}${p.eia_forecast_mb.toFixed(1)} MB`}
             </span>
             <IconChevronRight size={13} stroke={1.75} className="text-text-muted" />
           </div>

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { BASE, getAccessToken } from '@/lib/api';
+import { api, BASE, getAccessToken } from '@/lib/api';
 import type { AgentMessage, ConfirmGateState, GateAction, ToolCall } from '@/components/agent/types';
 
 const GATE_CONTENT: Record<GateAction, { step: string; title: string; confirmLabel: string }> = {
@@ -163,5 +163,17 @@ export function useAgentStream() {
     [messages, updateMessage]
   );
 
-  return { messages, sendMessage, confirmGate, cancelGate };
+  const clearConversation = useCallback(async () => {
+    esRef.current?.close();
+    // Delete the server-side turns for this session (they'd otherwise
+    // accumulate forever - DELETE /api/agent/history existed but nothing
+    // called it), then start a fresh session locally.
+    await api
+      .del(`/api/agent/history?session_id=${encodeURIComponent(sessionIdRef.current)}`)
+      .catch(console.error);
+    sessionIdRef.current = newId();
+    setMessages([]);
+  }, []);
+
+  return { messages, sendMessage, confirmGate, cancelGate, clearConversation };
 }

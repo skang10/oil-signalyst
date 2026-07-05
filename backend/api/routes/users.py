@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -7,6 +9,7 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 class UserConfigUpdate(BaseModel):
+    name: str | None = None
     role: str | None = None
     email: str | None = None
     instruments: list[str] | None = None
@@ -15,7 +18,9 @@ class UserConfigUpdate(BaseModel):
     alert_downside_threshold: float | None = None
     alert_regime_threshold: float | None = None
     alert_eia_threshold: float | None = None
+    alert_psi_threshold: float | None = None
     alert_channel: str | None = None
+    retrain_mode: Literal["manual", "psi", "sunday"] | None = None
 
 
 @router.get("/me")
@@ -31,7 +36,9 @@ async def get_me(user: CurrentUser) -> dict:
         "alert_downside_threshold": user.alert_downside_threshold,
         "alert_regime_threshold": user.alert_regime_threshold,
         "alert_eia_threshold": user.alert_eia_threshold,
+        "alert_psi_threshold": user.alert_psi_threshold,
         "alert_channel": user.alert_channel,
+        "retrain_mode": user.retrain_mode,
     }
 
 

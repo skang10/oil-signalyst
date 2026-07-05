@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRole } from '@/context/RoleContext';
 import { DEFAULT_CONFIG } from '@/context/RoleContext';
 import { ROLE_LABELS, ROLES } from '@/types/roles';
@@ -8,9 +8,16 @@ import Card from '@/components/shared/Card';
 export default function SettingsPage() {
   const { userConfig, setUserConfig } = useRole();
   const [draft, setDraft] = useState(userConfig);
+  const [saved, setSaved] = useState(false);
+
+  // userConfig hydrates from GET /api/users/me after mount - resync the
+  // draft when that lands so the form shows persisted values, not defaults.
+  useEffect(() => setDraft(userConfig), [userConfig]);
 
   function save() {
     setUserConfig(draft);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   function reset() {
@@ -49,14 +56,54 @@ export default function SettingsPage() {
       </Card>
 
       <Card className="mb-3">
+        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Forecast & Exposure</div>
+        <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
+          <span className="text-text-secondary">Forecast Horizon</span>
+          <div className="flex items-center gap-[6px]">
+            <input
+              type="number"
+              step={5}
+              value={draft.horizon_days}
+              onChange={(e) => setDraft({ ...draft, horizon_days: Number(e.target.value) })}
+              className="bg-surface-1 border border-border-strong rounded-default p-[5px_10px] text-[12px] w-20"
+            />
+            <span className="text-[11px] text-text-muted">days</span>
+          </div>
+        </div>
+        <div className="flex justify-between items-center py-[7px] text-[12px]">
+          <span className="text-text-secondary">Current Exposure</span>
+          <div className="flex items-center gap-[6px]">
+            <input
+              type="number"
+              step={10000}
+              value={draft.exposure_barrels}
+              onChange={(e) => setDraft({ ...draft, exposure_barrels: Number(e.target.value) })}
+              className="bg-surface-1 border border-border-strong rounded-default p-[5px_10px] text-[12px] w-28"
+            />
+            <span className="text-[11px] text-text-muted">bbl</span>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="mb-3">
         <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Alert Threshold</div>
+        <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
+          <span className="text-text-secondary">Downside Risk Threshold</span>
+          <input
+            type="number"
+            step={0.05}
+            value={draft.alert_downside_threshold}
+            onChange={(e) => setDraft({ ...draft, alert_downside_threshold: Number(e.target.value) })}
+            className="bg-surface-1 border border-border-strong rounded-default p-[5px_10px] text-[12px] w-20"
+          />
+        </div>
         <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
           <span className="text-text-secondary">PSI Alert Threshold</span>
           <input
             type="number"
             step={0.05}
-            value={draft.alerts.psi_threshold}
-            onChange={(e) => setDraft({ ...draft, alerts: { ...draft.alerts, psi_threshold: Number(e.target.value) } })}
+            value={draft.alert_psi_threshold}
+            onChange={(e) => setDraft({ ...draft, alert_psi_threshold: Number(e.target.value) })}
             className="bg-surface-1 border border-border-strong rounded-default p-[5px_10px] text-[12px] w-20"
           />
         </div>
@@ -66,8 +113,8 @@ export default function SettingsPage() {
             <input
               type="number"
               step={0.5}
-              value={draft.alerts.eia_surprise_threshold}
-              onChange={(e) => setDraft({ ...draft, alerts: { ...draft.alerts, eia_surprise_threshold: Number(e.target.value) } })}
+              value={draft.alert_eia_threshold}
+              onChange={(e) => setDraft({ ...draft, alert_eia_threshold: Number(e.target.value) })}
               className="bg-surface-1 border border-border-strong rounded-default p-[5px_10px] text-[12px] w-20"
             />
             <span className="text-[11px] text-text-muted">MB</span>
@@ -75,7 +122,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         <button
           type="button"
           onClick={save}
@@ -86,6 +133,7 @@ export default function SettingsPage() {
         <button type="button" onClick={reset} className="px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-surface-2 border border-border-strong">
           Reset Defaults
         </button>
+        {saved && <span className="text-[12px] text-success">Saved ✓</span>}
       </div>
     </div>
   );

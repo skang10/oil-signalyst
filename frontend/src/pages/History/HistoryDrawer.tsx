@@ -108,7 +108,11 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
                   />
                   <CfgRow
                     label="EIA Forecast"
-                    value={<span className="text-danger">{detail.summary.eia_forecast_mb.toFixed(1)} MB</span>}
+                    value={
+                      <span className="text-danger">
+                        {detail.summary.eia_forecast_mb == null ? '—' : `${detail.summary.eia_forecast_mb.toFixed(1)} MB`}
+                      </span>
+                    }
                   />
                   <CfgRow label="Risk Recommendations" value={detail.summary.risk_recommendation} />
                 </div>

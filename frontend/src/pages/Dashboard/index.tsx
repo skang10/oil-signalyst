@@ -32,7 +32,7 @@ export default function Dashboard() {
         {alertModel && (
           <AlertBanner>
             {alertModel.type[0].toUpperCase() + alertModel.type.slice(1)} model PSI{' '}
-            {alertModel.metrics.psi.toFixed(2)} exceeds alert threshold. Retraining recommended.
+            {(alertModel.metrics.psi ?? 0).toFixed(2)} exceeds alert threshold. Retraining recommended.
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}

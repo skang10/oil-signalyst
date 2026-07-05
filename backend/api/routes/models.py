@@ -17,7 +17,8 @@ PRIMARY_METRIC_KEY = {"regime": "accuracy", "eia": "mae", "returns": "brier"}
 
 
 @router.get("/status")
-async def get_model_status(db: DbSession) -> dict:
+async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
+    del user
     rows = await db.execute(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
     versions = rows.scalars().all()
 
