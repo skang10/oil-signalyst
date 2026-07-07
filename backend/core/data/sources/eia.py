@@ -12,11 +12,29 @@ EIA_BASE = "https://api.eia.gov/v2/seriesid"
 _US_CAL = FederalReserveSystem()
 
 # EIA's v2 `seriesid` endpoint ignores the `start`/`end` query params and
-# always returns the series' full history (crude stocks go back to 1982).
-# We slice to the requested window client-side, keeping a warmup buffer
-# before `start` so the registry's weekly->daily resample/ffill still has a
-# prior print to carry into the window.
+# always returns the series' full history (crude stocks go back to 1982:
+# ~2,280 weekly rows / ~600KB). It DOES honor `length`, returning the N
+# most-recent observations newest-first. So we ask for only enough rows to
+# cover the caller's window (see `_window_length`) and still slice client-side
+# as a backstop. This is the real fix for the slow EIA reads: a freshness
+# check drops from ~600KB to ~2KB, the server assembles a handful of rows
+# instead of 40+ years, and the smaller response shrinks the window for the
+# occasional multi-minute EIA-side latency spike. The warmup buffer keeps a
+# prior print before `start` so the registry's weekly->daily resample/ffill
+# has a value to carry into the window.
 _EIA_WARMUP_DAYS = 60
+_EIA_FREQ_DAYS = {"D": 1, "W": 7, "M": 31}
+_EIA_LENGTH_BUFFER = 8  # extra periods for publication lag / safety margin
+
+
+def _window_length(cfg: dict, start: str, end: str) -> int:
+    """Rows to request so the newest-first response reaches from the latest
+    print (~today) back past `start - warmup`, covering the caller's window."""
+    period_days = _EIA_FREQ_DAYS.get(cfg.get("freq", "W"), 7)
+    span_start = pd.Timestamp(start) - pd.Timedelta(days=_EIA_WARMUP_DAYS)
+    newest = max(pd.Timestamp(end), pd.Timestamp.now().normalize())
+    periods = int((newest - span_start).days // period_days) + _EIA_LENGTH_BUFFER
+    return max(periods, 1)
 
 
 def get_eia_release_date(reference_date: date) -> date:
@@ -38,8 +56,14 @@ class EIASource(BaseSource):
 
         response = requests.get(
             f"{EIA_BASE}/{cfg['series_id']}",
-            params={"api_key": settings.eia_api_key, "start": start, "end": end},
-            timeout=30,
+            params={
+                "api_key": settings.eia_api_key,
+                "length": _window_length(cfg, start, end),
+            },
+            # (connect, read) rather than one 30s value: cap connection setup
+            # tightly, and bound each read gap so a stalled EIA response fails
+            # fast into the retry/backoff instead of hanging on a slow trickle.
+            timeout=(5, 30),
         )
         response.raise_for_status()
         data = response.json()["response"]["data"]
@@ -50,9 +74,9 @@ class EIASource(BaseSource):
         df["period"] = pd.to_datetime(df["period"]).astype("datetime64[ns]")
         series = df.set_index("period")["value"].astype(float).sort_index()
 
-        # Honor the requested window (the endpoint won't) so downstream
-        # alignment - a per-row release-date calc + daily resample in the
-        # registry - runs over the caller's range instead of 40+ years.
+        # Trim the length-bounded response to exactly the caller's window (plus
+        # warmup): `length` is sized from now, so for a past `end` it returns
+        # rows newer than the window that downstream alignment shouldn't see.
         lower = pd.Timestamp(start) - pd.Timedelta(days=_EIA_WARMUP_DAYS)
         series = series.loc[lower : pd.Timestamp(end)]
 
