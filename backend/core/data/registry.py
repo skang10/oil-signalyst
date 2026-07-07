@@ -1,3 +1,5 @@
+import concurrent.futures as cf
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -55,14 +57,54 @@ class DataRegistry:
         start: str,
         end: str,
         source_names: list[str] | None = None,
+        timeout: float | None = None,
+        max_workers: int = 8,
     ) -> pd.DataFrame:
-        frames: dict[str, pd.Series] = {}
+        """Fetch each source's aligned series into one frame.
+
+        Default (`timeout=None`): serial, unbounded - the polite path the daily
+        pipeline and other offline callers use, one external call at a time to
+        stay off the sources' rate limits.
+
+        With `timeout`: fetch concurrently under a single global wall-clock
+        deadline (seconds). A source that doesn't return in time is dropped from
+        the frame rather than hanging the caller - used by the interactive
+        freshness check so one slow feed (e.g. EIA's ~240s HTTP) can't wedge a
+        page. Sources missing at the deadline simply resolve on the next call
+        once their abandoned fetch has populated the cache.
+        """
         names = source_names or list(self.config)
+        if timeout is None:
+            return self._fetch_all_serial(names, start, end)
+        return self._fetch_all_bounded(names, start, end, timeout, max_workers)
+
+    def _fetch_all_serial(self, names: list[str], start: str, end: str) -> pd.DataFrame:
+        frames: dict[str, pd.Series] = {}
         for name in names:
             try:
                 frames[name] = self.fetch(name, start, end)
             except Exception as exc:
                 logger.warning("Skipping source", extra={"source_name": name, "error": str(exc)})
+        return pd.DataFrame(frames)
+
+    def _fetch_all_bounded(
+        self, names: list[str], start: str, end: str, timeout: float, max_workers: int
+    ) -> pd.DataFrame:
+        frames: dict[str, pd.Series] = {}
+        pool = cf.ThreadPoolExecutor(max_workers=min(max_workers, len(names)) or 1)
+        futures = {pool.submit(self.fetch, name, start, end): name for name in names}
+        deadline = time.monotonic() + timeout
+        for future, name in futures.items():
+            remaining = deadline - time.monotonic()
+            try:
+                frames[name] = future.result(timeout=max(0.0, remaining))
+            except cf.TimeoutError:
+                logger.warning("Source fetch exceeded deadline", extra={"source_name": name})
+            except Exception as exc:
+                logger.warning("Skipping source", extra={"source_name": name, "error": str(exc)})
+        # Don't block shutdown on the abandoned slow fetches - let them finish
+        # in the background (they warm the cache for the next call).
+        pool.shutdown(wait=False, cancel_futures=True)
         return pd.DataFrame(frames)
 
     def _align(self, series: pd.Series, cfg: dict) -> pd.Series:

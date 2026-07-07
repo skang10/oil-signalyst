@@ -39,9 +39,14 @@ def test_feature_coverage_7d_defaults_to_full_when_matrix_unavailable(monkeypatc
 
 
 def test_data_source_status_reports_every_configured_source(monkeypatch):
-    idx = pd.date_range("2024-01-01", periods=3, freq="D")
-    matrix = pd.DataFrame({"a": [1.0, 2.0, 3.0]}, index=idx)
-    monkeypatch.setattr(data_monitor, "load_features", lambda start, end: matrix)
+    # Freshness now reads the persisted snapshot; seed a recent last-updated for
+    # every configured source and assert the classification against as_of.
+    recent = "2024-01-02T00:00:00"
+    monkeypatch.setattr(
+        data_monitor,
+        "_read_freshness_snapshot",
+        lambda: {name: recent for name in data_monitor._load_sources()},
+    )
 
     statuses = data_monitor.data_source_status(date(2024, 1, 3))
 
@@ -51,11 +56,10 @@ def test_data_source_status_reports_every_configured_source(monkeypatch):
         assert entry["last_updated"] is not None
 
 
-def test_data_source_status_reports_error_when_matrix_missing(monkeypatch):
-    def broken_load(start, end):
-        raise FileNotFoundError("no parquet files")
-
-    monkeypatch.setattr(data_monitor, "load_features", broken_load)
+def test_data_source_status_reports_error_when_source_unavailable(monkeypatch):
+    # A snapshot with no last-updated for a source (fetch failed when written)
+    # reads as an error, not a stale timestamp.
+    monkeypatch.setattr(data_monitor, "_read_freshness_snapshot", lambda: {})
 
     statuses = data_monitor.data_source_status(date(2024, 1, 3))
 

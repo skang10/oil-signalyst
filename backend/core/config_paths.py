@@ -16,4 +16,10 @@ ENV_FILE = _REPO_ROOT / ".env"
 
 DATA_SOURCES_YAML = CONFIG_DIR / "data_sources.yaml"
 FEATURES_YAML = CONFIG_DIR / "features.yaml"
+
+# Per-source freshness snapshot: the expensive live fetch of every source's
+# last-updated timestamp, persisted off the interactive request path (written
+# by the daily pipeline and a background startup warm) so the Data/Model
+# Monitor pages read it in milliseconds instead of re-fetching all sources.
+FRESHNESS_SNAPSHOT = DATA_DIR / "freshness_snapshot.json"
 DEFAULT_DB_URL = f"sqlite+aiosqlite:///{DATA_DIR / 'oilmarket.db'}"

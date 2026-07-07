@@ -11,6 +11,13 @@ from core.data.sources.base import BaseSource
 EIA_BASE = "https://api.eia.gov/v2/seriesid"
 _US_CAL = FederalReserveSystem()
 
+# EIA's v2 `seriesid` endpoint ignores the `start`/`end` query params and
+# always returns the series' full history (crude stocks go back to 1982).
+# We slice to the requested window client-side, keeping a warmup buffer
+# before `start` so the registry's weekly->daily resample/ffill still has a
+# prior print to carry into the window.
+_EIA_WARMUP_DAYS = 60
+
 
 def get_eia_release_date(reference_date: date) -> date:
     days_since_monday = reference_date.weekday()
@@ -42,5 +49,12 @@ class EIASource(BaseSource):
         df = pd.DataFrame(data)
         df["period"] = pd.to_datetime(df["period"]).astype("datetime64[ns]")
         series = df.set_index("period")["value"].astype(float).sort_index()
+
+        # Honor the requested window (the endpoint won't) so downstream
+        # alignment - a per-row release-date calc + daily resample in the
+        # registry - runs over the caller's range instead of 40+ years.
+        lower = pd.Timestamp(start) - pd.Timedelta(days=_EIA_WARMUP_DAYS)
+        series = series.loc[lower : pd.Timestamp(end)]
+
         series.name = cfg["series_id"]
         return series

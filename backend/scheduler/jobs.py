@@ -17,6 +17,7 @@ from core.models.regime import predict_regime
 from core.models.trainer import run_full_training_with_log
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
+from core.postprocess.data_monitor import write_freshness_snapshot
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_and_store_psi
 from core.postprocess.outcome_backfill import backfill_outcomes
 from core.postprocess.shap_explainer import explain_prediction
@@ -73,6 +74,10 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
         # New market data landed - rebuild the Evaluate-page chart cache in
         # the background so tomorrow's first page views stay instant.
         asyncio.create_task(refresh_signal_charts())
+        # Refresh the on-disk per-source freshness snapshot the Data/Model
+        # Monitor pages read, so it tracks each daily run. Blocking fetch, so
+        # off-thread; the API process picks it up via the shared file.
+        asyncio.create_task(asyncio.to_thread(write_freshness_snapshot, target_date))
 
         logger.info(
             "Pipeline complete",

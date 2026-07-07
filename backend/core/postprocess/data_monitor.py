@@ -1,9 +1,10 @@
+import json
 from datetime import date, datetime, timedelta
 
 import pandas as pd
 import yaml
 
-from core.config_paths import DATA_SOURCES_YAML
+from core.config_paths import DATA_SOURCES_YAML, FRESHNESS_SNAPSHOT
 from core.data.registry import DataRegistry
 from core.logging import get_logger
 from core.models.trainer import load_features
@@ -34,6 +35,16 @@ _REGISTRY = DataRegistry()
 # this many days, the daily pipeline (scheduler/runner.py) is behind: the
 # models are training/scoring on data older than the feeds already offer.
 PIPELINE_LAG_MAX_DAYS = 2
+
+# Freshness lookback: 30 days is enough to catch the most recent print of even
+# the weekly sources without refetching full history.
+FRESHNESS_LOOKBACK_DAYS = 30
+
+# Hard wall-clock bound (seconds) for the *interactive* fallback fetch used
+# only when no snapshot exists yet. Caps a cold page load at seconds instead of
+# the ~20min a full serial fetch of all sources would take; slow sources simply
+# read as unavailable until the off-path snapshot warm completes.
+FRESHNESS_FETCH_TIMEOUT_SECONDS = 30
 
 
 def _max_lag_days(cfg: dict) -> int:
@@ -88,52 +99,121 @@ def feature_missing_rates(as_of: date | None = None) -> list[dict]:
     ]
 
 
-def data_source_status(as_of: date | None = None) -> list[dict]:
-    """Per-source freshness status, measured against each source's own
-    expected update cadence.
-
-    Reads the live DataRegistry (shared 4h TTL cache) rather than the single
-    engineered feature-matrix timestamp: the matrix tail is gated by whichever
-    source lags most - a weekly, holiday-delayed CFTC/COT print would drag
-    every daily market source into a false "delayed" state even while WTI,
-    inventories and vol are current. Each source is now judged against its own
-    cadence (see `_max_lag_days`), so weekly releases and closed-market
-    weekends no longer read as anomalies.
-    """
-    as_of = as_of or date.today()
+def _load_sources() -> dict:
     with open(DATA_SOURCES_YAML) as f:
-        sources = yaml.safe_load(f).get("sources", {})
+        return yaml.safe_load(f).get("sources", {})
 
-    as_of_midnight = datetime.combine(as_of, datetime.min.time())
-    # 30 days is enough to see the most recent print of even the weekly
-    # sources without refetching full history on every page view.
-    start = (as_of - timedelta(days=30)).isoformat()
+
+def _measure_last_updated(
+    as_of: date, sources: dict, timeout: float | None = None
+) -> dict[str, str | None]:
+    """Live-fetch every source and return the ISO date of its newest
+    observation, or None if unavailable.
+
+    This is the expensive part - network I/O across all sources. Callers run it
+    off the interactive path (the snapshot warm, `timeout=None`, complete) or
+    with a `timeout` bound (the cold-page fallback, seconds, possibly partial).
+    """
+    start = (as_of - timedelta(days=FRESHNESS_LOOKBACK_DAYS)).isoformat()
     try:
-        raw = _REGISTRY.fetch_all(start, as_of.isoformat(), source_names=list(sources))
+        raw = _REGISTRY.fetch_all(
+            start, as_of.isoformat(), source_names=list(sources), timeout=timeout
+        )
     except Exception as exc:
         logger.warning("Data source freshness unavailable", extra={"error": str(exc)})
-        return [
-            {"name": name, "status": "error", "lag_hours": None, "last_updated": None}
-            for name in sources
-        ]
+        return {name: None for name in sources}
 
+    measured: dict[str, str | None] = {}
+    for name in sources:
+        series = raw[name].dropna() if name in raw.columns else pd.Series(dtype=float)
+        measured[name] = series.index.max().isoformat() if not series.empty else None
+    return measured
+
+
+def write_freshness_snapshot(as_of: date | None = None) -> dict[str, str | None]:
+    """Measure every source's last-updated date live and persist it to disk.
+
+    Runs OFF the interactive request path - fire-and-forget at API startup and
+    in the daily pipeline - so the slow full fetch (notably EIA's ~240s HTTP)
+    never blocks a page view. `data_source_status` then reads this snapshot in
+    milliseconds. Serial/unbounded here so the snapshot is complete.
+    """
+    as_of = as_of or date.today()
+    sources = _load_sources()
+    last_updated = _measure_last_updated(as_of, sources)
+    payload = {
+        "generated_at": datetime.now().isoformat(),
+        "measured_as_of": as_of.isoformat(),
+        "last_updated": last_updated,
+    }
+    try:
+        FRESHNESS_SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
+        FRESHNESS_SNAPSHOT.write_text(json.dumps(payload))
+        logger.info(
+            "Freshness snapshot written",
+            extra={"sources": len(last_updated), "path": str(FRESHNESS_SNAPSHOT)},
+        )
+    except OSError as exc:
+        logger.warning("Could not persist freshness snapshot", extra={"error": str(exc)})
+    return last_updated
+
+
+def _read_freshness_snapshot() -> dict[str, str | None] | None:
+    """The persisted `{source: last_updated_iso}` map, or None if no readable
+    snapshot exists yet."""
+    if not FRESHNESS_SNAPSHOT.exists():
+        return None
+    try:
+        payload = json.loads(FRESHNESS_SNAPSHOT.read_text())
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not read freshness snapshot", extra={"error": str(exc)})
+        return None
+    return payload.get("last_updated")
+
+
+def data_source_status(as_of: date | None = None) -> list[dict]:
+    """Per-source freshness status, measured against each source's own expected
+    update cadence.
+
+    Reads the persisted freshness snapshot (written off the request path by the
+    daily pipeline / startup warm) rather than live-fetching every source on
+    each page view - the earlier design put ~20min of cold serial network I/O
+    directly on the interactive path. Only the cheap lag/cadence classification
+    runs here, recomputed against the caller's `as_of`.
+
+    Each source is judged against its own cadence (see `_max_lag_days`) rather
+    than one shared feature-matrix timestamp, so weekly releases and
+    closed-market weekends no longer read as false anomalies. When no snapshot
+    exists yet, a time-bounded live fetch fills in so the page still answers in
+    seconds; the complete snapshot lands shortly after, off the request path.
+    """
+    as_of = as_of or date.today()
+    sources = _load_sources()
+
+    last_updated = _read_freshness_snapshot()
+    if last_updated is None:
+        last_updated = _measure_last_updated(
+            as_of, sources, timeout=FRESHNESS_FETCH_TIMEOUT_SECONDS
+        )
+
+    as_of_midnight = datetime.combine(as_of, datetime.min.time())
     statuses = []
     for name, cfg in sources.items():
-        series = raw[name].dropna() if name in raw.columns else pd.Series(dtype=float)
-        if series.empty:
+        iso = last_updated.get(name)
+        if not iso:
             statuses.append(
                 {"name": name, "status": "error", "lag_hours": None, "last_updated": None}
             )
             continue
-        last_updated = series.index.max().to_pydatetime()
-        lag_hours = round((as_of_midnight - last_updated).total_seconds() / 3600, 1)
+        last = datetime.fromisoformat(iso)
+        lag_hours = round((as_of_midnight - last).total_seconds() / 3600, 1)
         status = "ok" if lag_hours <= _max_lag_days(cfg) * 24 else "delayed"
         statuses.append(
             {
                 "name": name,
                 "status": status,
                 "lag_hours": lag_hours,
-                "last_updated": last_updated.isoformat(),
+                "last_updated": last.isoformat(),
             }
         )
     return statuses

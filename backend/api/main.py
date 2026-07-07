@@ -30,8 +30,17 @@ async def lifespan(app: FastAPI):
     from core.postprocess.signal_charts import refresh_signal_charts
 
     prewarm_task = asyncio.create_task(refresh_signal_charts())
+
+    # Also fire-and-forget: warm the per-source freshness snapshot to disk so
+    # the Data/Model Monitor pages read it in ms instead of paying a cold
+    # ~20min serial fetch of every source on first view. In its own thread -
+    # the fetch is blocking and slow (EIA), but off the request path.
+    from core.postprocess.data_monitor import write_freshness_snapshot
+
+    freshness_task = asyncio.create_task(asyncio.to_thread(write_freshness_snapshot))
     yield
     prewarm_task.cancel()
+    freshness_task.cancel()
     logger.info("Shutting down oil-signalyst API")
 
 
