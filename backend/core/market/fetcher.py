@@ -10,7 +10,8 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 # futures_curve doesn't go through DataRegistry (see its docstring below),
-# so it gets its own small cache to avoid ~20 yfinance calls per request.
+# so it gets its own small cache to keep its two batched yfinance downloads
+# off every request.
 _futures_cache = DataFetchCache(ttl_seconds=1800)
 
 CHART_HISTORY_DAYS = 548  # ~18 months
@@ -111,32 +112,49 @@ def fetch_futures_curve() -> dict:
         code = month_codes[month_index % 12]
         tickers.append(f"CL{code}{str(year)[-2:]}.NYM")
 
-    def _current_price(ticker: str) -> float | None:
+    def _last_closes(start: str, end: str) -> dict[str, float | None]:
+        """One batched multi-ticker download (yfinance fetches the contracts
+        concurrently) -> each ticker's last daily close in the window, or None
+        if it has no quote (e.g. an expired front month). Replaces 20 sequential
+        per-ticker calls (~9s -> ~3s); crucially, one delisted contract's 404
+        retries no longer serialize in front of the other nine. "Today" is the
+        latest close rather than the intraday last price - consistent with the
+        3m-ago basis, and the live WTI price is served separately by the ticker.
+        """
         try:
-            return round(float(yf.Ticker(ticker).fast_info.last_price), 2)
+            data = yf.download(
+                tickers, start=start, end=end,
+                progress=False, auto_adjust=True, threads=True,
+            )
         except Exception as exc:
-            logger.warning("Futures contract lookup failed", extra={"ticker": ticker, "error": str(exc)})
-            return None
+            logger.warning("Futures curve download failed", extra={"error": str(exc)})
+            return {t: None for t in tickers}
+        if data is None or data.empty:
+            return {t: None for t in tickers}
+        close = data["Close"] if isinstance(data.columns, pd.MultiIndex) else data[["Close"]]
+        prices: dict[str, float | None] = {}
+        for ticker in tickers:
+            try:
+                col = close[ticker].dropna() if ticker in close.columns else pd.Series(dtype=float)
+                prices[ticker] = round(float(col.iloc[-1]), 2) if not col.empty else None
+            except Exception:
+                prices[ticker] = None
+        return prices
 
-    def _price_3m_ago(ticker: str) -> float | None:
-        try:
-            target = today - timedelta(days=90)
-            window = yf.download(
-                ticker,
-                start=(target - timedelta(days=5)).strftime("%Y-%m-%d"),
-                end=(target + timedelta(days=5)).strftime("%Y-%m-%d"),
-                progress=False,
-            )["Close"].dropna()
-            return round(float(window.iloc[-1]), 2) if not window.empty else None
-        except Exception as exc:
-            logger.warning("Futures historical lookup failed", extra={"ticker": ticker, "error": str(exc)})
-            return None
-
+    target = today - timedelta(days=90)
+    current = _last_closes(
+        (today - timedelta(days=10)).strftime("%Y-%m-%d"),
+        (today + timedelta(days=1)).strftime("%Y-%m-%d"),
+    )
+    ago = _last_closes(
+        (target - timedelta(days=5)).strftime("%Y-%m-%d"),
+        (target + timedelta(days=5)).strftime("%Y-%m-%d"),
+    )
     labels = [f"M{i + 1}" for i in range(len(tickers))]
     result = {
         "labels": labels,
-        "today": [_current_price(t) for t in tickers],
-        "ago_3m": [_price_3m_ago(t) for t in tickers],
+        "today": [current[t] for t in tickers],
+        "ago_3m": [ago[t] for t in tickers],
     }
     _futures_cache.set(cache_key, result)
     return result
