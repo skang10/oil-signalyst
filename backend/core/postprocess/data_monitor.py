@@ -141,6 +141,17 @@ def write_freshness_snapshot(as_of: date | None = None) -> dict[str, str | None]
     as_of = as_of or date.today()
     sources = _load_sources()
     last_updated = _measure_last_updated(as_of, sources)
+
+    # Preserve last-known-good: if a source fails to fetch this round (e.g. the
+    # cold startup warm runs before CFTC's first ZIP has cached), don't overwrite
+    # a healthy prior timestamp with null - that would flip a fine source to
+    # "error" on the page. A genuinely stalled feed still surfaces: its carried
+    # timestamp ages against as_of and crosses into "delayed".
+    prior = _read_freshness_snapshot() or {}
+    for name, value in last_updated.items():
+        if value is None and prior.get(name):
+            last_updated[name] = prior[name]
+
     payload = {
         "generated_at": datetime.now().isoformat(),
         "measured_as_of": as_of.isoformat(),
