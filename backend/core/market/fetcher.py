@@ -9,6 +9,13 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Shared across requests so DataRegistry's 4h TTL cache (core/cache.py) actually
+# persists between market-chart calls. Every fetcher below used to new up its own
+# DataRegistry() per request, so the cache was always empty - each page load
+# re-fetched every source from yfinance/EIA/CFTC, and sources shared across charts
+# (e.g. wti) were fetched several times per tab load. One instance fixes both.
+_REGISTRY = DataRegistry()
+
 # futures_curve doesn't go through DataRegistry (see its docstring below),
 # so it gets its own small cache to keep its two batched yfinance downloads
 # off every request.
@@ -31,14 +38,14 @@ def _aligned(*series: pd.Series) -> pd.DataFrame:
 def fetch_wti_price_history() -> list[dict]:
     """Daily WTI closing price, last 18 months."""
     start, end = _date_range()
-    series = DataRegistry().fetch("wti", start, end).dropna()
+    series = _REGISTRY.fetch("wti", start, end).dropna()
     return [{"date": str(d.date()), "price": round(float(v), 2)} for d, v in series.items()]
 
 
 def fetch_brent_wti_spread() -> list[dict]:
     """Brent - WTI daily spread, last 18 months."""
     start, end = _date_range()
-    registry = DataRegistry()
+    registry = _REGISTRY
     brent = registry.fetch("brent", start, end)
     wti = registry.fetch("wti", start, end)
     df = _aligned(brent.rename("brent"), wti.rename("wti"))
@@ -62,7 +69,7 @@ def fetch_eia_inventory() -> list[dict]:
     """
     _, end = _date_range()
     five_year_start = (datetime.today() - timedelta(days=365 * 5 + 30)).strftime("%Y-%m-%d")
-    history = (DataRegistry().fetch("crude_inventory", five_year_start, end).dropna() / 1000).sort_index()
+    history = (_REGISTRY.fetch("crude_inventory", five_year_start, end).dropna() / 1000).sort_index()
     if history.empty:
         return []
     avg, std = float(history.mean()), float(history.std())
@@ -163,7 +170,7 @@ def fetch_futures_curve() -> dict:
 def fetch_ovx_vix() -> list[dict]:
     """OVX and VIX daily, last 18 months."""
     start, end = _date_range()
-    registry = DataRegistry()
+    registry = _REGISTRY
     ovx = registry.fetch("ovx", start, end)
     vix = registry.fetch("vix", start, end)
     df = _aligned(ovx.rename("ovx"), vix.rename("vix"))
@@ -183,7 +190,7 @@ def fetch_cot_net() -> list[dict]:
     were real positioning data when it isn't.
     """
     start, end = _date_range()
-    registry = DataRegistry()
+    registry = _REGISTRY
     long_pos = registry.fetch("cot_wti_spec_long", start, end)
     short_pos = registry.fetch("cot_wti_spec_short", start, end)
     df = _aligned(long_pos.rename("long"), short_pos.rename("short"))
