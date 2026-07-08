@@ -1,6 +1,6 @@
 import { useChart } from '@/hooks/useChart';
 import { useMarketSeries } from '@/hooks/useMarketSeries';
-import { baseOptions, GRID_COLOR, MUTED, sparseLabels } from './chart-base';
+import { baseOptions, GRID_COLOR, MUTED, dateAxisX, dateTooltip } from './chart-base';
 
 interface OvxVixPoint {
   date: string;
@@ -25,7 +25,7 @@ export default function VolatilityChart() {
     () => ({
       type: 'line',
       data: {
-        labels: sparseLabels(points.map((p) => p.date)),
+        labels: points.map((p) => p.date),
         datasets: [
           {
             label: 'OVX',
@@ -53,9 +53,9 @@ export default function VolatilityChart() {
       },
       options: {
         ...baseOptions,
-        plugins: { legend: { display: true, position: 'bottom', labels: { color: MUTED, font: { size: 10 }, boxWidth: 12, padding: 8 } } },
+        plugins: { legend: { display: true, position: 'bottom', labels: { color: MUTED, font: { size: 10 }, boxWidth: 12, padding: 8 } }, tooltip: dateTooltip },
         scales: {
-          x: { grid: { color: GRID_COLOR }, ticks: { color: MUTED, font: { size: 10 }, maxRotation: 0 } },
+          x: dateAxisX(),
           y: {
             type: 'linear',
             min: ovxMin,

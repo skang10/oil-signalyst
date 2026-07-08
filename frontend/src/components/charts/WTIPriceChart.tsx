@@ -1,6 +1,6 @@
 import { useChart } from '@/hooks/useChart';
 import { useMarketSeries } from '@/hooks/useMarketSeries';
-import { baseOptions, GRID_COLOR, MUTED, sparseLabels } from './chart-base';
+import { baseOptions, GRID_COLOR, MUTED, dateAxisX } from './chart-base';
 
 interface WtiPricePoint {
   date: string;
@@ -18,7 +18,7 @@ export default function WTIPriceChart() {
     () => ({
       type: 'line',
       data: {
-        labels: sparseLabels(points.map((p) => p.date)),
+        labels: points.map((p) => p.date),
         datasets: [
           {
             data: prices,
@@ -35,7 +35,7 @@ export default function WTIPriceChart() {
       options: {
         ...baseOptions,
         scales: {
-          x: { grid: { color: GRID_COLOR }, ticks: { color: MUTED, font: { size: 10 }, maxRotation: 0 } },
+          x: dateAxisX(),
           y: {
             min,
             max,
