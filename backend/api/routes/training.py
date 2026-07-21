@@ -17,6 +17,30 @@ router = APIRouter(prefix="/api/train", tags=["training"])
 
 SSE_POLL_INTERVAL_SECONDS = 0.5
 
+# A job in one of these states is considered to still hold the trainer.
+ACTIVE_JOB_STATUSES = ("queued", "running")
+
+
+async def fail_orphaned_jobs() -> int:
+    """Mark jobs left mid-flight by a process restart as failed.
+
+    Training runs inside this process as a BackgroundTask, so any restart -
+    uvicorn --reload in dev, a redeploy in prod - kills the run with nobody
+    left to update its row, and it sits in 'running' forever. Called once at
+    startup: without it the single-run guard below would see those ghosts and
+    refuse every subsequent run.
+    """
+    async with get_db() as db:
+        orphaned = (
+            await db.execute(select(TrainJob).where(TrainJob.status.in_(ACTIVE_JOB_STATUSES)))
+        ).scalars().all()
+        for job in orphaned:
+            job.status = "failed"
+            job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+            job.result = {"error": "Interrupted by an API restart before completion."}
+            db.add(job)
+    return len(orphaned)
+
 
 class TrainStartRequest(BaseModel):
     model_types: list[str] = ["regime", "eia", "returns"]
@@ -37,6 +61,20 @@ async def start_training(
 ) -> dict:
     job_id = str(uuid.uuid4())[:8]
     model_types = body.model_types or ["regime", "eia", "returns"]
+
+    # One run at a time. Until the trainer was moved off the event loop the
+    # blocking work serialized concurrent runs by accident; now that they can
+    # truly overlap, two runs would interleave their _save_model writes and
+    # race on the single is_active row per model type - last writer wins, and
+    # the losing run's model stays active with the winner's metrics on screen.
+    in_flight = (
+        await db.execute(select(TrainJob).where(TrainJob.status.in_(ACTIVE_JOB_STATUSES)).limit(1))
+    ).scalar_one_or_none()
+    if in_flight:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Training job {in_flight.id} is already {in_flight.status}. Wait for it to finish.",
+        )
     db.add(
         TrainJob(
             id=job_id,

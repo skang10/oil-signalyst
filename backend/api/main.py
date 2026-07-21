@@ -23,6 +23,12 @@ async def lifespan(app: FastAPI):
     async with get_db() as db:
         await get_or_create_default_user(db)
 
+    from api.routes.training import fail_orphaned_jobs
+
+    orphaned = await fail_orphaned_jobs()
+    if orphaned:
+        logger.warning("Failed orphaned training jobs at startup", extra={"count": orphaned})
+
     logger.info("Starting oil-signalyst API")
     # Fire-and-forget: builds every candidate's Evaluate-page charts into the
     # in-memory cache (core/postprocess/signal_charts.py) so first page views
