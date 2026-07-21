@@ -6,13 +6,7 @@ import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid'
 import DistChart from '@/components/shared/DistChart';
 import { formatUsd, lastBusinessDayLabels } from '@/lib/utils';
 import { IconBolt } from '@tabler/icons-react';
-
-const REGIME_LABELS: Record<'R1' | 'R2' | 'R3' | 'R4', string> = {
-  R1: 'R1 Supply Squeeze Bull',
-  R2: 'R2 Demand Expansion Bull',
-  R3: 'R3 Oversupply Bear',
-  R4: 'R4 Demand Collapse Bear',
-};
+import { REGIME_IDS, REGIME_LABELS, switchProbabilityText } from '@/lib/regime';
 
 export default function TraderView({ report }: { report: DailyReport }) {
   const trader = report.trader!;
@@ -27,7 +21,7 @@ export default function TraderView({ report }: { report: DailyReport }) {
   const range = max - min || 1;
   const change5d = (prices[prices.length - 1] - prices[0]) / prices[0];
 
-  const regimeItems: RegimeGridItem[] = (['R1', 'R2', 'R3', 'R4'] as const)
+  const regimeItems: RegimeGridItem[] = REGIME_IDS
     .map((id) => ({
       id,
       label: REGIME_LABELS[id],
@@ -115,8 +109,11 @@ export default function TraderView({ report }: { report: DailyReport }) {
             Market Regime
           </div>
           <RegimeGrid regimes={regimeItems} />
-          <div className="mt-2 text-[12px] text-warning">
-            {Math.round(regime.switch_probability_4w * 100)}% chance of regime switch in 4w · Trigger: {regime.switch_trigger}
+          {/* Was "0% chance of regime switch in 4w" - a ratio over a handful of
+              hand-drawn periods, phrased as a calibrated forecast on the tab a
+              trader sizes positions from. */}
+          <div className="mt-2 text-[12px] text-text-muted">
+            {switchProbabilityText(regime.switch_probability_basis)} · Trigger: {regime.switch_trigger}
           </div>
         </Card>
       </div>

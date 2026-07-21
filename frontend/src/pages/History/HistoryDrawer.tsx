@@ -5,6 +5,7 @@ import { useHistoryDetail } from '@/hooks/useHistoryDetail';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
 import TagBadge from '@/components/shared/TagBadge';
 import { cn, formatUsd } from '@/lib/utils';
+import { REGIME_IDS, REGIME_LABELS, switchProbabilityText } from '@/lib/regime';
 
 type DrawerTab = 'summary' | 'regime' | 'features' | 'outcome';
 
@@ -34,9 +35,9 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
   const { data: detail } = useHistoryDetail(date);
 
   const regimeItems: RegimeGridItem[] = detail
-    ? (['R1', 'R2', 'R3', 'R4'] as const).map((id) => ({
+    ? REGIME_IDS.map((id) => ({
         id,
-        label: id,
+        label: REGIME_LABELS[id],
         prob: detail.regime.probabilities[id],
         isDominant: id === detail.regime.dominant,
       }))
@@ -125,8 +126,12 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
                   </div>
                   <CfgRow label="Duration" value={`${detail.regime.duration_weeks} weeks`} />
                   <CfgRow
-                    label="4w switch prob"
-                    value={<span className="text-warning">{Math.round(detail.regime.switch_probability_4w * 100)}%</span>}
+                    label="Switch outlook"
+                    value={
+                      <span className="text-text-muted text-[11px]">
+                        {switchProbabilityText(detail.regime.switch_probability_basis)}
+                      </span>
+                    }
                   />
                 </div>
               )}

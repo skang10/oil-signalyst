@@ -59,7 +59,11 @@ export default function HistoryPage() {
           </div>
           <div>
             <div className="text-[11px] text-text-muted">Return Dist. Brier</div>
-            <div className="text-[20px] font-medium mt-[2px]">{history?.rolling_accuracy.returns_brier.toFixed(2)}</div>
+            {/* Same ?? guard as the tile above - without it this rendered
+                blank while SWR was still loading. */}
+            <div className="text-[20px] font-medium mt-[2px]">
+              {(history?.rolling_accuracy.returns_brier ?? 0).toFixed(2)}
+            </div>
           </div>
         </div>
       </Card>

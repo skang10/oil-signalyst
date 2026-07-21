@@ -7,8 +7,10 @@ import { cn } from '@/lib/utils';
 
 const QUICK_ACTIONS = [
   { label: 'Evaluate AIS signal', fill: 'Analyse AIS VLCC signal and evaluate for feature pool' },
-  { label: 'Full retrain', fill: 'Retrain all three models with latest data' },
-  { label: "Explain today's forecast", fill: "Explain today's Regime forecast drivers" },
+  // Two trainable models now, not three: regime is a state indicator and is no
+  // longer retrained (backend rejects it).
+  { label: 'Retrain forecasts', fill: 'Retrain the EIA and return-distribution models with latest data' },
+  { label: "Explain today's regime", fill: "What is driving today's market regime" },
 ];
 
 export default function AgentPanel({

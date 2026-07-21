@@ -23,9 +23,12 @@ async def test_switch_probability_falls_back_to_neutral_when_no_comparable_histo
 
     monkeypatch.setattr(regime_stats, "get_regime_duration", fake_duration)
 
-    probability = await regime_stats.estimate_switch_probability("R3")
+    basis = await regime_stats.estimate_switch_probability("R3")
 
-    assert probability == regime_stats.NEUTRAL_SWITCH_PROBABILITY
+    assert basis["probability"] == regime_stats.NEUTRAL_SWITCH_PROBABILITY
+    # comparable == 0 marks "this is the neutral prior, not an estimate", which
+    # is what lets the UI avoid presenting it as a measured probability.
+    assert basis["comparable"] == 0
 
 
 @pytest.mark.asyncio
@@ -35,6 +38,18 @@ async def test_switch_probability_uses_empirical_estimate_when_history_available
 
     monkeypatch.setattr(regime_stats, "get_regime_duration", fake_duration)
 
-    probability = await regime_stats.estimate_switch_probability("R3")
+    basis = await regime_stats.estimate_switch_probability("R3")
 
-    assert 0.0 <= probability <= 1.0
+    assert 0.0 <= basis["probability"] <= 1.0
+    # The ratio must be reconstructible from the counts shipped alongside it.
+    assert basis["comparable"] > 0
+    assert basis["switched"] <= basis["comparable"]
+    assert basis["probability"] == round(basis["switched"] / basis["comparable"], 4)
+
+
+def test_historical_segment_count_matches_durations():
+    assert regime_stats.historical_segment_count("R3") == len(
+        regime_stats._historical_segment_durations("R3")
+    )
+    # R4 (2020 covid) occurs exactly once - any statistic derived from it is n=1.
+    assert regime_stats.historical_segment_count("R4") == 1

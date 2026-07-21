@@ -47,13 +47,27 @@ def historical_avg_duration_weeks(regime: str) -> float:
     return round(sum(durations) / len(durations) / TRADING_DAYS_PER_WEEK, 1)
 
 
-async def estimate_switch_probability(current_regime: str, horizon_weeks: int = 4) -> float:
-    """Empirical probability the regime switches within `horizon_weeks`, given
-    how long it has already persisted, estimated from historical segments of
-    the same regime type in REGIME_TRANSITIONS. Falls back to a neutral
-    probability when there isn't enough comparable history - with only ~17
-    hand-curated transitions across 16 years, this is common and expected,
-    not an error condition.
+def historical_segment_count(regime: str) -> int:
+    """How many hand-curated segments back the statistics for `regime`.
+
+    Ships alongside every regime statistic so the UI can show what the number
+    rests on. The counts are tiny - R1 has 5 segments, R4 exactly 1 - because
+    REGIME_TRANSITIONS is 17 dates typed by hand, and a mean over 5 samples
+    rendered as "60.8 weeks" reads far more precise than it is.
+    """
+    return len(_historical_segment_durations(regime))
+
+
+async def estimate_switch_probability(current_regime: str, horizon_weeks: int = 4) -> dict:
+    """Empirical chance the regime switches within `horizon_weeks`, given how
+    long it has already persisted, from historical segments of the same regime
+    in REGIME_TRANSITIONS.
+
+    Returns the counts, not just the ratio: with ~17 hand-curated transitions
+    across 16 years the denominator is single-digit, so a bare "0%" invites
+    being read as a calibrated forecast when it only means "none of the 5
+    historical R1 segments ended this early". `comparable` is 0 when the
+    fallback applied and the ratio is the neutral prior rather than an estimate.
     """
     horizon_days = horizon_weeks * TRADING_DAYS_PER_WEEK
     current_duration = await get_regime_duration(current_regime)
@@ -61,7 +75,17 @@ async def estimate_switch_probability(current_regime: str, horizon_weeks: int = 
     durations = _historical_segment_durations(current_regime)
     survivors = [d for d in durations if d >= current_duration]
     if len(survivors) < MIN_COMPARABLE_SEGMENTS:
-        return NEUTRAL_SWITCH_PROBABILITY
+        return {
+            "probability": NEUTRAL_SWITCH_PROBABILITY,
+            "switched": 0,
+            "comparable": 0,
+            "horizon_weeks": horizon_weeks,
+        }
 
     switched_within_horizon = [d for d in survivors if d <= current_duration + horizon_days]
-    return round(len(switched_within_horizon) / len(survivors), 4)
+    return {
+        "probability": round(len(switched_within_horizon) / len(survivors), 4),
+        "switched": len(switched_within_horizon),
+        "comparable": len(survivors),
+        "horizon_weeks": horizon_weeks,
+    }

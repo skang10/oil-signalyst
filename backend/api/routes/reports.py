@@ -87,10 +87,10 @@ async def get_prediction_detail(prediction_date: date, db: DbSession, user: Curr
     regime_probs = prediction.regime_probs or {}
     dominant = dominant_regime(regime_probs)
     duration_weeks = (await get_regime_duration(dominant)) // 5
-    switch_probability_4w = await estimate_switch_probability(dominant)
+    switch_probability_basis = await estimate_switch_probability(dominant)
     eia_actual_mb = _lookup_eia_actual(prediction_date)
     return build_history_detail(
-        prediction, snapshot, duration_weeks, switch_probability_4w, eia_actual_mb
+        prediction, snapshot, duration_weeks, switch_probability_basis, eia_actual_mb
     )
 
 

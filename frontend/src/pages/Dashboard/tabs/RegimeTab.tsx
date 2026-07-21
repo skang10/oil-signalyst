@@ -4,19 +4,14 @@ import Card from '@/components/shared/Card';
 import TagBadge, { type TagKind } from '@/components/shared/TagBadge';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
 
-const REGIME_LABELS: Record<'R1' | 'R2' | 'R3' | 'R4', string> = {
-  R1: 'R1 — Supply Squeeze Bull',
-  R2: 'R2 — Demand Expansion Bull',
-  R3: 'R3 — Oversupply Bear',
-  R4: 'R4 — Demand Collapse Bear',
-};
-
-const REGIME_TRIGGER: Record<'R1' | 'R2' | 'R3' | 'R4', string> = {
-  R1: 'Production cuts / geopolitical disruption',
-  R2: 'Strong GDP / China demand',
-  R3: 'OPEC production increase / inventory build',
-  R4: 'Recession / pandemic shock',
-};
+import {
+  REGIME_IDS,
+  REGIME_LABELS,
+  REGIME_PROVENANCE,
+  REGIME_TRIGGER,
+  sampleNote,
+  switchProbabilityText,
+} from '@/lib/regime';
 
 const DIRECTION_TAG: Record<'bullish' | 'bearish' | 'neutral', TagKind> = {
   bullish: 'green',
@@ -36,7 +31,7 @@ export default function RegimeTab() {
   if (!report) return <div className="text-text-muted text-[12px]">Loading...</div>;
 
   const regime = report.regime;
-  const regimeItems: RegimeGridItem[] = (['R1', 'R2', 'R3', 'R4'] as const)
+  const regimeItems: RegimeGridItem[] = REGIME_IDS
     .map((id) => ({
       id,
       label: REGIME_LABELS[id],
@@ -51,8 +46,20 @@ export default function RegimeTab() {
   return (
     <>
       <div className="mb-[14px]">
-        <div className="text-[15px] font-medium">Market Regime Report</div>
+        <div className="flex items-baseline gap-[10px]">
+          <div className="text-[15px] font-medium">Market Regime</div>
+          <span className="text-[10px] uppercase tracking-[0.5px] px-[7px] py-[2px] rounded-default bg-surface-2 border border-border text-text-muted">
+            State indicator · not a forecast
+          </span>
+        </div>
         <div className="text-[12px] text-text-muted mt-[2px]">{report.date} · Based on closing data</div>
+      </div>
+
+      {/* Provenance up front, not as a footnote: every number below traces to
+          17 hand-typed transition dates, and the tab sits beside two genuine
+          forecast tabs. */}
+      <div className="mb-3 p-[10px_12px] rounded-default bg-surface-1 border border-border text-[11px] text-text-muted leading-[1.5]">
+        {REGIME_PROVENANCE}
       </div>
 
       <Card className="mb-3">
@@ -85,18 +92,24 @@ export default function RegimeTab() {
             </div>
             <span className="font-medium">{regime.duration_weeks} weeks</span>
           </div>
+          {/* "currently mid-cycle" used to be printed unconditionally, so a
+              regime running 0 weeks was still described as mid-cycle. */}
           <div className="text-[11px] text-text-muted mt-1">
-            {regime.dominant} historically lasts {regime.historical_avg_duration} weeks avg — currently mid-cycle
+            {regime.dominant} historically lasts {regime.historical_avg_duration} weeks on average
+            {sampleNote(regime.historical_segment_count)}
           </div>
         </Card>
 
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
-            Regime Switch Warning
+            Regime Switch Outlook
           </div>
-          <div className="p-[10px] bg-warning-bg border border-warning-border rounded-default text-[12px] text-warning">
-            <div className="font-medium mb-[6px]">
-              4-week switch probability: {Math.round(regime.switch_probability_4w * 100)}%
+          {/* Was "4-week switch probability: 0%", which reads as a calibrated
+              forecast. It is a ratio over a handful of hand-drawn periods, so
+              state the count instead. */}
+          <div className="p-[10px] bg-surface-1 border border-border rounded-default text-[12px] text-text-secondary">
+            <div className="font-medium mb-[6px] text-text-primary">
+              {switchProbabilityText(regime.switch_probability_basis)}
             </div>
             {regime.switch_trigger}
           </div>

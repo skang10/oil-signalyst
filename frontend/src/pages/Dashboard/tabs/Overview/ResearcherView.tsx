@@ -7,13 +7,7 @@ import SHAPBar from '@/components/shared/SHAPBar';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
 import DistChart from '@/components/shared/DistChart';
 import { IconSatellite, IconShip, IconChartLine } from '@tabler/icons-react';
-
-const REGIME_LABELS: Record<'R1' | 'R2' | 'R3' | 'R4', string> = {
-  R1: 'R1 — Supply Squeeze Bull',
-  R2: 'R2 — Demand Expansion Bull',
-  R3: 'R3 — Oversupply Bear',
-  R4: 'R4 — Demand Collapse Bear',
-};
+import { REGIME_IDS, REGIME_LABELS } from '@/lib/regime';
 
 const CANDIDATE_PREVIEW = [
   { icon: IconSatellite, label: 'Satellite Tank Fill Rate (Middle East)', ic: 0.31, tag: 'Recommended' as const },
@@ -33,7 +27,7 @@ export default function ResearcherView({
   const returns = report.returns;
   const maxAbs = Math.max(...regime.shap_drivers.map((d) => Math.abs(d.contribution)));
 
-  const regimeItems: RegimeGridItem[] = (['R1', 'R2', 'R3', 'R4'] as const)
+  const regimeItems: RegimeGridItem[] = REGIME_IDS
     .map((id) => ({
       id,
       label: REGIME_LABELS[id],

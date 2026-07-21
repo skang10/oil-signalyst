@@ -11,6 +11,7 @@ from core.postprocess.regime_stats import (
     estimate_switch_probability,
     get_regime_duration,
     historical_avg_duration_weeks,
+    historical_segment_count,
 )
 from db.models import FeatureSnapshot, Prediction
 
@@ -46,7 +47,12 @@ async def assemble_daily_report(prediction: Prediction, snapshot: FeatureSnapsho
         "feature_signals": _build_signal_list(features),
         "regime_duration_weeks": duration // 5,
         "regime_historical_avg_duration_weeks": historical_avg_duration_weeks(dominant),
-        "switch_prob_4w": switch_prob,
+        # Sample size travels with the statistic: these are means over a
+        # handful of hand-drawn segments (R1 has 5, R4 has 1), and without the
+        # count "60.8 weeks" reads like a population parameter.
+        "regime_historical_segment_count": historical_segment_count(dominant),
+        "switch_prob_4w": switch_prob["probability"],
+        "switch_prob_basis": switch_prob,
         "brent_wti_spread": round(features.get("brent_wti_spread", 0.0) or 0.0, 2),
         "ovx": round(features.get("ovx", 0.0) or 0.0, 1),
         "cot_net_percentile": _cot_net_percentile(features.get("spec_net_pct"), prediction.date),
@@ -132,7 +138,11 @@ def nest_daily_report(
             "dominant": raw["dominant_regime"],
             "duration_weeks": raw["regime_duration_weeks"],
             "historical_avg_duration": raw["regime_historical_avg_duration_weeks"],
+            "historical_segment_count": raw["regime_historical_segment_count"],
             "switch_probability_4w": raw["switch_prob_4w"],
+            # The counts behind the ratio, so the UI can state what it means
+            # rather than rendering a bare percentage.
+            "switch_probability_basis": raw["switch_prob_basis"],
             "support_signals": [
                 {"name": s["name"], "value": str(s["value"]), "direction": s["direction"]}
                 for s in raw["feature_signals"][:5]
@@ -281,7 +291,7 @@ def build_history_detail(
     prediction: Prediction,
     snapshot: FeatureSnapshot | None,
     duration_weeks: int,
-    switch_probability_4w: float,
+    switch_probability_basis: dict,
     eia_actual_mb: float | None,
 ) -> dict:
     """Reshapes a single Prediction (+ its async-derived regime/outcome stats)
@@ -309,7 +319,8 @@ def build_history_detail(
             "probabilities": regime_probs,
             "dominant": dominant,
             "duration_weeks": duration_weeks,
-            "switch_probability_4w": switch_probability_4w,
+            "switch_probability_4w": switch_probability_basis["probability"],
+            "switch_probability_basis": switch_probability_basis,
         },
         "features": [
             {

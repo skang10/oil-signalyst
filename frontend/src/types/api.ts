@@ -52,7 +52,21 @@ export interface DailyReport {
     dominant: 'R1' | 'R2' | 'R3' | 'R4';
     duration_weeks: number;
     historical_avg_duration: number;
+    /**
+     * How many hand-curated historical segments back historical_avg_duration.
+     * Single-digit (R1 has 5, R4 has 1) - shown next to the statistic so it
+     * doesn't read as a population parameter.
+     */
+    historical_segment_count: number;
     switch_probability_4w: number;
+    /** The counts behind switch_probability_4w. comparable === 0 means the
+     * neutral prior was substituted, not that a probability was measured. */
+    switch_probability_basis: {
+      probability: number;
+      switched: number;
+      comparable: number;
+      horizon_weeks: number;
+    };
     support_signals: {
       name: string;
       value: string;
@@ -250,6 +264,12 @@ export interface HistoryDetail {
     dominant: 'R1' | 'R2' | 'R3' | 'R4';
     duration_weeks: number;
     switch_probability_4w: number;
+    switch_probability_basis: {
+      probability: number;
+      switched: number;
+      comparable: number;
+      horizon_weeks: number;
+    };
   };
   features: { name: string; widthPct: number; value: number }[];
   outcome: {

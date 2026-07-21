@@ -94,7 +94,14 @@ def sample_report() -> dict:
         ],
         "regime_duration_weeks": 3,
         "regime_historical_avg_duration_weeks": 8.5,
+        "regime_historical_segment_count": 3,
         "switch_prob_4w": 0.22,
+        "switch_prob_basis": {
+            "probability": 0.22,
+            "switched": 2,
+            "comparable": 9,
+            "horizon_weeks": 4,
+        },
     }
 
 

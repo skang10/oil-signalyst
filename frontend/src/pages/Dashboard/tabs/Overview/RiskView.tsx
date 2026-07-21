@@ -4,6 +4,7 @@ import MetricCard from '@/components/shared/MetricCard';
 import TagBadge from '@/components/shared/TagBadge';
 import DistChart from '@/components/shared/DistChart';
 import StressTestCard from '@/components/shared/StressTestCard';
+import { sampleNote, switchProbabilityText } from '@/lib/regime';
 
 export default function RiskView({ report }: { report: DailyReport }) {
   const risk = report.risk!;
@@ -80,29 +81,37 @@ export default function RiskView({ report }: { report: DailyReport }) {
       </div>
 
       <div className="grid grid-cols-2 gap-[10px]">
+        {/* This card was titled "R3 Regime Historical Risk" and labelled every
+            row "R3", but historical_avg_duration / duration_weeks /
+            switch_probability_4w are all computed for the DOMINANT regime -
+            so with R1 dominant it displayed R1's figures under R3 labels. Only
+            r3_historical_max_drawdown is genuinely R3, and it stays marked as
+            such. The old "R3 avg return −2.3%" row was a hardcoded literal
+            with no backing data and is gone. */}
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
-            R3 Regime Historical Risk
+            {regime.dominant} Regime Historical Risk
           </div>
           <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
-            <span className="text-text-secondary">R3 avg duration</span>
-            <span className="font-medium font-mono">{regime.historical_avg_duration} weeks</span>
+            <span className="text-text-secondary">{regime.dominant} avg duration</span>
+            <span className="font-medium font-mono">
+              {regime.historical_avg_duration} weeks
+              <span className="text-text-muted">{sampleNote(regime.historical_segment_count)}</span>
+            </span>
           </div>
           <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
-            <span className="text-text-secondary">Currently Running</span>
-            <span className="font-medium font-mono">{regime.duration_weeks} weeks (mid-cycle)</span>
-          </div>
-          <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
-            <span className="text-text-secondary">R3 avg return</span>
-            <span className="font-medium font-mono text-danger">−2.3% (20-day)</span>
+            <span className="text-text-secondary">Currently running</span>
+            <span className="font-medium font-mono">{regime.duration_weeks} weeks</span>
           </div>
           <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
             <span className="text-text-secondary">R3 max drawdown</span>
             <span className="font-medium font-mono text-danger">{Math.round(risk.r3_historical_max_drawdown * 100)}%</span>
           </div>
-          <div className="flex justify-between items-center py-[7px] text-[12px]">
-            <span className="text-text-secondary">4w switch probability</span>
-            <span className="font-medium font-mono text-warning">{Math.round(regime.switch_probability_4w * 100)}%</span>
+          <div className="flex justify-between items-start py-[7px] text-[12px] gap-3">
+            <span className="text-text-secondary whitespace-nowrap">Switch outlook</span>
+            <span className="text-[11px] text-text-muted text-right">
+              {switchProbabilityText(regime.switch_probability_basis)}
+            </span>
           </div>
         </Card>
 
