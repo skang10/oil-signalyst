@@ -14,7 +14,7 @@ from core.models.eia import predict_eia
 from core.models.feature_prep import to_model_matrix
 from core.models.model_registry import ModelRegistry
 from core.models.regime import predict_regime
-from core.models.trainer import run_full_training_with_log
+from core.models.trainer import TRAINABLE_MODEL_TYPES, run_full_training_with_log
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
 from core.postprocess.data_monitor import write_freshness_snapshot
@@ -138,7 +138,10 @@ async def _maybe_auto_retrain(target_date: date) -> None:
             return
 
         job_id = str(uuid.uuid4())[:8]
-        model_types = ["regime", "eia", "returns"]
+        # regime is no longer trainable (it describes the current state rather
+        # than forecasting an outcome) - listing it here made every auto-retrain
+        # fail with a 400 the moment PSI/Sunday mode was enabled.
+        model_types = list(TRAINABLE_MODEL_TYPES)
         logger.info(
             "Auto-retrain triggered",
             extra={"mode": mode, "trigger": trigger, "job_id": job_id},
