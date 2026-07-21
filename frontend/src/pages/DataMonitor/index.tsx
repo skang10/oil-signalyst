@@ -155,36 +155,50 @@ export default function DataMonitorPage() {
       </Card>
 
       <Card>
-        <div className="flex items-center justify-between mb-[10px]">
-          <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium">
-            Current Feature Pool ({signals?.active.length ?? 0})
-          </div>
-          <Link to="/signals" className="text-[12px] text-accent-text no-underline">
-            Signals ↗
-          </Link>
-        </div>
-        <table className="w-full text-[12px] border-collapse">
-          <thead>
-            <tr className="text-left text-[11px] text-text-muted">
-              <th className="font-medium p-[6px_8px]">Feature Name</th>
-              <th className="font-medium p-[6px_8px]">Source</th>
-              <th className="font-medium p-[6px_8px]">Frequency</th>
-              <th className="font-medium p-[6px_8px]">Category</th>
-            </tr>
-          </thead>
-          <tbody>
-            {signals?.active.map((f, i) => (
-              <tr key={f.name} className={i % 2 === 0 ? 'bg-surface-2' : 'bg-surface-1'}>
-                <td className="p-[6px_8px] font-mono text-[11px]">{f.name}</td>
-                <td className="p-[6px_8px] text-text-secondary">{f.source}</td>
-                <td className="p-[6px_8px] text-text-secondary">{f.frequency}</td>
-                <td className="p-[6px_8px]">
-                  <TagBadge kind={CATEGORY_TAG[f.category] ?? 'muted'}>{f.category}</TagBadge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* The managed feature pool (pool_features table), not the live model's
+            feature list - the old `active` read the regime model's features and
+            showed 0 whenever no model was deployed, even with 14 pool features
+            defined. `removed_pending_retrain` rows are ghosts a model still
+            references, not real pool members, so they're excluded. */}
+        {(() => {
+          const pool = (signals?.pool ?? []).filter(
+            (f) => f.pool_status !== 'removed_pending_retrain'
+          );
+          return (
+            <>
+              <div className="flex items-center justify-between mb-[10px]">
+                <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium">
+                  Current Feature Pool ({pool.length})
+                </div>
+                <Link to="/signals" className="text-[12px] text-accent-text no-underline">
+                  Signals ↗
+                </Link>
+              </div>
+              <table className="w-full text-[12px] border-collapse">
+                <thead>
+                  <tr className="text-left text-[11px] text-text-muted">
+                    <th className="font-medium p-[6px_8px]">Feature Name</th>
+                    <th className="font-medium p-[6px_8px]">Source</th>
+                    <th className="font-medium p-[6px_8px]">Frequency</th>
+                    <th className="font-medium p-[6px_8px]">Category</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pool.map((f, i) => (
+                    <tr key={f.name} className={i % 2 === 0 ? 'bg-surface-2' : 'bg-surface-1'}>
+                      <td className="p-[6px_8px] font-mono text-[11px]">{f.name}</td>
+                      <td className="p-[6px_8px] text-text-secondary">{f.source}</td>
+                      <td className="p-[6px_8px] text-text-secondary">{f.frequency}</td>
+                      <td className="p-[6px_8px]">
+                        <TagBadge kind={CATEGORY_TAG[f.category] ?? 'muted'}>{f.category}</TagBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          );
+        })()}
       </Card>
     </div>
   );
