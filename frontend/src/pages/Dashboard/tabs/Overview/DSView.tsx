@@ -6,7 +6,7 @@ import Card from '@/components/shared/Card';
 import LogMono from '@/components/shared/LogMono';
 import { TriggerBadge, TrainStatusBadge } from '@/components/shared/TrainBadges';
 import { cn } from '@/lib/utils';
-import { MODEL_KIND, MODEL_LABEL, metricText } from '@/lib/model-metrics';
+import { MODEL_KIND, MODEL_LABEL, isUnhealthy, metricText } from '@/lib/model-metrics';
 
 export default function DSView() {
   const { data: modelStatus } = useModelStatus();
@@ -20,13 +20,13 @@ export default function DSView() {
             key={m.type}
             className={cn(
               'p-[12px_14px] rounded-default border',
-              m.psi_alert ? 'bg-warning-bg border-warning-border' : 'bg-surface-1 border-border'
+              isUnhealthy(m) ? 'bg-warning-bg border-warning-border' : 'bg-surface-1 border-border'
             )}
           >
             <div className="text-[10px] text-text-muted uppercase tracking-[0.5px] mb-[5px]">{MODEL_LABEL[m.type]}</div>
             <div className="text-[13px] font-medium">{m.version}</div>
-            <div className={cn('text-[11px] mt-[3px] flex items-center gap-1', m.psi_alert ? 'text-warning' : 'text-success')}>
-              {m.psi_alert ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
+            <div className={cn('text-[11px] mt-[3px] flex items-center gap-1', isUnhealthy(m) ? 'text-warning' : 'text-success')}>
+              {isUnhealthy(m) ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
               {metricText(m)}
             </div>
             <div className="text-[10px] text-text-muted mt-[3px]">{MODEL_KIND[m.type]}</div>

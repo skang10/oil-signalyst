@@ -50,6 +50,19 @@ export function beatsBaseline(m: Model): boolean | null {
 }
 
 /**
+ * Whether a model should read as healthy on the status cards.
+ *
+ * Drift was the only thing these cards reacted to, so a model losing to its own
+ * baseline - which can be deployed by override through deploy_service - showed
+ * the same green check as one that was working. Losing to the baseline is the
+ * more fundamental failure of the two: drift says the inputs moved, this says
+ * the model never beat guessing.
+ */
+export function isUnhealthy(m: Model): boolean {
+  return m.psi_alert || beatsBaseline(m) === false;
+}
+
+/**
  * One line per model. Single implementation - ModelMonitor and DSView each had
  * their own near-copy whose branch ordering differed, so the same model could
  * read differently on two pages.
@@ -59,5 +72,11 @@ export function metricText(m: Model): string {
   if (!m.is_forecast) return psi;
   const baseline = baselineText(m);
   const head = baseline ? `${primaryText(m)} / ${baseline}` : primaryText(m);
-  return m.psi_alert ? `${head} · ${psi} — Alerts` : `${head} · ${psi}`;
+  // Named rather than left to colour alone - "below baseline" is the whole
+  // finding, and it should survive a screenshot or a colourblind reader.
+  const notes = [
+    beatsBaseline(m) === false ? 'below baseline' : null,
+    m.psi_alert ? 'drift' : null,
+  ].filter(Boolean);
+  return notes.length ? `${head} · ${psi} — ${notes.join(', ')}` : `${head} · ${psi}`;
 }
