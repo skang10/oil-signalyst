@@ -9,9 +9,10 @@ This file is the backend deep-dive. See `docs/architecture.md` for the system-le
 ```
 backend/
 ├── api/
-│   ├── main.py              # FastAPI app factory, lifespan (init_db, default user, two
-│   │                        # fire-and-forget prewarms: signal charts + freshness
-│   │                        # snapshot), CORS
+│   ├── main.py              # FastAPI app factory, CORS, lifespan: init_db, default user,
+│   │                        # awaited fail_orphaned_jobs() (buries train jobs a restart
+│   │                        # left mid-run), then two fire-and-forget prewarms -
+│   │                        # signal charts + freshness snapshot
 │   ├── dependencies.py      # DbSession, CurrentUser (JWT Bearer), role guards
 │   │                        # (ResearcherOrDS, DSOnly)
 │   └── routes/
@@ -19,7 +20,10 @@ backend/
 │       ├── auth.py          # POST /api/auth/login|refresh|logout (JWT + httpOnly cookie)
 │       ├── reports.py       # GET /api/reports/daily/{role}, /history, /history/{date}, /stress
 │       ├── models.py        # GET /api/models/status, POST /api/models/{type}/deploy (DS-only)
-│       ├── training.py      # POST /api/train/start (DS-only), GET /status|/log (SSE)|/jobs (history)
+│       ├── training.py      # POST /api/train/start (DS-only; 409s if a job is already
+│       │                    # in flight - concurrent runs would race the single
+│       │                    # is_active row per model type), GET /status|/log (SSE)|
+│       │                    # /jobs (history); fail_orphaned_jobs() called at startup
 │       ├── signals.py       # GET /api/signals|/candidates|/active|/evaluate/{name};
 │       │                    # POST /{name}/pool|/ignore|/restore, DELETE /{name}/pool
 │       ├── users.py         # GET/PUT /api/users/me[/config]
@@ -54,7 +58,10 @@ backend/
 │   │   ├── trainer.py        # run_full_training[_with_log](model_types, cutoff_date);
 │   │   │                     # canonicalizes model order regime->eia->returns, and
 │   │   │                     # load_features() sorts columns so every call returns the
-│   │   │                     # same order no matter which yearly Parquet files backed it
+│   │   │                     # same order no matter which yearly Parquet files backed it.
+│   │   │                     # All blocking work (_prepare_training_data, TabPFN fits,
+│   │   │                     # joblib.dump) runs via asyncio.to_thread - training no
+│   │   │                     # longer stalls the event loop, hence the 409 guard above
 │   │   ├── feature_prep.py    # to_model_matrix(): ffill weekly sources forward, drop warmup
 │   │   │                     # gaps - the one path that completes rows before any model
 │   │   ├── regime.py          # TabPFNClassifier wrapper, dominant_regime(), predict_regime[_batch]()
