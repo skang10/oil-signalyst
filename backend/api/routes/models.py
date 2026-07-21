@@ -10,13 +10,12 @@ from core.postprocess.data_monitor import (
     feature_missing_rates,
     model_input_freshness,
 )
+from core.models.metrics import PRIMARY_METRIC_KEY
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD
 from core.services.deploy_service import do_deploy
 from db.models import FeatureSnapshot, ModelVersion
 
 router = APIRouter(prefix="/api/models", tags=["models"])
-
-PRIMARY_METRIC_KEY = {"regime": "accuracy", "eia": "mae", "returns": "brier"}
 
 
 @router.get("/status")
@@ -38,22 +37,30 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
     psi = round(max(psi_scores.values()), 4) if psi_scores else None
     psi_alert = psi > PSI_RETRAIN_THRESHOLD if psi is not None else False
 
-    models_out = [
-        {
+    def _model_entry(version: ModelVersion) -> dict:
+        metrics_oos = version.metrics_oos or {}
+        # 'regime' has no entry in PRIMARY_METRIC_KEY: it describes the current
+        # market state rather than forecasting an observable outcome, so it is
+        # reported as a state indicator with no score. is_forecast drives that
+        # split in the UI.
+        metric_key = PRIMARY_METRIC_KEY.get(version.model_type)
+        return {
             "type": version.model_type,
             "version": version.version,
             "deployed_at": str(version.deployed_at) if version.deployed_at else None,
             "mlflow_run_id": version.mlflow_run_id,
+            "is_forecast": metric_key is not None,
             "metrics": {
-                "primary": (version.metrics_oos or {}).get(
-                    PRIMARY_METRIC_KEY.get(version.model_type, "accuracy")
-                ),
+                "primary": metrics_oos.get(metric_key) if metric_key else None,
+                "baseline": (metrics_oos.get("baseline") or {}).get(metric_key)
+                if metric_key
+                else None,
                 "psi": psi,
             },
             "psi_alert": psi_alert,
         }
-        for version in versions
-    ]
+
+    models_out = [_model_entry(version) for version in versions]
 
     live_status = await asyncio.to_thread(data_source_status)
     return {

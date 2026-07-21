@@ -3,6 +3,7 @@ from sklearn.metrics import mean_absolute_error
 from tabpfn_client import TabPFNRegressor
 
 from core.models.common import as_named_row
+from core.models.metrics import regressor_baselines
 from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
 
@@ -24,10 +25,15 @@ def build_eia_model(train_x, train_y, val_x, val_y):
     metrics_val = {
         "mae": round(float(mean_absolute_error(val_y, val_pred)), 4),
         "direction_acc": round(direction_accuracy(val_y, val_pred), 4),
+        # Signed model-minus-consensus, so NEGATIVE means the model wins. Note
+        # `consensus` is a rolling mean of the validation labels themselves and
+        # is not available at prediction time; metrics_val["baseline"] below is
+        # the train-derived reference the deployment gate actually uses.
         "mae_vs_consensus": round(
             float(mean_absolute_error(val_y, val_pred) - mean_absolute_error(val_y, consensus)),
             4,
         ),
+        "baseline": regressor_baselines(train_y, val_y),
     }
     return model, metrics_train, metrics_val
 

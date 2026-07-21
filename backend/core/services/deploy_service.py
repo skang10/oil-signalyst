@@ -17,13 +17,16 @@ async def do_deploy(model_type: str, job_id: str, db: AsyncSession) -> dict:
     from the tool handler (it requires Depends()-injected db/user and can't
     run outside a request context).
 
-    Note: run_full_training() already auto-activates each newly trained
-    model as soon as it finishes (see trainer.py::_save_model) - there is no
-    staged "candidate, not yet live" state in this system. So under normal
-    operation this is a no-op confirmation for the most recent job. Its real
-    utility is rollback: promoting a specific *older* completed job's
-    version back to active after a later training run has since superseded
-    it, and re-invalidating the ModelRegistry cache.
+    Two things bring a model live: run_full_training() auto-activates a newly
+    trained model, but only if it clears the deployment gate
+    (core/models/metrics.py::evaluate_deployment_gate). A gated model is saved
+    inactive, which makes this route the promotion path for it as well as the
+    rollback path to an older version.
+
+    Deploying a gated model is allowed on purpose - this is the human override.
+    The response carries a `warning` with the gate's reasons so the caller can
+    confirm rather than promote one by accident. Following this function's
+    existing convention, that rides in a 200 body rather than an HTTP error.
     """
     job = await db.get(TrainJob, job_id)
     if not job or job.status != "complete":
@@ -60,4 +63,12 @@ async def do_deploy(model_type: str, job_id: str, db: AsyncSession) -> dict:
     db.add(target)
 
     ModelRegistry.invalidate(model_type)
-    return {"status": "deployed", "version": target.version, "model_type": model_type}
+    result = {"status": "deployed", "version": target.version, "model_type": model_type}
+
+    gate = (target.metrics_oos or {}).get("deployment_gate") or {}
+    if gate.get("passed") is False:
+        result["warning"] = (
+            "This version did not pass the deployment gate and was promoted by override: "
+            + "; ".join(gate.get("reasons") or [])
+        )
+    return result

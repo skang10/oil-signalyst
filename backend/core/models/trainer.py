@@ -13,9 +13,9 @@ from core.config_paths import FEATURES_DIR, MLRUNS_DIR, MODELS_DIR
 from core.logging import get_logger
 from core.models.eia import build_eia_model
 from core.models.feature_prep import to_model_matrix
-from core.models.labels import build_eia_labels, build_regime_labels, build_return_bucket_labels
+from core.models.labels import build_eia_labels, build_return_bucket_labels
+from core.models.metrics import PRIMARY_METRIC_KEY, evaluate_deployment_gate
 from core.models.model_registry import ModelRegistry
-from core.models.regime import build_regime_model, predict_regime_batch
 from core.models.returns import build_returns_model
 from db.database import get_db
 from db.models import ModelVersion, TrainJob
@@ -29,11 +29,11 @@ VAL_START = "2024-01-01"
 VAL_END = "2024-12-31"
 
 MLFLOW_EXPERIMENT = "oil-signalyst"
-SHAP_BACKGROUND_SIZE = 30
 
-# Mirrors api/routes/models.py's PRIMARY_METRIC_KEY - duplicated rather than
-# imported since core/ shouldn't depend on api/.
-PRIMARY_METRIC_KEY = {"regime": "accuracy", "eia": "mae", "returns": "brier"}
+# 'regime' is absent by design: it describes the current market state rather
+# than forecasting anything with an observable outcome, so there is nothing to
+# train it against. See core/models/regime.py.
+TRAINABLE_MODEL_TYPES = ("eia", "returns")
 
 
 def _init_mlflow() -> None:
@@ -94,10 +94,6 @@ def _prepare_training_data(
     val_x = to_model_matrix(load_features(val_start, val_end))
     feature_version = FeatureEngine().feature_version
     labels = {
-        "regime": (
-            build_regime_labels(TRAIN_START, train_end),
-            build_regime_labels(val_start, val_end),
-        ),
         "eia": (build_eia_labels(TRAIN_START, train_end), build_eia_labels(val_start, val_end)),
         "returns": (
             build_return_bucket_labels(TRAIN_START, train_end),
@@ -123,17 +119,19 @@ async def run_full_training(
 ) -> dict:
     del triggered_by_user_id
     _init_mlflow()
-    selected = model_types or ["regime", "eia", "returns"]
-    # Canonical dependency order, regardless of the order the caller sent:
-    # the returns model consumes regime probabilities as input features
-    # (predict_regime_batch below), so regime must train before returns
-    # whenever both are selected. The frontend sends checkbox-click order,
-    # which crashed returns-first runs with "'NoneType' object has no
-    # attribute 'predict_proba'" - regime_model was still None in the loop.
-    selected = [t for t in ("regime", "eia", "returns") if t in selected]
+    selected = model_types or list(TRAINABLE_MODEL_TYPES)
+    # Order is now cosmetic. It used to be load-bearing: returns consumed regime
+    # probabilities, so regime had to train first. That coupling is gone, and
+    # with it the "'NoneType' object has no attribute 'predict_proba'" crash on
+    # returns-first runs.
+    selected = [t for t in TRAINABLE_MODEL_TYPES if t in selected]
     if not selected:
         raise ValueError(
-            f"No valid model types in {model_types} - expected any of 'regime', 'eia', 'returns'."
+            f"No valid model types in {model_types} - expected any of "
+            f"{', '.join(repr(t) for t in TRAINABLE_MODEL_TYPES)}. "
+            "'regime' is no longer trainable: it describes the current market "
+            "state rather than forecasting an observable outcome, so there is "
+            "nothing to score it against."
         )
     # cutoff_date shifts the train/val split boundary for a what-if backtest:
     # train up to cutoff, validate on everything since. Real k-fold
@@ -151,24 +149,11 @@ async def run_full_training(
     version = datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S")
 
     builders = {
-        "regime": build_regime_model,
         "eia": build_eia_model,
         "returns": build_returns_model,
     }
 
     results = {}
-    regime_model = None
-    regime_feature_list = None
-    if "returns" in selected and "regime" not in selected:
-        # Returns model needs regime probabilities as input features even
-        # when regime itself isn't being retrained this run - fall back to
-        # the currently deployed regime model. Its feature_list may differ
-        # (order or content) from the current FeatureEngine output, so it
-        # must travel with the model rather than being inferred from x_train.
-        regime_artifact = await ModelRegistry.get_active("regime")
-        regime_model = regime_artifact["model"]
-        regime_feature_list = regime_artifact["feature_list"]
-
     for model_type in selected:
         builder = builders[model_type]
         x_train, y_train = _align(train_x, labels[model_type][0])
@@ -187,16 +172,6 @@ async def run_full_training(
                 "Pick an earlier cutoff date - forward-looking labels need trailing "
                 "days of future data that don't exist yet this close to today."
             )
-
-        if model_type == "returns":
-            train_probs, val_probs = await asyncio.to_thread(
-                lambda: (
-                    predict_regime_batch(regime_model, x_train, regime_feature_list),
-                    predict_regime_batch(regime_model, x_val, regime_feature_list),
-                )
-            )
-            x_train = pd.concat([x_train, train_probs], axis=1)
-            x_val = pd.concat([x_val, val_probs], axis=1)
 
         with mlflow.start_run(run_name=f"{model_type}_{version}") as run:
             mlflow.log_params(
@@ -219,19 +194,19 @@ async def run_full_training(
             model, metrics_train, metrics_val = await asyncio.to_thread(
                 builder, x_train, y_train, x_val, y_val
             )
-            if model_type == "regime":
-                regime_model = model
-                regime_feature_list = list(x_train.columns)
+            # Classifiers report how many distinct classes the validation window
+            # actually contained; a single-class window makes accuracy vacuous.
+            n_val_classes = None if model_type == "eia" else int(pd.Series(y_val).nunique())
+            gate = evaluate_deployment_gate(
+                model_type, metrics_val, n_val_rows=len(x_val), n_val_classes=n_val_classes
+            )
+            metrics_val["deployment_gate"] = gate
+
             _log_metrics_flat(metrics_train, prefix="train.")
             _log_metrics_flat(metrics_val, prefix="val.")
             mlflow.log_dict(metrics_train, "metrics_train.json")
             mlflow.log_dict(metrics_val, "metrics_val.json")
 
-            extra_artifact = (
-                {"shap_background": x_train.tail(SHAP_BACKGROUND_SIZE)}
-                if model_type == "regime"
-                else None
-            )
             results[model_type] = await _save_model(
                 model_type=model_type,
                 version=version,
@@ -240,11 +215,17 @@ async def run_full_training(
                 metrics_train=metrics_train,
                 metrics_val=metrics_val,
                 mlflow_run_id=run.info.run_id,
-                extra_artifact=extra_artifact,
+                activate=gate["passed"],
             )
             mlflow.log_artifact(results[model_type]["file_path"])
             if on_progress:
-                await on_progress(f"{model_type} model trained: {metrics_val}")
+                if gate["passed"]:
+                    await on_progress(f"{model_type} model trained and deployed: {metrics_val}")
+                else:
+                    await on_progress(
+                        f"{model_type} model trained but NOT deployed - "
+                        f"{'; '.join(gate['reasons'])}"
+                    )
 
     return results
 
@@ -257,8 +238,16 @@ async def _save_model(
     metrics_train: dict,
     metrics_val: dict,
     mlflow_run_id: str | None = None,
-    extra_artifact: dict | None = None,
+    activate: bool = True,
 ) -> dict:
+    """Persists the artifact and its ModelVersion row.
+
+    `activate=False` (the deployment gate rejected it) still writes the row and
+    the joblib file - the run stays inspectable in the training history, and an
+    operator can promote it by hand through deploy_service. It just does not
+    become live on its own, which is how an accuracy-0.0 model trained on a
+    3-row validation window silently replaced production twice.
+    """
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     file_path = MODELS_DIR / f"{model_type}_{version}.joblib"
     artifact = {
@@ -266,15 +255,15 @@ async def _save_model(
         "feature_list": feature_list,
         "model_type": model_type,
         "version": version,
-        **(extra_artifact or {}),
     }
     await asyncio.to_thread(joblib.dump, artifact, file_path)
 
     async with get_db() as db:
-        await db.execute(
-            text("UPDATE model_versions SET is_active = 0 WHERE model_type = :model_type"),
-            {"model_type": model_type},
-        )
+        if activate:
+            await db.execute(
+                text("UPDATE model_versions SET is_active = 0 WHERE model_type = :model_type"),
+                {"model_type": model_type},
+            )
         db.add(
             ModelVersion(
                 model_type=model_type,
@@ -284,19 +273,24 @@ async def _save_model(
                 metrics_train=metrics_train,
                 metrics_oos=metrics_val,
                 feature_list=feature_list,
-                is_active=True,
-                deployed_at=datetime.now(UTC).replace(tzinfo=None),
+                is_active=activate,
+                deployed_at=datetime.now(UTC).replace(tzinfo=None) if activate else None,
                 mlflow_run_id=mlflow_run_id,
             )
         )
 
-    ModelRegistry.invalidate(model_type)
-    logger.info("Model trained", extra={"model_type": model_type, "metrics": metrics_val})
+    if activate:
+        ModelRegistry.invalidate(model_type)
+    logger.info(
+        "Model trained",
+        extra={"model_type": model_type, "metrics": metrics_val, "deployed": activate},
+    )
     return {
         "file_path": str(file_path),
         "metrics": metrics_val,
         "version": version,
         "mlflow_run_id": mlflow_run_id,
+        "deployed": activate,
     }
 
 
@@ -369,10 +363,28 @@ async def run_full_training_with_log(
             (new_returns_brier - old_returns_brier) / old_returns_brier * 100, 1
         )
 
+    # Baselines travel in their own map rather than as extra old/new_metrics
+    # keys: ModelCompareCard builds its table rows from those dicts, so an added
+    # key would render as a bogus row carrying the run-level improvement_pct.
+    baselines = {
+        f"{model_type}_{PRIMARY_METRIC_KEY[model_type]}": (
+            new_metrics_by_type[model_type].get("baseline") or {}
+        ).get(PRIMARY_METRIC_KEY[model_type])
+        for model_type in result
+    }
+    blocked = {
+        model_type: (new_metrics_by_type[model_type].get("deployment_gate") or {}).get("reasons")
+        for model_type, info in result.items()
+        if not info.get("deployed", True)
+    }
+
     return {
         "old_metrics": old_metrics,
         "new_metrics": new_metrics,
+        "baselines": baselines,
         "improvement_pct": improvement_pct,
         "versions": {model_type: info["version"] for model_type, info in result.items()},
+        "deployed": {model_type: info.get("deployed", True) for model_type, info in result.items()},
+        "blocked_reasons": blocked,
         "mlflow_run_id": (result.get("returns") or {}).get("mlflow_run_id"),
     }

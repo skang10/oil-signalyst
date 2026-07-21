@@ -9,7 +9,7 @@ from sqlalchemy import desc, func, select
 
 from api.dependencies import CurrentUser, DbSession, DSOnly
 from auth.jwt import JWTError, decode_access_token
-from core.models.trainer import run_full_training_with_log
+from core.models.trainer import TRAINABLE_MODEL_TYPES, run_full_training_with_log
 from db.database import AsyncSessionLocal, get_db
 from db.models import ModelVersion, TrainJob, User
 
@@ -43,7 +43,7 @@ async def fail_orphaned_jobs() -> int:
 
 
 class TrainStartRequest(BaseModel):
-    model_types: list[str] = ["regime", "eia", "returns"]
+    model_types: list[str] = list(TRAINABLE_MODEL_TYPES)
     cutoff_date: str | None = None
     # Not yet implemented - this project trains a single train/val split, not
     # real k-fold cross-validation. Accepted so the frontend's config form
@@ -60,7 +60,20 @@ async def start_training(
     body: TrainStartRequest = TrainStartRequest(),
 ) -> dict:
     job_id = str(uuid.uuid4())[:8]
-    model_types = body.model_types or ["regime", "eia", "returns"]
+    model_types = body.model_types or list(TRAINABLE_MODEL_TYPES)
+
+    unknown = [t for t in model_types if t not in TRAINABLE_MODEL_TYPES]
+    if unknown:
+        detail = f"Not trainable: {', '.join(unknown)}."
+        if "regime" in unknown:
+            detail += (
+                " The regime model describes the current market state rather than "
+                "forecasting an observable outcome - its only reference was a hardcoded "
+                "table of transition dates, so there is nothing to score it against. "
+                "It now serves predictions from a frozen artifact and is not retrained."
+            )
+        detail += f" Trainable types: {', '.join(TRAINABLE_MODEL_TYPES)}."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     # One run at a time. Until the trainer was moved off the event loop the
     # blocking work serialized concurrent runs by accident; now that they can
@@ -156,15 +169,23 @@ def _improvement_summary(result: dict | None) -> dict | None:
 
 def _deploy_state(job: TrainJob, active_versions: dict[str, str]) -> str:
     """'live' when every version this job trained is still the active one,
-    'superseded' when none are, 'partial' for a mix. 'none' for jobs that
-    never produced versions (failed / still running)."""
-    versions = (job.result or {}).get("versions") or {}
+    'superseded' when none are, 'partial' for a mix. 'blocked' when the
+    deployment gate stopped every model this job produced from going live at
+    all - distinct from 'superseded', which means it *was* live and a later run
+    replaced it. 'none' for jobs that never produced versions."""
+    result = job.result or {}
+    versions = result.get("versions") or {}
     if job.status != "complete" or not versions:
         return "none"
     live = sum(1 for t, v in versions.items() if active_versions.get(t) == v)
     if live == len(versions):
         return "live"
-    return "partial" if live else "superseded"
+    if live:
+        return "partial"
+    deployed = result.get("deployed") or {}
+    if deployed and not any(deployed.values()):
+        return "blocked"
+    return "superseded"
 
 
 @router.get("/jobs")
@@ -218,6 +239,13 @@ async def list_training_jobs(
                 "summary": _improvement_summary(j.result),
                 "deploy_state": _deploy_state(j, active_versions),
                 "error": (j.result or {}).get("error"),
+                # Flattened per-model gate reasons, so the history row can say
+                # *why* a run was blocked without fetching the full detail.
+                "blocked_reasons": [
+                    f"{model_type}: {reason}"
+                    for model_type, reasons in ((j.result or {}).get("blocked_reasons") or {}).items()
+                    for reason in (reasons or [])
+                ],
                 # Tail only: enough for the dashboard's "Last Training Run"
                 # card without shipping every job's full log in a list.
                 "log_tail": (j.log_lines or [])[-3:],
