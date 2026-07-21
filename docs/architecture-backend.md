@@ -9,11 +9,11 @@ This file is the backend deep-dive. See `docs/architecture.md` for the system-le
 ```
 backend/
 ├── api/
-│   ├── main.py              # FastAPI app factory, lifespan (init_db, default user,
-│   │                        # fire-and-forget signal-chart prewarm), CORS
+│   ├── main.py              # FastAPI app factory, lifespan (init_db, default user, two
+│   │                        # fire-and-forget prewarms: signal charts + freshness
+│   │                        # snapshot), CORS
 │   ├── dependencies.py      # DbSession, CurrentUser (JWT Bearer), role guards
 │   │                        # (ResearcherOrDS, DSOnly)
-│   ├── auth/                # JWT encode/decode, password hashing (bcrypt)
 │   └── routes/
 │       ├── health.py        # GET /health
 │       ├── auth.py          # POST /api/auth/login|refresh|logout (JWT + httpOnly cookie)
@@ -27,9 +27,13 @@ backend/
 │       ├── ws.py            # WebSocket /ws/price (live WTI ticker, 30s poll)
 │       └── agent.py         # POST /api/agent/message|/confirm/{id}|/cancel/{id}, GET /stream (SSE)
 │
+├── auth/                    # JWT encode/decode (jwt.py), password hashing (password.py);
+│                            # top-level, not under api/ - imported by api/dependencies.py
+│
 ├── core/
 │   ├── config.py            # Settings (env vars incl. TABPFN_API_KEY, OPENAI_API_KEY, JWT_SECRET)
-│   ├── config_paths.py      # Resolved paths: data/, config/, models/, mlruns/, features/
+│   ├── config_paths.py      # Resolved paths: data/, config/, models/, mlruns/, features/,
+│   │                        # FRESHNESS_SNAPSHOT (data/freshness_snapshot.json)
 │   ├── cache.py             # In-memory TTL cache (DataRegistry + signal-chart caches)
 │   ├── exceptions.py        # ModelNotFoundError
 │   ├── logging.py           # JSON structured logging
@@ -38,9 +42,19 @@ backend/
 │   │   ├── registry.py      # DataRegistry: fetch/fetch_all, alignment, clear_cache()
 │   │   └── sources/         # yahoo.py, eia.py, fred.py, cftc.py adapters
 │   │
+│   ├── market/               # Market Data chart series (GET /api/market/{series_id})
+│   │   ├── fetcher.py        # Six chart fetchers (wti price, brent spread, EIA inventory,
+│   │   │                     # futures curve, OVX/VIX, COT net) over one module-level
+│   │   │                     # _REGISTRY so the 4h TTL cache persists across requests;
+│   │   │                     # futures_curve bypasses DataRegistry (own 30m cache,
+│   │   │                     # batched yfinance download)
+│   │   └── series.py         # SERIES dict: series_id -> fetcher, the route's whitelist
+│   │
 │   ├── models/               # Training + inference for the 3 production models
 │   │   ├── trainer.py        # run_full_training[_with_log](model_types, cutoff_date);
-│   │   │                     # canonicalizes model order regime->eia->returns
+│   │   │                     # canonicalizes model order regime->eia->returns, and
+│   │   │                     # load_features() sorts columns so every call returns the
+│   │   │                     # same order no matter which yearly Parquet files backed it
 │   │   ├── feature_prep.py    # to_model_matrix(): ffill weekly sources forward, drop warmup
 │   │   │                     # gaps - the one path that completes rows before any model
 │   │   ├── regime.py          # TabPFNClassifier wrapper, dominant_regime(), predict_regime[_batch]()
@@ -63,7 +77,9 @@ backend/
 │   │   ├── stress_test.py     # Re-inference over 3 historical crisis scenarios
 │   │   ├── signal_charts.py   # Signal-Evaluate chart series; shared DataRegistry + chart cache
 │   │   │                      # + refresh_signal_charts() prewarm (startup + post-pipeline)
-│   │   ├── data_monitor.py    # Live cadence-aware per-source freshness + feature coverage/missing-rate
+│   │   ├── data_monitor.py    # Cadence-aware per-source freshness, served from the on-disk
+│   │   │                      # snapshot (write_freshness_snapshot / data_source_status);
+│   │   │                      # + feature coverage / missing-rate from the parquet
 │   │   └── outcome_backfill.py# Fills Prediction.actual_return once realized returns exist
 │   │
 │   ├── agent/                 # DS Agent: real OpenAI Chat Completions, multi-step tool use
@@ -92,7 +108,8 @@ backend/
 ├── scheduler/
 │   ├── runner.py             # APScheduler process: daily pipeline (cron) + weekly signal scan
 │   └── jobs.py                # run_daily_pipeline(): snapshot -> PSI -> predict -> backfill ->
-│                             # _maybe_auto_retrain() -> refresh_signal_charts()
+│                             # _maybe_auto_retrain(), then fires refresh_signal_charts()
+│                             # and write_freshness_snapshot() concurrently (off-thread)
 │
 └── scripts/
     └── backfill.py            # One-time historical feature backfill (2010-2024) into Parquet
@@ -128,7 +145,10 @@ them, so the only real difference between them is *when* each was captured.
 flowchart LR
     APIs[Yahoo / EIA / FRED / CFTC] -->|on demand| Reg[DataRegistry]
     Reg -->|4h in-memory TTL cache| Reg
-    Reg --> Live[Live consumers:<br/>WS ticker, Data-Source-Status,<br/>Signal-Evaluate charts]
+    Reg --> Live[Live consumers:<br/>WS ticker, Market-Data charts,<br/>Signal-Evaluate charts]
+    Reg --> Warm[write_freshness_snapshot<br/>off-thread: startup + daily job]
+    Warm --> Fresh[(freshness_snapshot.json)]
+    Fresh --> Status[Data-Source-Status panel<br/>reads snapshot in ms]
     Reg --> Build[FeatureEngine.build<br/>honest matrix, partial tail]
     Build --> Parquet[(features_YYYY.parquet<br/>honest, per-year)]
     Build --> Prep[to_model_matrix<br/>ffill + dropna]
@@ -139,8 +159,9 @@ flowchart LR
 
 **1. Live `DataRegistry` (`core/data/registry.py`).** `fetch`/`fetch_all` call
 the Yahoo/EIA/FRED/CFTC adapters on demand, behind a **4-hour in-memory TTL
-cache** (`core/cache.py`; shared module-level registries in `signal_charts.py`
-and `data_monitor.py` so repeat page views are free). No cron pre-fetch is
+cache** (`core/cache.py`; shared module-level registries in `signal_charts.py`,
+`data_monitor.py` and `core/market/fetcher.py` so repeat page views are free -
+one registry per module, not one per request). No cron pre-fetch is
 needed - a read is always as fresh as the source. Only CFTC caches to disk
 (`data/raw/cftc/*.parquet`) and only for *past* years; the current year is
 always re-downloaded. `_align` resamples to daily, applies `lag_days`, and
@@ -172,13 +193,34 @@ pipeline scores the *ffilled* freshest row but persists the *honest* (un-filled)
 row to parquet, so monitoring still sees the real gaps.
 
 **Freshness reporting is two distinct signals.** The Data Monitor's
-*Data-Source-Status* panel reads the **live** registry and judges each source
-against its own expected cadence (`data_monitor._max_lag_days`: daily ~4d,
-weekly ~14d, per-source `max_lag_days` override) - it answers "are the feeds
-alive?". *Feature Coverage / Missing-rate* reads the **parquet** and answers
-"how complete is what the models consume?". The two diverge whenever the
-parquet lags the live feeds, which is why they are reported separately rather
-than collapsed into one number.
+*Data-Source-Status* panel judges each source against its own expected cadence
+(`data_monitor._max_lag_days`: daily ~4d, weekly ~14d, per-source
+`max_lag_days` override) - it answers "are the feeds alive?". *Feature
+Coverage / Missing-rate* reads the **parquet** and answers "how complete is
+what the models consume?". The two diverge whenever the parquet lags the live
+feeds, which is why they are reported separately rather than collapsed into
+one number.
+
+**Data-Source-Status is served from a snapshot, not a live fetch.** Measuring
+every source's true last-print means a serial, unbounded fetch of all of them
+(EIA especially) - roughly **20 minutes cold**, far too slow for a page view.
+So `write_freshness_snapshot()` does that measurement **off the request path**
+and persists `{source: last_updated}` to `data/freshness_snapshot.json`
+(`config_paths.FRESHNESS_SNAPSHOT`). It runs in two places, both off-thread via
+`asyncio.to_thread`: a fire-and-forget task at API startup (`api/main.py`
+lifespan) and at the end of each `run_daily_pipeline` (`scheduler/jobs.py`), so
+the snapshot tracks every daily run. `data_source_status()` then just reads the
+file in milliseconds. Two consequences worth knowing:
+
+- Each write **merges over the prior snapshot** rather than replacing it, so a
+  source that fails or times out on one pass keeps its last-known-good
+  timestamp instead of flipping to "unavailable".
+- When **no** snapshot exists yet (first-ever boot), the panel falls back to a
+  *bounded* live measurement so the page still renders in seconds; the complete
+  snapshot lands shortly after and subsequent views use it.
+
+The API and scheduler processes coordinate only through this shared file - the
+scheduler writes it, the API reads it, no IPC.
 
 ## Data Flow: Daily Pipeline
 

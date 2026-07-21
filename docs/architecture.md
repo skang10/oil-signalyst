@@ -120,6 +120,7 @@ flowchart LR
     Store --> Backfill[Backfill actual_return on past predictions]
     Backfill --> AutoRetrain[Maybe auto-retrain per users.retrain_mode]
     AutoRetrain --> Prewarm[Rebuild Signal-Evaluate chart cache]
+    AutoRetrain --> Fresh[Write per-source freshness snapshot]
 ```
 
 ## Persistence Model

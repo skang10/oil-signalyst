@@ -30,6 +30,8 @@ frontend/
 │   │   │                      # refresh cookie, transparent 401 -> refresh -> retry
 │   │   ├── swr-keys.ts        # Centralised URL builders for SWR cache keys
 │   │   ├── categoryColors.ts  # Feature-category -> badge color, shared by Data Monitor + Signals
+│   │   ├── price-store.ts     # zustand store: WTI price/changePct + Brent + spread, filled
+│   │   │                      # by usePriceTicker's /ws/price feed, read anywhere
 │   │   └── utils.ts           # cn(), formatUsd(), etc.
 │   │
 │   ├── hooks/                 # One SWR/React Query hook per backend endpoint
