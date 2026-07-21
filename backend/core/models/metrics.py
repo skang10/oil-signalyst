@@ -72,6 +72,26 @@ def beats_baseline(metric_key: str, value: float | None, baseline: float | None)
     return value > baseline if metric_key in HIGHER_IS_BETTER else value < baseline
 
 
+def deployment_gate_criteria() -> list[dict]:
+    """Human-readable description of what evaluate_deployment_gate enforces, for
+    a read-only UI panel. Kept next to the logic so the two can't drift - the UI
+    renders this rather than hardcoding the rules."""
+    return [
+        {
+            "label": "Test window size",
+            "rule": f"at least {MIN_VAL_ROWS} rows",
+        },
+        {
+            "label": "Distinct classes",
+            "rule": "at least 2 (classifiers only)",
+        },
+        {
+            "label": "Beats baseline",
+            "rule": "returns: Brier below climatology · eia: MAE below train-mean",
+        },
+    ]
+
+
 def evaluate_deployment_gate(
     model_type: str,
     metrics_val: dict,

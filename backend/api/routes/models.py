@@ -11,7 +11,7 @@ from core.postprocess.data_monitor import (
     model_input_freshness,
     training_dataset_summary,
 )
-from core.models.metrics import PRIMARY_METRIC_KEY
+from core.models.metrics import PRIMARY_METRIC_KEY, deployment_gate_criteria
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_current_psi
 from core.services.deploy_service import do_deploy
 from db.models import ModelVersion
@@ -77,6 +77,8 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
         # The retrain threshold, so the drift legend states the app's real
         # cutoff rather than hardcoding one that could drift out of sync.
         "psi_threshold": PSI_RETRAIN_THRESHOLD,
+        # Read-only description of the auto-deploy gate for the UI panel.
+        "deployment_gate": deployment_gate_criteria(),
     }
 
 

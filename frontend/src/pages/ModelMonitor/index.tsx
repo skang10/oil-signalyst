@@ -11,17 +11,21 @@ import { MODEL_KIND, MODEL_LABEL, fmt, isUnhealthy, metricText } from '@/lib/mod
 
 export default function ModelMonitorPage() {
   const { role } = useRole();
-  const { data: report, error: reportError } = useReport(role);
+  // The report (SHAP drivers, stress test) needs a daily prediction, but the
+  // model cards / PSI / gate only need modelStatus - so a missing report (e.g.
+  // right after a data reset, before the pipeline runs) shouldn't blank the
+  // whole page. Only a status failure means there's genuinely nothing to show.
+  const { data: report } = useReport(role);
   const { data: modelStatus, error: statusError } = useModelStatus();
-  if (reportError || statusError)
+  if (statusError)
     return (
       <div className="p-[18px] text-text-muted text-[12px]">
-        No model data available yet — run the daily pipeline to produce a first prediction.
+        Model status unavailable — {String(statusError)}
       </div>
     );
-  if (!modelStatus || !report) return <div className="p-[18px] text-text-muted text-[12px]">Loading...</div>;
+  if (!modelStatus) return <div className="p-[18px] text-text-muted text-[12px]">Loading...</div>;
 
-  const shapDrivers = report.regime.shap_drivers;
+  const shapDrivers = report?.regime.shap_drivers ?? [];
   const maxShap = Math.max(...shapDrivers.map((d) => Math.abs(d.contribution)), 1e-9);
 
   return (
@@ -44,6 +48,30 @@ export default function ModelMonitorPage() {
           </div>
         ))}
       </div>
+
+      {/* Read-only: what a freshly trained model must clear to auto-deploy.
+          Rules come from the backend (deployment_gate_criteria) so the panel
+          can't drift from the logic, and are deliberately not editable - the
+          gate is a safety rail, and a specific model can still be promoted by
+          hand through the training history if the operator means it. */}
+      <Card className="mb-3">
+        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[8px]">
+          Deployment Gate
+        </div>
+        <div className="text-[11px] text-text-muted mb-[10px]">
+          A newly trained model deploys automatically only if it clears all of these.
+          A blocked model is still saved, and can be deployed by hand from the training history.
+        </div>
+        <div className="flex flex-col gap-[6px]">
+          {modelStatus.deployment_gate.map((c) => (
+            <div key={c.label} className="flex items-baseline gap-[8px] text-[12px]">
+              <IconCircleCheck size={13} stroke={1.75} className="text-text-muted shrink-0 translate-y-[2px]" />
+              <span className="text-text-secondary w-[130px] shrink-0">{c.label}</span>
+              <span className="text-text-primary">{c.rule}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-2 gap-[10px] mb-3">
         <Card>
@@ -71,19 +99,25 @@ export default function ModelMonitorPage() {
 
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Feature Importance (SHAP)</div>
-          {shapDrivers.map((d) => (
-            <SHAPBar
-              key={d.name}
-              name={d.name}
-              widthPct={(Math.abs(d.contribution) / maxShap) * 80}
-              displayValue={d.contribution.toFixed(2)}
-              color="accent"
-            />
-          ))}
+          {shapDrivers.length > 0 ? (
+            shapDrivers.map((d) => (
+              <SHAPBar
+                key={d.name}
+                name={d.name}
+                widthPct={(Math.abs(d.contribution) / maxShap) * 80}
+                displayValue={d.contribution.toFixed(2)}
+                color="accent"
+              />
+            ))
+          ) : (
+            <div className="text-[11px] text-text-muted">
+              No prediction yet — run the daily pipeline to populate feature importances.
+            </div>
+          )}
         </Card>
       </div>
 
-      <StressTestCard title="Stress Test" />
+      {report && <StressTestCard title="Stress Test" />}
     </div>
   );
 }

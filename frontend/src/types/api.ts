@@ -191,6 +191,10 @@ export interface ModelStatus {
   /** PSI at or above which a feature is flagged for retrain (backend
    *  PSI_RETRAIN_THRESHOLD). Drives the drift legend's cutoff. */
   psi_threshold: number;
+  /** Read-only description of the auto-deploy gate (backend
+   *  deployment_gate_criteria). Every rule must pass for a trained model to
+   *  activate on its own. */
+  deployment_gate: { label: string; rule: string }[];
 }
 
 export interface TrainJob {
