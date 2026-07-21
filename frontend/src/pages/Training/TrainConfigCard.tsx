@@ -3,8 +3,12 @@ import Card from '@/components/shared/Card';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { TrainParams } from '@/types/api';
 
+// 'regime' is deliberately absent - it describes the current market state
+// rather than forecasting an observable outcome, so there is nothing to train
+// it against and the backend rejects it (api/routes/training.py). It now
+// serves from a frozen artifact. These two forecast against real outcomes:
+// the inventory change EIA later publishes, and the realized 20-day return.
 const MODEL_OPTIONS: { type: string; label: string }[] = [
-  { type: 'regime', label: 'Regime' },
   { type: 'eia', label: 'EIA Forecast' },
   { type: 'returns', label: 'Return Dist.' },
 ];

@@ -14,6 +14,7 @@ export default function TrainingPage() {
   const { data: modelStatus } = useModelStatus();
   const [jobId, setJobId] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [startError, setStartError] = useState<string | null>(null);
   const { mutateAsync: startTraining, isPending } = useStartTraining();
   const { data: job } = useTrainStatus(jobId);
 
@@ -25,11 +26,20 @@ export default function TrainingPage() {
     if (job?.status === 'complete' || job?.status === 'failed') refreshTrainJobs();
   }, [job?.status]);
 
+  // Without the catch, a rejected mutation from an onClick handler becomes an
+  // unhandled promise rejection: the button just un-disables and the user gets
+  // no feedback at all. The 409 from the single-run guard and the 400 for a
+  // non-trainable model type both land here.
   async function handleStart(params: TrainParams) {
-    const newJob = await startTraining(params);
-    setJobId(newJob.job_id);
-    setLogLines([]);
-    refreshTrainJobs();
+    setStartError(null);
+    try {
+      const newJob = await startTraining(params);
+      setJobId(newJob.job_id);
+      setLogLines([]);
+      refreshTrainJobs();
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : 'Failed to start training.');
+    }
   }
 
   const alertModel = modelStatus?.models.find((m) => m.psi_alert);
@@ -50,11 +60,23 @@ export default function TrainingPage() {
         <AutoTriggerCard />
       </div>
 
+      {startError && <AlertBanner>Could not start training — {startError}</AlertBanner>}
+
       {job?.status === 'failed' && (
         <AlertBanner>
           Training job {job.job_id} failed{job.result?.error ? ` — ${job.result.error}` : ''}
         </AlertBanner>
       )}
+
+      {job?.status === 'complete' && job.result?.blocked_reasons &&
+        Object.keys(job.result.blocked_reasons).length > 0 && (
+          <AlertBanner>
+            Trained but not deployed —{' '}
+            {Object.entries(job.result.blocked_reasons)
+              .map(([type, reasons]) => `${type}: ${(reasons ?? []).join('; ')}`)
+              .join(' | ')}
+          </AlertBanner>
+        )}
 
       <TrainLogCard lines={logLines} />
 

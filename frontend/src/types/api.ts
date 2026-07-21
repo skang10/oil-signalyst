@@ -96,8 +96,22 @@ export interface ModelStatus {
     // persisted (see api/routes/models.py).
     deployed_at: string | null;
     mlflow_run_id: string | null;
+    /**
+     * False for 'regime', which describes the current market state rather than
+     * forecasting anything with an observable outcome - so it carries no score
+     * and must not be rendered alongside eia/returns as if it did. See
+     * core/models/metrics.py::PRIMARY_METRIC_KEY.
+     */
+    is_forecast: boolean;
     metrics: {
       primary: number | null;
+      /**
+       * What the primary metric has to beat to mean anything: majority-class
+       * accuracy / climatology Brier for classifiers, train-mean MAE for eia.
+       * Null for non-forecast models and for versions trained before baselines
+       * were recorded.
+       */
+      baseline: number | null;
       psi: number | null;
     };
     psi_alert: boolean;
@@ -143,8 +157,17 @@ export interface TrainJob {
     // A failed job's result carries only `error`.
     old_metrics?: Record<string, number | null>;
     new_metrics?: Record<string, number | null>;
+    /**
+     * Same keys as new_metrics. Deliberately a separate map rather than extra
+     * new_metrics entries, which would render as bogus comparison rows.
+     */
+    baselines?: Record<string, number | null>;
     improvement_pct?: number | null;
     versions?: Record<string, string>;
+    /** Per model type: did it clear the deployment gate and go live? */
+    deployed?: Record<string, boolean>;
+    /** Per model type: why the gate blocked it. Absent when nothing was blocked. */
+    blocked_reasons?: Record<string, string[]>;
     error?: string;
   };
   // Present only when fetched with ?include_log=true (history detail panel).
@@ -168,9 +191,13 @@ export interface TrainJobSummary {
   // training where every old metric is null.
   summary: { improved: number; of: number } | null;
   // 'live': every version this job trained is still active; 'partial': some
-  // are; 'superseded': none are; 'none': job produced no versions.
-  deploy_state: 'live' | 'partial' | 'superseded' | 'none';
+  // are; 'blocked': the deployment gate stopped all of them going live at all;
+  // 'superseded': they were live and a later run replaced them; 'none': job
+  // produced no versions.
+  deploy_state: 'live' | 'partial' | 'blocked' | 'superseded' | 'none';
   error: string | null;
+  /** Flattened "modelType: reason" strings when deploy_state is 'blocked'. */
+  blocked_reasons: string[];
   log_tail: string[];
 }
 
@@ -198,8 +225,10 @@ export interface HistoryPrediction {
 
 export interface HistoryResponse {
   predictions: HistoryPrediction[];
+  // Only outcomes that are actually observed. Regime is absent by design: its
+  // "accuracy" compared the model against a hardcoded table of transition
+  // dates, which measures agreement with a constant, not accuracy.
   rolling_accuracy: {
-    regime_directional_acc: number;
     eia_directional_acc: number;
     returns_brier: number;
   };

@@ -46,13 +46,11 @@ export default function HistoryPage() {
         <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
           Model Accuracy (Rolling 30 Days)
         </div>
+        {/* No regime tile: its "accuracy" compared the model against a
+            hardcoded table of transition dates rather than an observed
+            outcome, so it sat here looking comparable to the two below when
+            it measured something else entirely. */}
         <div className="flex gap-6">
-          <div>
-            <div className="text-[11px] text-text-muted">Regime Directional Acc.</div>
-            <div className="text-[20px] font-medium mt-[2px]">
-              {Math.round((history?.rolling_accuracy.regime_directional_acc ?? 0) * 100)}%
-            </div>
-          </div>
           <div>
             <div className="text-[11px] text-text-muted">EIA Directional Acc.</div>
             <div className="text-[20px] font-medium mt-[2px]">

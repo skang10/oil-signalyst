@@ -41,9 +41,18 @@ function ResultCell({ job }: { job: TrainJobSummary }) {
   );
 }
 
-function DeployCell({ state }: { state: TrainJobSummary['deploy_state'] }) {
+function DeployCell({ job }: { job: TrainJobSummary }) {
+  const state = job.deploy_state;
   if (state === 'live') return <span className="text-success font-medium">● Live</span>;
   if (state === 'partial') return <span className="text-warning">◐ Partial</span>;
+  // 'blocked' is not 'superseded': it never went live at all, because the
+  // deployment gate rejected it. The reason rides in the tooltip.
+  if (state === 'blocked')
+    return (
+      <span className="text-warning" title={job.blocked_reasons?.join('\n')}>
+        ⨯ Blocked
+      </span>
+    );
   if (state === 'superseded') return <span className="text-text-muted">Superseded</span>;
   return <span className="text-text-muted">—</span>;
 }
@@ -145,7 +154,7 @@ export default function TrainingHistoryCard() {
                   <div className="text-right tabular-nums text-text-secondary text-[11.5px]">{fmtDuration(job.duration_seconds)}</div>
                   <div className="text-right text-[11.5px] min-w-0"><ResultCell job={job} /></div>
                   <div><TrainStatusBadge status={job.status} /></div>
-                  <div className="text-[11px]"><DeployCell state={job.deploy_state} /></div>
+                  <div className="text-[11px]"><DeployCell job={job} /></div>
                 </div>
                 {open && <RunDetailPanel job={job} />}
               </Fragment>

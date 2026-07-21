@@ -62,8 +62,45 @@ async function request<T>(path: string, init?: RequestInit, _retried = false): P
     throw new Error('401 - session expired');
   }
 
-  if (!res.ok) throw new Error(`${res.status} ${path}`);
+  if (!res.ok) throw await ApiError.fromResponse(res, path);
   return res.json() as Promise<T>;
+}
+
+/**
+ * Carries the server's explanation instead of discarding it. The old
+ * `throw new Error(\`${status} ${path}\`)` meant a 409 "a training job is
+ * already running" or a 400 "regime is not trainable" reached the UI as an
+ * opaque status code, so callers had nothing to show the user.
+ */
+export class ApiError extends Error {
+  // Explicit fields rather than constructor parameter properties: tsconfig
+  // sets erasableSyntaxOnly, which disallows the shorthand.
+  status: number;
+  detail: string;
+
+  constructor(status: number, detail: string, path: string) {
+    super(detail || `${status} ${path}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+
+  static async fromResponse(res: Response, path: string): Promise<ApiError> {
+    let detail = '';
+    try {
+      const body = await res.json();
+      // FastAPI puts the message in `detail`; it is a list for 422s.
+      detail =
+        typeof body?.detail === 'string'
+          ? body.detail
+          : body?.detail
+            ? JSON.stringify(body.detail)
+            : '';
+    } catch {
+      // Non-JSON error body - fall back to the status line.
+    }
+    return new ApiError(res.status, detail, path);
+  }
 }
 
 export const api = {

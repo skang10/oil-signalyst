@@ -6,27 +6,7 @@ import Card from '@/components/shared/Card';
 import LogMono from '@/components/shared/LogMono';
 import { TriggerBadge, TrainStatusBadge } from '@/components/shared/TrainBadges';
 import { cn } from '@/lib/utils';
-import type { ModelStatus } from '@/types/api';
-
-const MODEL_LABEL: Record<ModelStatus['models'][number]['type'], string> = {
-  regime: 'Regime Model',
-  eia: 'EIA Forecast Model',
-  returns: 'Returns Model',
-};
-
-// metrics.primary / metrics.psi are null until first recorded (types/api.ts) -
-// show a placeholder instead of crashing on null.toFixed().
-function fmt(value: number | null, digits: number, scale = 1): string {
-  return value === null ? '—' : (value * scale).toFixed(digits);
-}
-
-function metricText(m: ModelStatus['models'][number]): string {
-  const psi = `PSI ${fmt(m.metrics.psi, 2)}`;
-  if (m.psi_alert) return `${psi} — Alerts`;
-  if (m.type === 'regime') return `Acc ${fmt(m.metrics.primary, 1, 100)}% · ${psi}`;
-  if (m.type === 'eia') return `MAE ${fmt(m.metrics.primary, 1)} MB · ${psi}`;
-  return `Brier ${fmt(m.metrics.primary, 3)} · ${psi}`;
-}
+import { MODEL_KIND, MODEL_LABEL, metricText } from '@/lib/model-metrics';
 
 export default function DSView() {
   const { data: modelStatus } = useModelStatus();
@@ -49,6 +29,7 @@ export default function DSView() {
               {m.psi_alert ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
               {metricText(m)}
             </div>
+            <div className="text-[10px] text-text-muted mt-[3px]">{MODEL_KIND[m.type]}</div>
           </div>
         ))}
       </div>

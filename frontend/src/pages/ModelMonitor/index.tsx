@@ -7,26 +7,7 @@ import SHAPBar from '@/components/shared/SHAPBar';
 import StressTestCard from '@/components/shared/StressTestCard';
 import { cn } from '@/lib/utils';
 import { IconCircleCheck, IconAlertTriangle } from '@tabler/icons-react';
-import type { ModelStatus } from '@/types/api';
-
-const MODEL_LABEL: Record<ModelStatus['models'][number]['type'], string> = {
-  regime: 'Regime Model',
-  eia: 'EIA Forecast Model',
-  returns: 'Returns Model',
-};
-
-// metrics.primary / metrics.psi are null until first recorded (types/api.ts) -
-// show a placeholder instead of crashing on null.toFixed().
-function fmt(value: number | null, digits: number, scale = 1): string {
-  return value === null ? '—' : (value * scale).toFixed(digits);
-}
-
-function metricText(m: ModelStatus['models'][number]): string {
-  const psi = `PSI ${fmt(m.metrics.psi, 2)}`;
-  if (m.type === 'regime') return `Acc ${fmt(m.metrics.primary, 1, 100)}% · ${psi}`;
-  if (m.type === 'eia') return `MAE ${fmt(m.metrics.primary, 1)} MB · ${psi}`;
-  return m.psi_alert ? `${psi} — Alerts` : `Brier ${fmt(m.metrics.primary, 3)} · ${psi}`;
-}
+import { MODEL_KIND, MODEL_LABEL, fmt, metricText } from '@/lib/model-metrics';
 
 export default function ModelMonitorPage() {
   const { role } = useRole();
@@ -45,7 +26,7 @@ export default function ModelMonitorPage() {
 
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
-      <PageHeader title="Model Monitor" sub="PSI Drift · Brier Score · Feature Importance" />
+      <PageHeader title="Model Monitor" sub="PSI Drift · Score vs Baseline · Feature Importance" />
 
       <div className="grid grid-cols-3 gap-[10px] mb-3">
         {modelStatus.models.map((m) => (
@@ -59,6 +40,7 @@ export default function ModelMonitorPage() {
               {m.psi_alert ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
               {metricText(m)}
             </div>
+            <div className="text-[10px] text-text-muted mt-[3px]">{MODEL_KIND[m.type]}</div>
           </div>
         ))}
       </div>
