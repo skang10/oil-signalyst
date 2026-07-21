@@ -111,7 +111,7 @@ class DataRegistry:
         if cfg.get("freq") == "W" and cfg.get("type") == "eia":
             return self._align_eia(series, cfg)
 
-        daily = series.resample("D").last().ffill()
+        daily = self._to_business_days(series)
 
         lag = cfg.get("lag_days", 0)
         if lag > 0:
@@ -124,6 +124,25 @@ class DataRegistry:
 
         return daily
 
+    @staticmethod
+    def _to_business_days(series: pd.Series) -> pd.Series:
+        """Resample onto business days rather than calendar days.
+
+        Every series used to be resampled with "D", so ~29% of every row in the
+        feature matrix was a weekend carrying Friday's value forward. Because
+        rolling windows count rows, that made every day-count window shorter
+        than its name in trading terms: ret_20d spanned 20 calendar days, about
+        14 trading days, and build_return_bucket_labels' `horizon_trading_days`
+        shifted by 20 calendar days despite the parameter name. It also biased
+        rvol_20d low - roughly a third of the returns in its window were zero by
+        construction - while still annualising with sqrt(252), a constant that
+        assumes 252 observations per year on a series that had 365.
+
+        Market holidays are still forward-filled: "B" is Mon-Fri, not an
+        exchange calendar. That leaves ~9 carried rows a year instead of ~104.
+        """
+        return series.resample("B").last().ffill()
+
     def _align_eia(self, series: pd.Series, cfg: dict) -> pd.Series:
         released = series.copy()
         released.index = pd.to_datetime(
@@ -131,7 +150,7 @@ class DataRegistry:
         ).astype("datetime64[ns]")
         released = released.sort_index()
 
-        daily = released.resample("D").last().ffill()
+        daily = self._to_business_days(released)
         lag = cfg.get("lag_days", 0)
         if lag > 0:
             daily = daily.shift(lag)

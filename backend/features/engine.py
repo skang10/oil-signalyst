@@ -112,11 +112,16 @@ class FeatureEngine:
             max_days = max(max_days, self._window_days(feature, source_name))
         return max_days
 
+    # Rows per week on the matrix index. DataRegistry aligns every source onto
+    # business days, so a weekly source's window of N weeks spans N*5 rows -
+    # this was N*7 while the index was calendar days.
+    ROWS_PER_WEEK = 5
+
     def _window_days(self, feature: dict, source_name: str) -> int:
         window = feature.get("window", 1)
         source_cfg = self.registry.config.get(source_name, {})
         if source_cfg.get("freq") == "W":
-            return window * 7
+            return window * self.ROWS_PER_WEEK
         return window
 
     def _required_sources(self) -> list[str]:

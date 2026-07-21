@@ -28,7 +28,10 @@ def build_eia_labels(
     # unit every consumer (report, UI, MAE metric) expects.
     changes = published.diff() / 1000
     next_change = changes.shift(-1).dropna()
-    daily_index = pd.date_range(start, end, freq="D")
+    # Business days, matching the index DataRegistry now aligns every source
+    # onto - a calendar-day index here would put labels on rows the feature
+    # matrix no longer has.
+    daily_index = pd.date_range(start, end, freq="B")
     return next_change.reindex(daily_index, method="bfill").rename("eia_change")
 
 
