@@ -39,10 +39,9 @@ contained · 🟢 cosmetic/efficiency.
   and contradicts them.
 - **B2 🟢 Supporting Signals show raw values** (`crude_inv_dev = -210070.8651`).
   Backend `_build_signal_list` formatting.
-- **B3 🟢 Data Monitor "Feature Missing Rate" shows >100% (e.g. 7140%).**
-  Double percentage: backend `feature_missing_rates` returns pct already
-  scaled by 100, and the frontend multiplies by 100 again. One-line frontend
-  fix.
+- ~~**B3 Data Monitor "Feature Missing Rate" shows >100%.**~~ FIXED - the
+  frontend was double-scaling an already-percentage value; also corrected the
+  panel title from "Last 30 Days" to the real 7-trading-day window.
 
 ## C. Ingestion robustness (silent-corruption class)
 

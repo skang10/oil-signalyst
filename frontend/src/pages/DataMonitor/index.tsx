@@ -91,19 +91,24 @@ export default function DataMonitorPage() {
       </Card>
 
       <Card className="mb-3">
-        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Feature Missing Rate (Last 30 Days)</div>
+        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Feature Missing Rate (Last 7 Trading Days)</div>
         <div className="flex flex-col gap-[6px]">
-          {modelStatus.feature_missing_rates.map((f) => (
-            <div key={f.name} className="flex items-center gap-[10px] text-[12px]">
-              <span className="w-[140px] font-mono text-[11px] text-text-secondary">{f.name}</span>
-              <div className="flex-1 h-[6px] bg-surface-1 rounded-[3px] overflow-hidden">
-                <div className="h-full" style={{ width: `${f.pct * 100}%`, background: f.pct < 0.05 ? '#3B6D11' : 'var(--border-warning)' }} />
+          {modelStatus.feature_missing_rates.map((f) => {
+            // `pct` arrives already scaled 0-100 from the backend; the old code
+            // multiplied by 100 again, rendering 71.4% as "7140%".
+            const missing = f.pct < 5;
+            return (
+              <div key={f.name} className="flex items-center gap-[10px] text-[12px]">
+                <span className="w-[140px] font-mono text-[11px] text-text-secondary">{f.name}</span>
+                <div className="flex-1 h-[6px] bg-surface-1 rounded-[3px] overflow-hidden">
+                  <div className="h-full" style={{ width: `${f.pct}%`, background: missing ? '#3B6D11' : 'var(--border-warning)' }} />
+                </div>
+                <span className={cn('text-[11px] w-9 text-right', missing ? 'text-success' : 'text-warning')}>
+                  {Math.round(f.pct)}%
+                </span>
               </div>
-              <span className={cn('text-[11px] w-9 text-right', f.pct < 0.05 ? 'text-success' : 'text-warning')}>
-                {Math.round(f.pct * 100)}%
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 
