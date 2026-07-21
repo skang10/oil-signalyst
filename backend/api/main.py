@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import agent, auth, market, models, reports, signals, training, users, ws
 from api.routes.health import router as health_router
-from core.config_paths import CFTC_RAW_DIR, DATA_DIR, FEATURES_DIR, LOGS_DIR, MODELS_DIR, RAW_DIR
+from core.config_paths import CFTC_RAW_DIR, DATA_DIR, FEATURES_DIR, LOGS_DIR, MODELS_DIR, RAW_DIR, SERIES_CACHE_DIR
 from core.logging import get_logger
 from db.crud import get_or_create_default_user
 from db.database import get_db, init_db
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    for path in (DATA_DIR, RAW_DIR, CFTC_RAW_DIR, FEATURES_DIR, MODELS_DIR, LOGS_DIR):
+    for path in (DATA_DIR, RAW_DIR, CFTC_RAW_DIR, SERIES_CACHE_DIR, FEATURES_DIR, MODELS_DIR, LOGS_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
     await init_db()

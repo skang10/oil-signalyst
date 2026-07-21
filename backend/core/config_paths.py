@@ -8,6 +8,11 @@ CONFIG_DIR = _REPO_ROOT / "config"
 DATA_DIR = _REPO_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 CFTC_RAW_DIR = RAW_DIR / "cftc"
+# Per-source persisted raw series (one Parquet per source) for the adapters that
+# don't manage their own disk cache - Yahoo/FRED/EIA. Lets backfill and process
+# restarts read history from disk instead of re-downloading it. See
+# core/data/series_store.py.
+SERIES_CACHE_DIR = RAW_DIR / "series"
 FEATURES_DIR = DATA_DIR / "features"
 MODELS_DIR = DATA_DIR / "models"
 MLRUNS_DIR = DATA_DIR / "mlruns"

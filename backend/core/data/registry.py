@@ -8,8 +8,9 @@ import yaml
 
 from core.cache import DataFetchCache
 from core.config_paths import DATA_SOURCES_YAML
+from core.data.series_store import SeriesStore
 from core.data.sources.cftc import CFTCSource
-from core.data.sources.eia import EIASource, get_eia_release_date
+from core.data.sources.eia import _EIA_WARMUP_DAYS, EIASource, get_eia_release_date
 from core.data.sources.fred import FREDSource
 from core.data.sources.yahoo import YahooSource
 from core.logging import get_logger
@@ -26,6 +27,7 @@ class DataRegistry:
         with open(config_path) as file:
             self.config = yaml.safe_load(file)["sources"]
         self._cache = cache or DataFetchCache()
+        self._store = SeriesStore()
         self._adapters = {
             "yahoo": YahooSource(),
             "eia": EIASource(),
@@ -34,9 +36,12 @@ class DataRegistry:
         }
 
     def clear_cache(self) -> None:
-        """Drops all cached raw series - callers refresh after the daily
-        pipeline lands new data (e.g. signal_charts.refresh_signal_charts)."""
+        """Drops the in-memory tiers - callers refresh after the daily pipeline
+        lands new data (e.g. signal_charts.refresh_signal_charts). Persisted
+        per-source history on disk is kept; the next fetch reconciles with it
+        and re-fetches only the recent tail."""
         self._cache.clear()
+        self._store.clear()
 
     def fetch(self, name: str, start: str, end: str) -> pd.Series:
         cache_key = f"{name}:{start}:{end}"
@@ -46,8 +51,24 @@ class DataRegistry:
 
         cfg = self.config[name]
         adapter = self._adapters[cfg["type"]]
-        raw = adapter.fetch(cfg, start, end)
-        aligned = self._align(raw, cfg)
+        if adapter.manages_own_persistence:
+            # CFTC: its own per-year disk cache, and its fetch() already slices
+            # to the window.
+            aligned = self._align(adapter.fetch(cfg, start, end), cfg)
+        else:
+            # Slice the persisted raw to the exact span the adapter's own
+            # fetch(start, end) would have returned, then align it - so routing
+            # through the store is byte-for-byte what direct fetching produced.
+            # This matters for path-dependent transforms: crude_inv_dev's
+            # seasonal_dev is an expanding mean, so the warmup EIA prepends
+            # before `start` shifts its baseline. Weekly sources get that
+            # warmup (also load-bearing for the weekly->daily ffill); daily
+            # sources are fetched for exactly [start, end].
+            raw_full = self._store.get(name, adapter, cfg, start, end)
+            warmup = _EIA_WARMUP_DAYS if cfg.get("freq") == "W" else 0
+            lo = pd.Timestamp(start) - pd.Timedelta(days=warmup)
+            aligned = self._align(raw_full.loc[lo : pd.Timestamp(end)], cfg)
+
         self._cache.set(cache_key, aligned)
         logger.info("Fetched source", extra={"source_name": name, "rows": len(aligned)})
         return aligned

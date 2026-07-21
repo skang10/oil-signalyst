@@ -27,6 +27,11 @@ CFTC_COLUMNS = {
 
 
 class CFTCSource(BaseSource):
+    # Whole-year ZIP parses are cached per year below - the registry's
+    # SeriesStore would be redundant, and worse per-year files suit the bulk
+    # annual downloads better than one growing per-source file.
+    manages_own_persistence = True
+
     def __init__(self) -> None:
         CFTC_RAW_DIR.mkdir(parents=True, exist_ok=True)
         # The long and short legs share this one adapter instance and both
