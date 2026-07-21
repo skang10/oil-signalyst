@@ -108,18 +108,41 @@ export default function DataMonitorPage() {
       </Card>
 
       <Card className="mb-3">
-        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Feature Distribution Drift (PSI)</div>
+        <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[4px]">
+          Feature Distribution Drift (PSI)
+        </div>
+        {/* PSI is opaque without saying what it compares and what the number
+            means - a bare column of 0.11-2.66 tells a reader nothing. */}
+        <div className="text-[11px] text-text-muted leading-[1.5] mb-[10px]">
+          How far each feature's recent values have moved from the 2012–2023 training
+          distribution. 0 = identical; higher = more drift. Bands:{' '}
+          <span className="text-success">&lt; 0.1 stable</span> ·{' '}
+          <span className="text-warning">0.1–{modelStatus.psi_threshold.toFixed(2)} moderate</span> ·{' '}
+          <span className="text-danger">≥ {modelStatus.psi_threshold.toFixed(2)} significant, flags retrain</span>.
+        </div>
         <div className="flex flex-col gap-[6px]">
           {modelStatus.feature_psi.map((f) => {
-            const stable = f.psi < 0.1;
+            // Three tiers keyed to the real retrain threshold, so colour tracks
+            // "would this trigger a retrain" rather than an arbitrary cutoff.
+            const tier =
+              f.psi < 0.1 ? 'stable' : f.psi < modelStatus.psi_threshold ? 'moderate' : 'significant';
+            const color =
+              tier === 'stable' ? 'text-success' : tier === 'moderate' ? 'text-warning' : 'text-danger';
+            const barColor =
+              tier === 'stable' ? '#3B6D11' : tier === 'moderate' ? 'var(--border-warning)' : 'var(--text-danger)';
+            const badge = tier === 'stable' ? 'green' : tier === 'moderate' ? 'yellow' : 'red';
+            // Fill relative to the retrain threshold so the meaningful low range
+            // is legible; genuine drift (well past it) simply saturates rather
+            // than every bar maxing out as it did at psi*200.
+            const width = Math.min(100, (f.psi / (modelStatus.psi_threshold * 2)) * 100);
             return (
               <div key={f.name} className="flex items-center gap-[10px] text-[12px]">
                 <span className="w-[140px] font-mono text-[11px] text-text-secondary">{f.name}</span>
                 <div className="flex-1 h-[6px] bg-surface-1 rounded-[3px] overflow-hidden">
-                  <div className="h-full" style={{ width: `${Math.min(100, f.psi * 200)}%`, background: stable ? '#3B6D11' : 'var(--border-warning)' }} />
+                  <div className="h-full" style={{ width: `${width}%`, background: barColor }} />
                 </div>
-                <span className={cn('text-[11px] w-9 text-right', stable ? 'text-success' : 'text-warning')}>{f.psi.toFixed(2)}</span>
-                <TagBadge kind={stable ? 'green' : 'yellow'}>{stable ? 'stable' : 'Watch'}</TagBadge>
+                <span className={cn('text-[11px] w-9 text-right', color)}>{f.psi.toFixed(2)}</span>
+                <TagBadge kind={badge}>{tier}</TagBadge>
               </div>
             );
           })}

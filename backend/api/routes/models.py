@@ -74,6 +74,9 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
                 (psi_scores or {}).items(), key=lambda item: item[1], reverse=True
             )
         ],
+        # The retrain threshold, so the drift legend states the app's real
+        # cutoff rather than hardcoding one that could drift out of sync.
+        "psi_threshold": PSI_RETRAIN_THRESHOLD,
     }
 
 

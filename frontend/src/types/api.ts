@@ -188,6 +188,9 @@ export interface ModelStatus {
    */
   feature_missing_rates: { name: string; pct: number }[];
   feature_psi: { name: string; psi: number }[];
+  /** PSI at or above which a feature is flagged for retrain (backend
+   *  PSI_RETRAIN_THRESHOLD). Drives the drift legend's cutoff. */
+  psi_threshold: number;
 }
 
 export interface TrainJob {
