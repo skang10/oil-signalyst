@@ -1,6 +1,7 @@
 import json
 from datetime import date, datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -33,9 +34,15 @@ WEEKLY_MAX_LAG_DAYS = 14
 _REGISTRY = DataRegistry()
 
 # When the freshest live feed leads the persisted feature matrix by more than
-# this many days, the daily pipeline (scheduler/runner.py) is behind: the
-# models are training/scoring on data older than the feeds already offer.
-PIPELINE_LAG_MAX_DAYS = 2
+# this many TRADING days, the daily pipeline (scheduler/runner.py) is behind:
+# the models are training/scoring on data older than the feeds already offer.
+#
+# One trading day of slack, not two: the tolerance used to absorb weekends,
+# because the lag was counted in calendar days against a calendar-day matrix.
+# Now that both sides are business days, a single day of lag is exactly one
+# missing trading day - real, not slack - and anything beyond it means a
+# pipeline run was skipped.
+PIPELINE_LAG_MAX_DAYS = 1
 
 # Freshness lookback: 30 days is enough to catch the most recent print of even
 # the weekly sources without refetching full history.
@@ -263,8 +270,17 @@ def model_input_freshness(
         if row.get("last_updated")
     ]
     freshest_live = max(live_dates) if live_dates else None
+    # Counted in TRADING days, not calendar days. The matrix is indexed on
+    # business days, so a Friday matrix beside a Monday feed is 3 calendar days
+    # apart but exactly one trading day behind - measured in calendar days this
+    # reported "Behind 3d" every Monday.
     lag_days = (
-        int((freshest_live.normalize() - matrix_as_of.normalize()).days)
+        int(
+            np.busday_count(
+                matrix_as_of.date(),
+                freshest_live.normalize().date(),
+            )
+        )
         if freshest_live is not None
         else None
     )

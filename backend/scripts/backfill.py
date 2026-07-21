@@ -1,5 +1,5 @@
 import argparse
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from core.config_paths import FEATURES_DIR
 from core.data.registry import DataRegistry
@@ -12,15 +12,19 @@ BACKFILL_START = "2010-01-01"
 
 
 def _default_end() -> str:
-    """Today, not a hardcoded date.
+    """Tomorrow, so today is actually included.
 
-    This was pinned at 2024-12-31, which is why the feature matrix had a
-    540-day hole: the backfill stopped at the end of 2024 and the only other
-    writer is the daily pipeline, which has to be running to fill anything.
-    A cutoff_date inside that hole silently produced an empty validation
-    window.
+    Two things bite here. The date was pinned at 2024-12-31, which is why the
+    feature matrix had a 540-day hole: the backfill stopped at the end of 2024
+    and the only other writer is the daily pipeline, which has to be running to
+    fill anything.
+
+    And `end` is exclusive - the Yahoo adapter passes it straight to yfinance -
+    so building "through today" leaves the matrix a day short of the feeds.
+    scheduler/jobs.py already compensates with `target_date + 1 day`; this now
+    matches it.
     """
-    return str(datetime.now(UTC).date())
+    return str(datetime.now(UTC).date() + timedelta(days=1))
 
 
 def run_backfill(force: bool = False, end: str | None = None) -> None:
