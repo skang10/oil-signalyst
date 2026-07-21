@@ -58,8 +58,9 @@ contained · 🟢 cosmetic/efficiency.
   the feed level. Bound the ffill staleness.
 - **C4 🟠 no ingestion validation.** A bad print (0 / negative / 10x gap) flows
   silently into features → labels → models. Add basic sanity checks.
-- **C5 🟢 range-keyed cache re-fetches overlapping data; Yahoo not persisted.**
-  Efficiency only. **← starting here (per-source persistence).**
+- ~~**C5 range-keyed cache re-fetches overlapping data; Yahoo not persisted.**~~
+  FIXED - SeriesStore (bdd136d) persists per-source raw series to disk, serves
+  settled history without a network call, refetches only a 90-day tail.
 
 ## D. Structural / deferred modeling
 
@@ -76,13 +77,3 @@ contained · 🟢 cosmetic/efficiency.
   train/val split; `cv_folds`/`gap_days` accepted but ignored. Rolling-origin
   work.
 
----
-
-## In progress
-
-**C5 — per-source persistence.** Persist aligned single-source series to disk
-parquet (one file per source, like CFTC), keyed by source not range; treat old
-history as immutable, refetch only a bounded recent tail to absorb revisions
-(Yahoo auto_adjust, EIA weekly revisions, CFTC reclassifications). Kills
-backfill re-download and restart-cold, and removes the overlapping-range
-refetch. Fold C2's version stamp into the file schema while here.
