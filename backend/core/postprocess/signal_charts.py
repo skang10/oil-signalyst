@@ -7,7 +7,9 @@ from scipy.stats import spearmanr
 from core.cache import DataFetchCache
 from core.data.registry import DataRegistry
 from core.logging import get_logger
-from core.models.trainer import TRAIN_END, TRAIN_START, VAL_END
+from datetime import date
+
+from core.models.trainer import TRAIN_END, TRAIN_START
 from core.signal_scanner import load_candidates
 from features.engine import FeatureEngine
 
@@ -77,9 +79,10 @@ def _build_signal_charts_sync(signal_name: str) -> dict | None:
         return None
 
     engine = FeatureEngine(registry=_REGISTRY)
-    raw = _REGISTRY.fetch_all(TRAIN_START, VAL_END, source_names=[candidate["source"]])
+    eval_end = str(date.today())
+    raw = _REGISTRY.fetch_all(TRAIN_START, eval_end, source_names=[candidate["source"]])
     signal = engine.apply_transform(candidate, raw).dropna().sort_index()
-    wti = _REGISTRY.fetch("wti", TRAIN_START, VAL_END).dropna().sort_index()
+    wti = _REGISTRY.fetch("wti", TRAIN_START, eval_end).dropna().sort_index()
 
     df = pd.concat([signal.rename("signal"), wti.rename("price")], axis=1).dropna()
     if df.empty:

@@ -1,30 +1,34 @@
 import numpy as np
 from tabpfn_client import TabPFNClassifier
 
-from core.models.calibration import calibrate_if_better
 from core.models.common import as_named_row, classifier_metrics
 from core.models.labels import RETURN_BIN_LABELS
 from core.models.metrics import classifier_baselines
 from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
 
-def build_returns_model(train_x, train_y, val_x, val_y):
+def build_returns_model(train_x, train_y, test_x, test_y):
+    """Fit on train, report on the held-out test window.
+
+    No probability calibration: with ~12 independent observations a year, a
+    held-out calibration set can't fit a sigmoid that generalizes, and TabPFN's
+    native probabilities (with balance_probabilities) are a reasonable base.
+    Removing it also means the reported Brier is a genuine held-out figure, not
+    one scored on the same set a calibrator was tuned against.
+    """
     ensure_tabpfn_authenticated()
+    n_classes = len(RETURN_BIN_LABELS)
     model = TabPFNClassifier(balance_probabilities=True)
     model.fit(train_x, train_y)
-    metrics_train = classifier_metrics(model, train_x, train_y, len(RETURN_BIN_LABELS))
-    metrics_val = classifier_metrics(model, val_x, val_y, len(RETURN_BIN_LABELS))
-    n_classes = len(RETURN_BIN_LABELS)
-    model, metrics_val = calibrate_if_better(model, val_x, val_y, n_classes, metrics_val)
-    # Attached after calibration so the baseline travels with whichever model is
-    # actually served, instead of being recomputed by the calibrated pass.
-    metrics_val["baseline"] = classifier_baselines(train_y, val_y, n_classes)
-    counts = {
+    metrics_train = classifier_metrics(model, train_x, train_y, n_classes)
+    metrics_test = classifier_metrics(model, test_x, test_y, n_classes)
+    metrics_test["baseline"] = classifier_baselines(train_y, test_y, n_classes)
+
+    metrics_train["bucket_counts"] = {
         RETURN_BIN_LABELS[int(k)]: int(v)
         for k, v in train_y.value_counts().sort_index().items()
     }
-    metrics_train["bucket_counts"] = counts
-    return model, metrics_train, metrics_val
+    return model, metrics_train, metrics_test
 
 
 def predict_returns(artifact: dict, features: np.ndarray) -> dict:

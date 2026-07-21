@@ -8,9 +8,9 @@ from api.main import app
 @pytest.mark.asyncio
 async def test_training_start_returns_202(monkeypatch, auth_headers):
     async def fake_run_full_training_with_log(
-        job_id=None, triggered_by_user_id=None, model_types=None, cutoff_date=None
+        job_id=None, triggered_by_user_id=None, model_types=None
     ):
-        del job_id, triggered_by_user_id, model_types, cutoff_date
+        del job_id, triggered_by_user_id, model_types
         return {}
 
     monkeypatch.setattr(

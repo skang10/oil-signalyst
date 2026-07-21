@@ -11,31 +11,32 @@ def direction_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(np.sign(y_true) == np.sign(y_pred)))
 
 
-def build_eia_model(train_x, train_y, val_x, val_y):
+def build_eia_model(train_x, train_y, test_x, test_y):
+    """Fit on train (2012-2024), report on the held-out test window."""
     ensure_tabpfn_authenticated()
     model = TabPFNRegressor()
     model.fit(train_x, train_y)
     train_pred = model.predict(train_x)
-    val_pred = model.predict(val_x)
-    consensus = val_y.rolling(4).mean().shift(1).fillna(0.0)
+    test_pred = model.predict(test_x)
+    consensus = test_y.rolling(4).mean().shift(1).fillna(0.0)
     metrics_train = {
         "mae": round(float(mean_absolute_error(train_y, train_pred)), 4),
         "direction_acc": round(direction_accuracy(train_y, train_pred), 4),
     }
-    metrics_val = {
-        "mae": round(float(mean_absolute_error(val_y, val_pred)), 4),
-        "direction_acc": round(direction_accuracy(val_y, val_pred), 4),
+    metrics_test = {
+        "mae": round(float(mean_absolute_error(test_y, test_pred)), 4),
+        "direction_acc": round(direction_accuracy(test_y, test_pred), 4),
         # Signed model-minus-consensus, so NEGATIVE means the model wins. Note
-        # `consensus` is a rolling mean of the validation labels themselves and
-        # is not available at prediction time; metrics_val["baseline"] below is
-        # the train-derived reference the deployment gate actually uses.
+        # `consensus` is a rolling mean of the test labels themselves and is not
+        # available at prediction time; metrics_test["baseline"] below is the
+        # train-derived reference the deployment gate actually uses.
         "mae_vs_consensus": round(
-            float(mean_absolute_error(val_y, val_pred) - mean_absolute_error(val_y, consensus)),
+            float(mean_absolute_error(test_y, test_pred) - mean_absolute_error(test_y, consensus)),
             4,
         ),
-        "baseline": regressor_baselines(train_y, val_y),
+        "baseline": regressor_baselines(train_y, test_y),
     }
-    return model, metrics_train, metrics_val
+    return model, metrics_train, metrics_test
 
 
 def predict_eia(artifact: dict, features, recent_inventory=None) -> dict:

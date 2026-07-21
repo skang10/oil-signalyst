@@ -6,7 +6,9 @@ from scipy.stats import spearmanr
 from core.config_paths import CONFIG_DIR
 from core.data.registry import DataRegistry
 from core.logging import get_logger
-from core.models.trainer import TRAIN_END, TRAIN_START, VAL_END, VAL_START, load_features
+from datetime import date
+
+from core.models.trainer import TEST_START, TRAIN_END, TRAIN_START, load_features
 from db.database import get_db
 from db.models import SignalEvaluation
 from features.engine import FeatureEngine
@@ -86,8 +88,9 @@ async def run_signal_scan() -> list[dict]:
     n_tests = len(candidates) * len(IC_LAGS_DAYS)
 
     registry = DataRegistry()
-    wti = registry.fetch("wti", TRAIN_START, VAL_END).sort_index()
-    active_features = load_features(TRAIN_START, VAL_END)
+    eval_end = str(date.today())
+    wti = registry.fetch("wti", TRAIN_START, eval_end).sort_index()
+    active_features = load_features(TRAIN_START, eval_end)
 
     engine = FeatureEngine(registry=registry)
     results = []
@@ -95,7 +98,7 @@ async def run_signal_scan() -> list[dict]:
     for candidate in candidates:
         name = candidate["name"]
         try:
-            raw = registry.fetch_all(TRAIN_START, VAL_END, source_names=[candidate["source"]])
+            raw = registry.fetch_all(TRAIN_START, eval_end, source_names=[candidate["source"]])
             signal = engine.apply_transform(candidate, raw).sort_index()
 
             per_lag = {}
@@ -105,7 +108,7 @@ async def run_signal_scan() -> list[dict]:
                 train_ic, _ = _ic(
                     signal[TRAIN_START:TRAIN_END], forward[TRAIN_START:TRAIN_END]
                 )
-                val_ic, val_p = _ic(signal[VAL_START:VAL_END], forward[VAL_START:VAL_END])
+                val_ic, val_p = _ic(signal[TEST_START:eval_end], forward[TEST_START:eval_end])
                 corrected_p = round(min(val_p * n_tests, 1.0), 6)
                 per_lag[str(lag_days)] = {
                     "train_ic": round(train_ic, 4),
@@ -118,7 +121,7 @@ async def run_signal_scan() -> list[dict]:
 
             best = per_lag[best_lag]
             oos_decay = round(best["train_ic"] - best["val_ic"], 4)
-            coverage = _coverage(raw[candidate["source"]], TRAIN_START, VAL_END)
+            coverage = _coverage(raw[candidate["source"]], TRAIN_START, eval_end)
             corr_feature, corr_value = _max_correlation_with_active_features(
                 signal, active_features
             )

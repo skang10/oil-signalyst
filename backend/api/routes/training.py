@@ -43,13 +43,10 @@ async def fail_orphaned_jobs() -> int:
 
 
 class TrainStartRequest(BaseModel):
+    # Training uses a fixed train/calibration/test split now (see trainer.py).
+    # The old cutoff_date what-if and the never-implemented cv_folds/gap_days
+    # knobs are gone; walk-forward evaluation lives behind /api/train/cross-validate.
     model_types: list[str] = list(TRAINABLE_MODEL_TYPES)
-    cutoff_date: str | None = None
-    # Not yet implemented - this project trains a single train/val split, not
-    # real k-fold cross-validation. Accepted so the frontend's config form
-    # doesn't 422; silently ignored rather than silently wrong.
-    cv_folds: int | None = None
-    gap_days: int | None = None
 
 
 @router.post("/start", status_code=status.HTTP_202_ACCEPTED)
@@ -120,7 +117,6 @@ async def start_training(
                 job_id=job_id,
                 triggered_by_user_id=user.id,
                 model_types=model_types,
-                cutoff_date=body.cutoff_date,
             )
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)

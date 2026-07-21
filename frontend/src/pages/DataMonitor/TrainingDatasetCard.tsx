@@ -141,12 +141,12 @@ export default function TrainingDatasetCard({ dataset }: { dataset: Dataset }) {
       <div className="text-[11px] text-text-muted leading-[1.5] mt-[10px] pt-[8px] border-t border-border">
         <span className="text-text-secondary">Effective n</span> = independent
         observations, not rows. Labels look 20 trading days ahead, so consecutive
-        daily rows share almost all of their outcome window and weekend rows are
-        forward-filled duplicates — validation's {' '}
-        {splits.find((s) => s.name === 'Validation')?.weekday_rows ?? 0} weekday rows
-        are worth only ~{splits.find((s) => s.name === 'Validation')?.effective_n ?? 0}{' '}
+        daily rows share almost all of their outcome window — the test window's{' '}
+        {splits.find((s) => s.name === 'Test')?.weekday_rows ?? 0} rows are worth only
+        ~{splits.find((s) => s.name === 'Test')?.effective_n ?? 0}{' '}
         independent samples. Read every accuracy and Brier figure against this, not
-        the row count.
+        the row count. Walk-forward cross-validation aggregates across many such
+        windows for a steadier estimate.
       </div>
     </Card>
   );

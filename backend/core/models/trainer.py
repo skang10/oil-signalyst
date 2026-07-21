@@ -23,10 +23,30 @@ from features.engine import FeatureEngine
 
 logger = get_logger(__name__)
 
-TRAIN_START = "2010-01-01"
-TRAIN_END = "2023-12-31"
-VAL_START = "2024-01-01"
-VAL_END = "2024-12-31"
+# Fixed, temporally-ordered two-way split. The purge between train and test is
+# automatic: labels are built per-window (build_*_labels fetch only within
+# [start, end]), so a forward-looking label can never reach past the train
+# window's end into the test window - the last ~1 month of train is simply
+# unlabeled and dropped. TRAIN_START matches the first row that actually exists
+# (2012), not an aspirational 2010.
+#
+#   Train  2012-2024   fit the model
+#   Test   2025->today held out; the honest metric and the deployment gate
+#
+# There is no separate calibration set: on this data the effective sample size
+# is ~12 independent observations per year, far too few to fit even a 2-param
+# sigmoid that generalizes, and TabPFN's native probabilities are reasonable -
+# so a held-out calibration year would sacrifice scarce data for an unreliable
+# gain. Dropping it also removes the calibration-leakage problem entirely.
+#
+# What-if backtesting by cutoff date is gone - it produced degenerate windows
+# twice - and is replaced by walk-forward cross-validation (cross_validate).
+TRAIN_START = "2012-01-01"
+TRAIN_END = "2024-12-31"
+TEST_START = "2025-01-01"
+# Kept as an alias for the first post-training date, which drift_monitor uses as
+# the start of the "recent production" window for PSI.
+VAL_START = TEST_START
 
 MLFLOW_EXPERIMENT = "oil-signalyst"
 
@@ -80,27 +100,34 @@ def load_features(start: str, end: str) -> pd.DataFrame:
     return df[start:end]
 
 
-def _prepare_training_data(
-    train_end: str, val_start: str, val_end: str
-) -> tuple[pd.DataFrame, pd.DataFrame, str, dict]:
-    """Feature matrices, feature version, and every model type's labels.
-
-    Pure blocking work, kept in one function so run_full_training can push it
-    to a worker thread in a single hop: Parquet reads (load_features), the
-    sync DB read behind FeatureEngine's feature pool, and the label builders,
-    which fetch their source series over the network.
-    """
-    train_x = to_model_matrix(load_features(TRAIN_START, train_end))
-    val_x = to_model_matrix(load_features(val_start, val_end))
-    feature_version = FeatureEngine().feature_version
+def _window(a: str, b: str) -> tuple[pd.DataFrame, dict]:
+    """The model matrix and per-type labels for one date window."""
+    x = to_model_matrix(load_features(a, b))
     labels = {
-        "eia": (build_eia_labels(TRAIN_START, train_end), build_eia_labels(val_start, val_end)),
-        "returns": (
-            build_return_bucket_labels(TRAIN_START, train_end),
-            build_return_bucket_labels(val_start, val_end),
-        ),
+        "eia": build_eia_labels(a, b),
+        "returns": build_return_bucket_labels(a, b),
     }
-    return train_x, val_x, feature_version, labels
+    return x, labels
+
+
+def _prepare_training_data(
+    test_end: str,
+) -> tuple[dict[str, pd.DataFrame], str, dict]:
+    """Train/test matrices, feature version, and every model type's labels for
+    each split.
+
+    Pure blocking work, kept in one function so run_full_training can push it to
+    a worker thread in a single hop: Parquet reads (load_features), the sync DB
+    read behind FeatureEngine's feature pool, and the label builders, which
+    fetch their source series over the network.
+    """
+    train_x, train_y = _window(TRAIN_START, TRAIN_END)
+    test_x, test_y = _window(TEST_START, test_end)
+    feature_version = FeatureEngine().feature_version
+    matrices = {"train": train_x, "test": test_x}
+    # labels[model_type] = (train_y, test_y)
+    labels = {mt: (train_y[mt], test_y[mt]) for mt in TRAINABLE_MODEL_TYPES}
+    return matrices, feature_version, labels
 
 
 def _align(features: pd.DataFrame, target: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
@@ -115,15 +142,14 @@ async def run_full_training(
     triggered_by_user_id: int | None = None,
     on_progress: Callable[[str], Awaitable[None]] | None = None,
     model_types: list[str] | None = None,
-    cutoff_date: str | None = None,
 ) -> dict:
+    """Trains and deploys one model per selected type on the fixed two-way
+    split: fit on train (2012-2024), report + gate on the held-out test window
+    (2025->today). The metric here is a single honest test figure (small
+    effective n - see cross_validate for the robust walk-forward distribution)."""
     del triggered_by_user_id
     _init_mlflow()
     selected = model_types or list(TRAINABLE_MODEL_TYPES)
-    # Order is now cosmetic. It used to be load-bearing: returns consumed regime
-    # probabilities, so regime had to train first. That coupling is gone, and
-    # with it the "'NoneType' object has no attribute 'predict_proba'" crash on
-    # returns-first runs.
     selected = [t for t in TRAINABLE_MODEL_TYPES if t in selected]
     if not selected:
         raise ValueError(
@@ -133,19 +159,11 @@ async def run_full_training(
             "state rather than forecasting an observable outcome, so there is "
             "nothing to score it against."
         )
-    # cutoff_date shifts the train/val split boundary for a what-if backtest:
-    # train up to cutoff, validate on everything since. Real k-fold
-    # cross-validation (cv_folds/gap_days) isn't implemented - this project
-    # uses a single train/val split; see api/routes/training.py's start_training.
-    train_end = cutoff_date or TRAIN_END
-    val_start = str((pd.Timestamp(cutoff_date) + pd.Timedelta(days=1)).date()) if cutoff_date else VAL_START
-    val_end = str(datetime.now(UTC).date()) if cutoff_date else VAL_END
+    test_end = str(datetime.now(UTC).date())
 
     # Parquet reads, the DB-backed feature pool, and the label builders' source
     # fetches are all blocking - see _prepare_training_data.
-    train_x, val_x, feature_version, labels = await asyncio.to_thread(
-        _prepare_training_data, train_end, val_start, val_end
-    )
+    matrices, feature_version, labels = await asyncio.to_thread(_prepare_training_data, test_end)
     version = datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S")
 
     builders = {
@@ -156,21 +174,16 @@ async def run_full_training(
     results = {}
     for model_type in selected:
         builder = builders[model_type]
-        x_train, y_train = _align(train_x, labels[model_type][0])
-        x_val, y_val = _align(val_x, labels[model_type][1])
+        train_y, test_y = labels[model_type]
+        x_train, y_train = _align(matrices["train"], train_y)
+        x_test, y_test = _align(matrices["test"], test_y)
 
-        if x_train.empty or x_val.empty:
-            # Forward-looking labels (eia/returns) need N trailing days of
-            # future data to compute - a cutoff_date too close to "today"
-            # leaves the validation window with zero labeled rows. Fail
-            # fast with a clear message instead of a cryptic TabPFN
-            # "x_test is empty" error deep inside predict_regime_batch.
-            empty_side = "training" if x_train.empty else "validation"
+        empty = next((n for n, x in [("train", x_train), ("test", x_test)] if x.empty), None)
+        if empty:
             raise ValueError(
-                f"No {empty_side} rows available for '{model_type}' with "
-                f"train_end={train_end}, val_start={val_start}, val_end={val_end}. "
-                "Pick an earlier cutoff date - forward-looking labels need trailing "
-                "days of future data that don't exist yet this close to today."
+                f"No {empty} rows for '{model_type}'. The fixed split needs labeled "
+                f"data in {TRAIN_START}..{TRAIN_END} (train) and {TEST_START}..{test_end} "
+                "(test) - rebuild the feature matrix if a window is missing."
             )
 
         with mlflow.start_run(run_name=f"{model_type}_{version}") as run:
@@ -178,34 +191,29 @@ async def run_full_training(
                 {
                     "model_type": model_type,
                     "feature_version": feature_version,
-                    "train_start": TRAIN_START,
-                    "train_end": train_end,
-                    "val_start": val_start,
-                    "val_end": val_end,
+                    "train": f"{TRAIN_START}..{TRAIN_END}",
+                    "test": f"{TEST_START}..{test_end}",
                     "feature_count": len(x_train.columns),
                 }
             )
-            # The dominant blocker: every TabPFN fit/predict inside the builders
-            # goes through tabpfn_client's synchronous httpx.Client, so running
-            # this inline froze the event loop for the whole run - the live-log
-            # SSE stream (api/routes/training.py) could not even be accepted
-            # until training finished, which is why the first log line took the
-            # entire run to appear in the UI.
-            model, metrics_train, metrics_val = await asyncio.to_thread(
-                builder, x_train, y_train, x_val, y_val
+            # Off the event loop: the TabPFN calls inside the builders use
+            # tabpfn_client's synchronous httpx.Client and would otherwise
+            # freeze the SSE log stream for the whole run.
+            model, metrics_train, metrics_test = await asyncio.to_thread(
+                builder, x_train, y_train, x_test, y_test
             )
-            # Classifiers report how many distinct classes the validation window
-            # actually contained; a single-class window makes accuracy vacuous.
-            n_val_classes = None if model_type == "eia" else int(pd.Series(y_val).nunique())
+            # Gate on the held-out TEST window: how many rows, and (for the
+            # classifier) how many distinct classes it actually contained.
+            n_test_classes = None if model_type == "eia" else int(pd.Series(y_test).nunique())
             gate = evaluate_deployment_gate(
-                model_type, metrics_val, n_val_rows=len(x_val), n_val_classes=n_val_classes
+                model_type, metrics_test, n_val_rows=len(x_test), n_val_classes=n_test_classes
             )
-            metrics_val["deployment_gate"] = gate
+            metrics_test["deployment_gate"] = gate
 
             _log_metrics_flat(metrics_train, prefix="train.")
-            _log_metrics_flat(metrics_val, prefix="val.")
+            _log_metrics_flat(metrics_test, prefix="test.")
             mlflow.log_dict(metrics_train, "metrics_train.json")
-            mlflow.log_dict(metrics_val, "metrics_val.json")
+            mlflow.log_dict(metrics_test, "metrics_test.json")
 
             results[model_type] = await _save_model(
                 model_type=model_type,
@@ -213,14 +221,14 @@ async def run_full_training(
                 model=model,
                 feature_list=list(x_train.columns),
                 metrics_train=metrics_train,
-                metrics_val=metrics_val,
+                metrics_val=metrics_test,
                 mlflow_run_id=run.info.run_id,
                 activate=gate["passed"],
             )
             mlflow.log_artifact(results[model_type]["file_path"])
             if on_progress:
                 if gate["passed"]:
-                    await on_progress(f"{model_type} model trained and deployed: {metrics_val}")
+                    await on_progress(f"{model_type} model trained and deployed: {metrics_test}")
                 else:
                     await on_progress(
                         f"{model_type} model trained but NOT deployed - "
@@ -310,7 +318,6 @@ async def run_full_training_with_log(
     job_id: str,
     triggered_by_user_id: int | None = None,
     model_types: list[str] | None = None,
-    cutoff_date: str | None = None,
 ) -> dict:
     """Wraps run_full_training() with per-milestone log lines appended to
     TrainJob.log_lines (for the /api/train/log/{job_id} SSE stream), and
@@ -331,7 +338,6 @@ async def run_full_training_with_log(
         triggered_by_user_id=triggered_by_user_id,
         on_progress=log,
         model_types=model_types,
-        cutoff_date=cutoff_date,
     )
     await log("Training run complete.")
 

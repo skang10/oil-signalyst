@@ -257,7 +257,6 @@ export interface TrainJobsResponse {
 
 export interface TrainParams {
   model_types: string[];
-  cutoff_date?: string;
 }
 
 export interface HistoryPrediction {
