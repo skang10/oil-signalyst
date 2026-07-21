@@ -1,12 +1,18 @@
 import { useLocation } from 'react-router-dom';
-import { IconBell, IconRefresh, IconRobot } from '@tabler/icons-react';
+import {
+  IconBell,
+  IconCaretDownFilled,
+  IconCaretUpFilled,
+  IconRefresh,
+  IconRobot,
+} from '@tabler/icons-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
 import { usePriceTicker } from '@/hooks/usePriceTicker';
 import { usePriceStore } from '@/lib/price-store';
 import RolePill from './RolePill';
-import TimeAgo from '@/components/shared/TimeAgo';
+import LiveTick from '@/components/shared/LiveTick';
 import { cn, formatUsd } from '@/lib/utils';
 
 const PAGE_TITLES: { prefix: string; title: string }[] = [
@@ -53,20 +59,44 @@ export default function Topbar({
       <div className="text-[13px] font-medium flex-1">{pageTitle(location.pathname)}</div>
 
       {price != null && changePct != null && (
-        <div className="text-[12px] text-text-secondary whitespace-nowrap">
-          WTI <strong className={changePct < 0 ? 'text-danger' : 'text-success'}>{formatUsd(price)}</strong>{' '}
-          <span className={cn('text-[11px]', changePct < 0 ? 'text-danger' : 'text-success')}>
-            {changePct < 0 ? '▼' : '▲'} {(Math.abs(changePct) * 100).toFixed(1)}%
-          </span>
-          {spread != null && (
-            <span className="text-[11px] text-text-muted ml-2" title="Brent minus WTI spot spread">
-              B–W {spread < 0 ? '-' : '+'}${Math.abs(spread).toFixed(2)}
+        // A quote strip, read as a trading terminal reads: mono tabular
+        // numerals so digits don't jitter as the price ticks, the price itself
+        // neutral with only the session change carrying up/down colour (the
+        // old line was a wall of green), and the three data - last, spread,
+        // freshness - separated by hairline rules rather than run together.
+        <div className="flex items-center gap-[9px] whitespace-nowrap">
+          <div className="flex items-baseline gap-[6px]">
+            <span className="text-[9.5px] uppercase tracking-[0.7px] text-text-muted font-medium">WTI</span>
+            <span className="font-mono tabular-nums text-[13px] font-semibold text-text-primary leading-none">
+              {formatUsd(price)}
             </span>
+            <span
+              className={cn(
+                'flex items-center gap-[1px] font-mono tabular-nums text-[11px] leading-none',
+                changePct < 0 ? 'text-danger' : 'text-success'
+              )}
+            >
+              {changePct < 0 ? <IconCaretDownFilled size={11} /> : <IconCaretUpFilled size={11} />}
+              {(Math.abs(changePct) * 100).toFixed(1)}%
+            </span>
+          </div>
+
+          {spread != null && (
+            <>
+              <span className="h-[13px] w-px bg-border" />
+              <span className="font-mono tabular-nums text-[11px] text-text-muted" title="Brent minus WTI spot spread">
+                B–W {spread < 0 ? '−' : '+'}${Math.abs(spread).toFixed(2)}
+              </span>
+            </>
           )}
-          {/* Last live tick time; only when the WS price is in use (updatedAt
-              is set by the ticker). Absent on the daily-report fallback. */}
+
+          {/* Live freshness; only when the WS price is in use (updatedAt set by
+              the ticker). Absent on the daily-report fallback. */}
           {wsPrice != null && updatedAt != null && (
-            <TimeAgo since={updatedAt} className="text-[11px] ml-2" />
+            <>
+              <span className="h-[13px] w-px bg-border" />
+              <LiveTick since={updatedAt} />
+            </>
           )}
         </div>
       )}
