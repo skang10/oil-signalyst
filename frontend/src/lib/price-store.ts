@@ -7,6 +7,9 @@ interface PriceState {
   // WTI by /ws/price. Null when the Brent quote is briefly unavailable.
   brent: number | null;
   spread: number | null;
+  // Client time of the last tick, so the UI can show how fresh the quote is.
+  // The ticker pushes ~every 30s, so a growing value flags a dropped socket.
+  updatedAt: number | null;
   setPrice: (
     price: number,
     changePct: number | null,
@@ -20,6 +23,7 @@ export const usePriceStore = create<PriceState>((set) => ({
   changePct: null,
   brent: null,
   spread: null,
+  updatedAt: null,
   setPrice: (price, changePct, brent = null, spread = null) =>
-    set({ price, changePct, brent, spread }),
+    set({ price, changePct, brent, spread, updatedAt: Date.now() }),
 }));

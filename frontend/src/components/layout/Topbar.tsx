@@ -6,6 +6,7 @@ import { useReport } from '@/hooks/useReport';
 import { usePriceTicker } from '@/hooks/usePriceTicker';
 import { usePriceStore } from '@/lib/price-store';
 import RolePill from './RolePill';
+import TimeAgo from '@/components/shared/TimeAgo';
 import { cn, formatUsd } from '@/lib/utils';
 
 const PAGE_TITLES: { prefix: string; title: string }[] = [
@@ -37,7 +38,7 @@ export default function Topbar({
   const { data: report } = useReport(role);
 
   usePriceTicker(); // establishes the WS connection once; updates the store below
-  const { price: wsPrice, changePct: wsChangePct, spread: wsSpread } = usePriceStore();
+  const { price: wsPrice, changePct: wsChangePct, spread: wsSpread, updatedAt } = usePriceStore();
   // Prefer the WebSocket tick (30s granularity) once connected; fall back to
   // the daily report's price (already real, just less frequent) until the
   // first WS message arrives or if the socket is disconnected.
@@ -61,6 +62,11 @@ export default function Topbar({
             <span className="text-[11px] text-text-muted ml-2" title="Brent minus WTI spot spread">
               B–W {spread < 0 ? '-' : '+'}${Math.abs(spread).toFixed(2)}
             </span>
+          )}
+          {/* Last live tick time; only when the WS price is in use (updatedAt
+              is set by the ticker). Absent on the daily-report fallback. */}
+          {wsPrice != null && updatedAt != null && (
+            <TimeAgo since={updatedAt} className="text-[11px] ml-2" />
           )}
         </div>
       )}
