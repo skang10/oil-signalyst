@@ -1,7 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter
-from sqlalchemy import desc, select
+from sqlalchemy import select
 
 from api.dependencies import CurrentUser, DbSession, DSOnly
 from core.postprocess.data_monitor import (
@@ -12,9 +12,9 @@ from core.postprocess.data_monitor import (
     training_dataset_summary,
 )
 from core.models.metrics import PRIMARY_METRIC_KEY
-from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD
+from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_current_psi
 from core.services.deploy_service import do_deploy
-from db.models import FeatureSnapshot, ModelVersion
+from db.models import ModelVersion
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -25,16 +25,12 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
     rows = await db.execute(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
     versions = rows.scalars().all()
 
-    snapshot_row = await db.execute(
-        select(FeatureSnapshot).order_by(desc(FeatureSnapshot.date)).limit(1)
-    )
-    latest_snapshot = snapshot_row.scalar_one_or_none()
-    psi_scores = latest_snapshot.psi_scores if latest_snapshot else None
-
-    # Only derive an alert once scores have actually been persisted, per
-    # spec - absence of data is not the same as "no drift detected". PSI is
-    # computed per-feature, not per-model-type (all three models draw on the
-    # same active feature set), so the same value is reported for every model.
+    # Computed live from the Parquet matrix, not read from the latest
+    # FeatureSnapshot row - that row's stored value was all zeros because PSI's
+    # "recent" sample came from the sparse snapshot table. PSI is per-feature,
+    # not per-model-type (all models share the active feature set), so the same
+    # value is reported for every model.
+    psi_scores = await asyncio.to_thread(compute_current_psi)
     psi = round(max(psi_scores.values()), 4) if psi_scores else None
     psi_alert = psi > PSI_RETRAIN_THRESHOLD if psi is not None else False
 

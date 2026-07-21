@@ -8,15 +8,16 @@ contained · 🟢 cosmetic/efficiency.
 
 ## A. Landmines / wrong right now
 
-- **A1 🔴 auto-retrain will always fail.** `scheduler/jobs.py:141` still lists
-  `model_types = ["regime", "eia", "returns"]`; regime is now rejected with 400,
-  so any PSI/Sunday auto-retrain fails every run. One-line fix, missed when
-  regime training was removed.
-- **A2 🔴 PSI reads all zeros.** `drift_monitor.compute_and_store_psi` reads
-  recent data from the `feature_snapshots` DB table (~4 rows); PSI needs ≥20
-  samples and returns 0 below that. The 3,793-row parquet sits right there.
-  Fix: read the parquet tail, like stress_test / trader-fields / data_monitor
-  already switched to.
+- ~~**A1 auto-retrain will always fail.**~~ FIXED - lists TRAINABLE_MODEL_TYPES.
+- ~~**A2 PSI reads all zeros.**~~ FIXED - PSI computes live from the parquet
+  tail, and the methodology was corrected: robust (1-99 pct) bin edges so the
+  2020 negative-price outliers don't distort the grid, and Laplace smoothing
+  for empty bins instead of a 1e-4 floor that scored a single empty bin at
+  ~0.69. A random-split null (~0.01 per feature) confirmed the residual high
+  values are REAL drift, not artifacts: 2024+ inputs genuinely occupy a
+  different distribution than the 2012-2023 training window (the models are
+  extrapolating). The 0.2 threshold correctly separates that (0.1-2.7) from the
+  0.01 noise floor.
 - **A3 🟠 scheduler not running locally (root cause).** `feature_snapshots`
   stuck at 2026-07-05, `predictions` has ~3 rows. This is the shared root of
   A2, the near-empty History page, and stale predictions. Not a code issue —
@@ -38,6 +39,10 @@ contained · 🟢 cosmetic/efficiency.
   and contradicts them.
 - **B2 🟢 Supporting Signals show raw values** (`crude_inv_dev = -210070.8651`).
   Backend `_build_signal_list` formatting.
+- **B3 🟢 Data Monitor "Feature Missing Rate" shows >100% (e.g. 7140%).**
+  Double percentage: backend `feature_missing_rates` returns pct already
+  scaled by 100, and the frontend multiplies by 100 again. One-line frontend
+  fix.
 
 ## C. Ingestion robustness (silent-corruption class)
 
