@@ -82,7 +82,6 @@ export interface DailyReport {
   };
 
   returns: {
-    condition_description: string;
     buckets: {
       label: string;
       pct: number;

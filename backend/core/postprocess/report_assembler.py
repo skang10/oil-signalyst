@@ -155,11 +155,12 @@ def nest_daily_report(
             "shap_drivers": shap_drivers,
         },
         "returns": {
-            # Static placeholder: no generated narrative summary today.
-            "condition_description": (
-                f"Regime {raw['dominant_regime']} dominant with "
-                f"{round(decision.get('downside_prob', 0.0) * 100)}% downside probability."
-            ),
+            # `condition_description` used to sit here, reading "Regime {X}
+            # dominant with N% downside probability" - a leftover from when the
+            # returns model took regime probabilities as input. It no longer
+            # does, so the sentence described a conditioning that does not
+            # happen. Dropped rather than reworded: there is no generated
+            # narrative to replace it with.
             "buckets": [
                 {"label": "< -10%", "pct": return_dist.get("lt_minus10", 0.0), "color": "danger"},
                 {

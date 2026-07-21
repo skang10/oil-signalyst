@@ -15,17 +15,21 @@ export default function ReturnsTab() {
 
   return (
     <>
+      {/* No longer "Conditional": that meant conditioned on the regime model,
+          whose probabilities were removed from this model's inputs because
+          they leaked hindsight into training. */}
       <div className="mb-[14px]">
-        <div className="text-[15px] font-medium">Conditional Return Distribution (WTI, Next 20 Trading Days)</div>
+        <div className="text-[15px] font-medium">WTI Return Forecast (Next 20 Trading Days)</div>
         <div className="text-[12px] text-text-muted mt-[2px]">
           {report.date} · Current price: {formatUsd(report.wti_price)}/bbl
         </div>
       </div>
 
       <Card className="mb-3">
-        <div className="mb-[10px] p-[8px_10px] bg-accent-bg rounded-default border border-accent-border text-[12px] text-text-secondary">
-          {returns.condition_description}
-        </div>
+        {/* The callout that stood here read "Regime {X} dominant with N%
+            downside probability", presenting the forecast as derived from a
+            regime this model no longer sees. Removed rather than reworded -
+            there is no generated narrative to put in its place. */}
         <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
           Return Bucket Probability Distribution
         </div>

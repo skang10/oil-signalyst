@@ -15,7 +15,11 @@ import { cn } from '@/lib/utils';
 const TABS: { key: DashTab; label: string; startsGroup?: boolean }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'eia', label: 'EIA Inventory Forecast', startsGroup: true },
-  { key: 'returns', label: 'Return Dist. Forecast' },
+  // Horizon in the label because a return forecast without one says nothing,
+  // and "Dist." read as an abbreviation for anything from distance to
+  // distribution while naming the model's output shape rather than the
+  // question a reader is asking.
+  { key: 'returns', label: '20-Day WTI Return Forecast' },
   { key: 'regime', label: 'Regime', startsGroup: true },
   { key: 'charts', label: 'Market Data' },
 ];
