@@ -16,7 +16,7 @@ class FakeRegimeModel:
 def test_predict_regime_batch_uses_regime_class_column_order():
     x = pd.DataFrame({"ret_20d": [0.1, 0.2]}, index=[10, 20])
 
-    result = predict_regime_batch(FakeRegimeModel(), x)
+    result = predict_regime_batch(FakeRegimeModel(), x, ["ret_20d"])
 
     assert list(result.columns) == REGIME_PROB_COLUMNS
     assert list(result.index) == [10, 20]

@@ -62,6 +62,20 @@ def load_features(start: str, end: str) -> pd.DataFrame:
     if not frames:
         raise FileNotFoundError(f"No feature Parquet files found for {start} to {end}")
     df = pd.concat(frames).sort_index()
+    # Column order in each yearly Parquet file reflects whatever order the
+    # feature pool (DB-backed, ordered by row id) was in on the day that
+    # file was first written - re-adding a removed pool feature gives it a
+    # new, higher id, so the current year's file can end up with columns in
+    # a different order than prior years'. pd.concat only reconciles that
+    # when the range spans multiple files (it adopts the first frame's
+    # order); a single-file range - e.g. a recent cutoff_date backtest's
+    # val window, which draws only from the current year - passes that
+    # file's own order straight through. TabPFN Client's fit/predict column
+    # check is order-sensitive, so two same-named-but-differently-ordered
+    # frames 422 with "columns ... differ" deep inside model.fit/predict.
+    # Sorting here makes every load_features() call return the same order
+    # regardless of which files backed it.
+    df = df[sorted(df.columns)]
     return df[start:end]
 
 
@@ -125,11 +139,16 @@ async def run_full_training(
 
     results = {}
     regime_model = None
+    regime_feature_list = None
     if "returns" in selected and "regime" not in selected:
         # Returns model needs regime probabilities as input features even
         # when regime itself isn't being retrained this run - fall back to
-        # the currently deployed regime model.
-        regime_model = (await ModelRegistry.get_active("regime"))["model"]
+        # the currently deployed regime model. Its feature_list may differ
+        # (order or content) from the current FeatureEngine output, so it
+        # must travel with the model rather than being inferred from x_train.
+        regime_artifact = await ModelRegistry.get_active("regime")
+        regime_model = regime_artifact["model"]
+        regime_feature_list = regime_artifact["feature_list"]
 
     for model_type in selected:
         builder = builders[model_type]
@@ -151,8 +170,12 @@ async def run_full_training(
             )
 
         if model_type == "returns":
-            x_train = pd.concat([x_train, predict_regime_batch(regime_model, x_train)], axis=1)
-            x_val = pd.concat([x_val, predict_regime_batch(regime_model, x_val)], axis=1)
+            x_train = pd.concat(
+                [x_train, predict_regime_batch(regime_model, x_train, regime_feature_list)], axis=1
+            )
+            x_val = pd.concat(
+                [x_val, predict_regime_batch(regime_model, x_val, regime_feature_list)], axis=1
+            )
 
         with mlflow.start_run(run_name=f"{model_type}_{version}") as run:
             mlflow.log_params(
@@ -169,6 +192,7 @@ async def run_full_training(
             model, metrics_train, metrics_val = builder(x_train, y_train, x_val, y_val)
             if model_type == "regime":
                 regime_model = model
+                regime_feature_list = list(x_train.columns)
             _log_metrics_flat(metrics_train, prefix="train.")
             _log_metrics_flat(metrics_val, prefix="val.")
             mlflow.log_dict(metrics_train, "metrics_train.json")

@@ -65,10 +65,17 @@ def predict_regime(artifact: dict, features: np.ndarray) -> dict:
     return decode_regime_probs(model.classes_, probs)
 
 
-def predict_regime_batch(model, x: pd.DataFrame) -> pd.DataFrame:
-    """Regime probabilities for every row of x, used to condition the returns model."""
+def predict_regime_batch(model, x: pd.DataFrame, feature_list: list[str]) -> pd.DataFrame:
+    """Regime probabilities for every row of x, used to condition the returns model.
+
+    Reindexes to the regime model's fit-time feature_list first: when the returns
+    model is retrained alone, x comes from the current FeatureEngine output, which
+    may have a different column order (or superset of columns) than whatever the
+    already-deployed regime model was fit on - TabPFN Client rejects that mismatch
+    with a 422 "columns differ" error.
+    """
     ensure_tabpfn_authenticated()
-    probs = model.predict_proba(x)
+    probs = model.predict_proba(x[feature_list])
     columns = [f"p_{REGIME_CLASSES[int(class_id)]}" for class_id in model.classes_]
     return pd.DataFrame(probs, columns=columns, index=x.index)[REGIME_PROB_COLUMNS]
 
