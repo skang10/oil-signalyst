@@ -40,6 +40,21 @@ function baselineText(m: Model): string | null {
     : `baseline ${fmt(m.metrics.baseline, 3)}`;
 }
 
+/**
+ * Just the score and its unit, for the dashboard tab bar. Null for models that
+ * forecast nothing - that absence is the point: it is what distinguishes a tab
+ * that can be right or wrong from one that only describes the present, without
+ * needing a caption to assert it.
+ *
+ * '—' rather than null when a forecast has no recorded score yet, so the slot
+ * still reads as "this should have a number".
+ */
+export function compactMetric(m: Model): string | null {
+  if (!m.is_forecast) return null;
+  if (m.metrics.primary === null) return '—';
+  return m.type === 'eia' ? `${fmt(m.metrics.primary, 1)} MB` : fmt(m.metrics.primary, 3);
+}
+
 /** True when the model beats its baseline; null when it cannot be judged. */
 export function beatsBaseline(m: Model): boolean | null {
   const { primary, baseline } = m.metrics;
