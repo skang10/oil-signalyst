@@ -33,7 +33,12 @@ export default function TrainConfigCard({
   onSubmit: (params: TrainParams) => void;
   isPending: boolean;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set(['returns']));
+  // Both trainable models selected by default - the two are independent now
+  // that returns no longer conditions on regime, so the common case is
+  // retraining the whole forecast set together.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(MODEL_OPTIONS.map((o) => o.type))
+  );
   const [cutoffDate, setCutoffDate] = useState(defaultCutoffDate);
 
   function toggle(type: string, checked: boolean) {
