@@ -134,6 +134,20 @@ export default function TrainingDatasetCard({ dataset }: { dataset: Dataset }) {
             {s.name}: {s.warning}
           </div>
         ))}
+
+      {/* Effective n is the load-bearing number here - it's what every metric
+          should be read against - and it's far below the row count, so it
+          needs saying rather than hiding in a tooltip. */}
+      <div className="text-[11px] text-text-muted leading-[1.5] mt-[10px] pt-[8px] border-t border-border">
+        <span className="text-text-secondary">Effective n</span> = independent
+        observations, not rows. Labels look 20 trading days ahead, so consecutive
+        daily rows share almost all of their outcome window and weekend rows are
+        forward-filled duplicates — validation's {' '}
+        {splits.find((s) => s.name === 'Validation')?.weekday_rows ?? 0} weekday rows
+        are worth only ~{splits.find((s) => s.name === 'Validation')?.effective_n ?? 0}{' '}
+        independent samples. Read every accuracy and Brier figure against this, not
+        the row count.
+      </div>
     </Card>
   );
 }
