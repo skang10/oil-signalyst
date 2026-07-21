@@ -26,6 +26,19 @@ class ModelRegistry:
         artifact["model_version_id"] = model_version.id
         artifact["model_version"] = model_version.version
         artifact["feature_list"] = model_version.feature_list or artifact.get("feature_list", [])
+
+        # Returns models trained before regime conditioning was removed carry
+        # p_R1..p_R4 in their feature_list. Nothing produces those columns any
+        # more, so scoring one would fail deep inside TabPFN with a column
+        # mismatch; say so plainly instead.
+        stale = [name for name in artifact["feature_list"] if name.startswith("p_R")]
+        if stale:
+            raise ModelNotFoundError(
+                f"Active '{model_type}' model {model_version.version} was trained with "
+                f"regime-conditioning features {stale}, which are no longer produced. "
+                "Retrain this model type."
+            )
+
         _cache[model_type] = artifact
         return artifact
 

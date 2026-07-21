@@ -108,13 +108,7 @@ async def _pool_signals(db: DbSession) -> list[dict]:
             }
         )
 
-    # Regime-probability columns (p_R1..p_R4) are synthesized at training
-    # time for the returns model (trainer.py::predict_regime_batch concat),
-    # not pool_features entries - they'd otherwise show up as scary
-    # "removed" ghosts on every install.
-    from core.models.regime import REGIME_PROB_COLUMNS
-
-    pool_names = {p["name"] for p in pool} | set(REGIME_PROB_COLUMNS)
+    pool_names = {p["name"] for p in pool}
     ghost_used_by: dict[str, list[str]] = {}
     for model_type, feature_list in live_lists.items():
         for name in feature_list:

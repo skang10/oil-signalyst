@@ -6,7 +6,6 @@ import pytest
 
 import core.postprocess.stress_test as stress_test_module
 from core.exceptions import ModelNotFoundError
-from core.models.regime import REGIME_PROB_COLUMNS
 
 
 class FakeRegimeModel:
@@ -31,9 +30,12 @@ FEATURE_LIST = ["ret_20d", "rvol_20d", "brent_wti_spread"]
 @pytest.fixture
 def fake_active_models(monkeypatch):
     regime_artifact = {"model": FakeRegimeModel(), "feature_list": FEATURE_LIST}
+    # Reversed order on purpose: the regime artifact is frozen at its old column
+    # order while returns retrains against the sorted one, so stress_test must
+    # index each model by its own feature_list rather than sharing one vector.
     returns_artifact = {
         "model": FakeReturnsModel(),
-        "feature_list": FEATURE_LIST + REGIME_PROB_COLUMNS,
+        "feature_list": list(reversed(FEATURE_LIST)),
     }
 
     async def fake_get_active(model_type: str):

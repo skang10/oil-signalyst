@@ -107,13 +107,19 @@ async def run_stress_test() -> dict:
     except ModelNotFoundError as exc:
         return {"scenarios": [], "error": f"Active models unavailable: {exc}"}
 
-    feature_list = regime_artifact.get("feature_list") or []
+    regime_features = regime_artifact.get("feature_list") or []
+    returns_features = returns_artifact.get("feature_list") or []
+    # Union, so one Parquet read covers both models; each model is then indexed
+    # by its own fit-time order below. The regime artifact is frozen at the old
+    # column order while returns retrains against the sorted one, so the two
+    # lists agree on membership but not necessarily on order.
+    required_features = list(dict.fromkeys([*regime_features, *returns_features]))
     registry = DataRegistry()
     scenarios = []
 
     for key, scenario_date in STRESS_SCENARIOS.items():
         name = SCENARIO_LABELS[key]
-        row = _load_historical_feature_row(scenario_date, feature_list)
+        row = _load_historical_feature_row(scenario_date, required_features)
         if row is None:
             scenarios.append(
                 {
@@ -125,9 +131,12 @@ async def run_stress_test() -> dict:
             continue
 
         try:
-            vector = row.to_numpy(dtype=float)
-            regime_probs = predict_regime(regime_artifact, vector)
-            return_dist = predict_returns(returns_artifact, vector, regime_probs)
+            regime_probs = predict_regime(
+                regime_artifact, row[regime_features].to_numpy(dtype=float)
+            )
+            return_dist = predict_returns(
+                returns_artifact, row[returns_features].to_numpy(dtype=float)
+            )
         except Exception as exc:
             logger.warning(
                 "Stress scenario inference failed", extra={"scenario": key, "error": str(exc)}

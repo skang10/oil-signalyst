@@ -252,17 +252,29 @@ async def _ensure_prediction(
         )
         return
 
-    feature_list = regime_artifact.get("feature_list") or list(selected_features.columns)
-    feature_values = [feature_dict[name] for name in feature_list]
-    vector = pd.Series(feature_values, index=feature_list, dtype=float).to_numpy()
-    regime_probs = predict_regime(regime_artifact, vector)
+    def _vector_for(artifact: dict):
+        """Feature vector ordered by THIS model's own fit-time feature_list.
+
+        One shared vector used to be built from the regime model's list and fed
+        to all three, which held only while every model was trained in the same
+        run off identically-ordered columns. The regime model is now frozen at
+        its old column order while eia/returns retrain against the sorted order
+        load_features() produces, so a shared vector would silently hand each
+        model another model's values under its own column names.
+        """
+        names = artifact.get("feature_list") or list(selected_features.columns)
+        return pd.Series(
+            [feature_dict[name] for name in names], index=names, dtype=float
+        ).to_numpy()
+
+    regime_probs = predict_regime(regime_artifact, _vector_for(regime_artifact))
     recent_inventory = registry.fetch(
         "crude_inventory",
         str(target_date - timedelta(days=60)),
         str(target_date),
     )
-    eia_forecast = predict_eia(eia_artifact, vector, recent_inventory)
-    return_dist = predict_returns(returns_artifact, vector, regime_probs)
+    eia_forecast = predict_eia(eia_artifact, _vector_for(eia_artifact), recent_inventory)
+    return_dist = predict_returns(returns_artifact, _vector_for(returns_artifact))
     recent_wti = registry.fetch("wti", str(target_date - timedelta(days=7)), str(target_date))
     current_price = float(recent_wti.dropna().iloc[-1])
     async with get_db() as db:
@@ -276,7 +288,7 @@ async def _ensure_prediction(
         exposure_barrels=exposure_barrels,
         regime_confidence_threshold=regime_confidence_threshold,
     )
-    shap_values = explain_prediction(regime_artifact, vector)
+    shap_values = explain_prediction(regime_artifact, _vector_for(regime_artifact))
 
     async with get_db() as db:
         db.add(

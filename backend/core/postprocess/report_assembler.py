@@ -6,7 +6,6 @@ from core.data.registry import DataRegistry
 from core.logging import get_logger
 from core.models.labels import return_bucket_for_value
 from core.models.regime import dominant_regime
-from core.models.regime_labels import build_regime_series
 from core.models.trainer import load_features
 from core.postprocess.regime_stats import (
     estimate_switch_probability,
@@ -201,12 +200,11 @@ def _shap_drivers(shap_values: dict, feature_signals: list[dict], top_n: int = 6
 def build_history_response(predictions: list[Prediction]) -> dict:
     """Reshapes recent Prediction rows into the frontend's HistoryResponse
     contract: a per-day prediction list plus rolling accuracy metrics.
-    Accuracy is computed for real against actual outcomes where available
-    (the hand-curated regime series and real crude_inventory changes - the
-    same sources regime_stats.py/labels.py already use), not against a
-    backfilled column - only the returns model has one (outcome_correct)."""
+    Accuracy is scored only against genuinely observed outcomes: real
+    crude_inventory changes for eia, realized forward returns for the return
+    distribution. Regime is deliberately absent - it has no observable outcome
+    to be scored against."""
     empty_accuracy = {
-        "regime_directional_acc": 0.0,
         "eia_directional_acc": 0.0,
         "returns_brier": 0.0,
     }
@@ -216,7 +214,6 @@ def build_history_response(predictions: list[Prediction]) -> dict:
     dates = [p.date for p in predictions]
     start, end = str(min(dates)), str(max(dates))
 
-    true_regime_series = build_regime_series(start, end)
     try:
         crude = DataRegistry().fetch("crude_inventory", start, end).dropna().sort_index()
         actual_eia_change = crude[crude.ne(crude.shift())].diff() / 1000
@@ -225,7 +222,6 @@ def build_history_response(predictions: list[Prediction]) -> dict:
         actual_eia_change = pd.Series(dtype=float)
 
     rows = []
-    regime_hits, regime_total = 0, 0
     eia_hits, eia_total = 0, 0
     brier_scores = []
     bucket_order = ["lt_minus10", "neg_10_0", "pos_0_10", "gt_10"]
@@ -249,11 +245,6 @@ def build_history_response(predictions: list[Prediction]) -> dict:
         )
 
         ts = pd.Timestamp(p.date)
-        if ts in true_regime_series.index:
-            regime_total += 1
-            if true_regime_series.loc[ts] == dominant:
-                regime_hits += 1
-
         if ts in actual_eia_change.index and eia_forecast.get("crude") is not None:
             actual_chg = actual_eia_change.loc[ts]
             if pd.notna(actual_chg):
@@ -273,9 +264,11 @@ def build_history_response(predictions: list[Prediction]) -> dict:
     return {
         "predictions": rows,
         "rolling_accuracy": {
-            "regime_directional_acc": round(regime_hits / regime_total, 4)
-            if regime_total
-            else 0.0,
+            # No regime entry: it used to compare the model's dominant regime
+            # against build_regime_series(), i.e. a hardcoded table of 17 dates.
+            # That measures agreement with a constant, not accuracy - unlike the
+            # two below, which score against observed inventory and realized
+            # returns.
             "eia_directional_acc": round(eia_hits / eia_total, 4) if eia_total else 0.0,
             "returns_brier": round(sum(brier_scores) / len(brier_scores), 4)
             if brier_scores

@@ -1,20 +1,27 @@
+"""Regime is a market-state description, not a forecast.
+
+It is deliberately NOT trained alongside eia/returns any more. The dividing
+line is whether a thing has an observable future outcome to be scored against:
+eia is checked against the inventory change EIA later publishes, returns
+against the realized 20-day return - regime was only ever checked against
+regime_labels.py's REGIME_TRANSITIONS, a hand-typed table of 17 dates. Scoring
+a model against a hardcoded lookup table is not accuracy, so the training
+path, its metrics, and its GMM cross-check have been removed.
+
+What remains is inference from the frozen artifact, which still supplies the
+dashboard's probability distribution, decision_engine's confidence gate, the
+SHAP drivers card, and stress_test.
+"""
+
 import numpy as np
-import pandas as pd
-from tabpfn_client import TabPFNClassifier
 
 from core.logging import get_logger
-from core.models.calibration import calibrate_if_better
-from core.models.common import as_named_row, classifier_metrics
+from core.models.common import as_named_row
 from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
 logger = get_logger(__name__)
 
 REGIME_CLASSES = ["R1", "R2", "R3", "R4"]
-REGIME_PROB_COLUMNS = [f"p_{cls}" for cls in REGIME_CLASSES]
-
-
-def encode_regimes(labels) -> np.ndarray:
-    return np.array([REGIME_CLASSES.index(value) for value in labels])
 
 
 def decode_regime_probs(classes: np.ndarray, probs: np.ndarray) -> dict:
@@ -33,49 +40,9 @@ def dominant_regime(regime_probs: dict | None) -> str | None:
     return max(regime_probs, key=regime_probs.get)
 
 
-def build_regime_model(train_x, train_y, val_x, val_y):
-    from core.models.regime_validation import validate_regime_labels
-
-    ensure_tabpfn_authenticated()
-    model = TabPFNClassifier(balance_probabilities=True)
-    y_train = encode_regimes(train_y)
-    y_val = encode_regimes(val_y)
-    model.fit(train_x, y_train)
-    metrics_train = classifier_metrics(model, train_x, y_train, len(REGIME_CLASSES))
-    metrics_val = classifier_metrics(model, val_x, y_val, len(REGIME_CLASSES))
-    model, metrics_val = calibrate_if_better(model, val_x, y_val, len(REGIME_CLASSES), metrics_val)
-    metrics_train["class_counts"] = {
-        str(k): int(v) for k, v in train_y.value_counts().sort_index().items()
-    }
-    gmm_validation = validate_regime_labels(train_x, train_y, val_x, val_y)
-    metrics_train["gmm_validation"] = gmm_validation
-    if gmm_validation.get("review_trigger"):
-        logger.warning(
-            "GMM regime label agreement below review threshold",
-            extra={"agreement_val": gmm_validation.get("agreement_val")},
-        )
-    return model, metrics_train, metrics_val
-
-
 def predict_regime(artifact: dict, features: np.ndarray) -> dict:
     ensure_tabpfn_authenticated()
     model = artifact["model"]
     x = as_named_row(features, artifact["feature_list"])
     probs = model.predict_proba(x)[0]
     return decode_regime_probs(model.classes_, probs)
-
-
-def predict_regime_batch(model, x: pd.DataFrame, feature_list: list[str]) -> pd.DataFrame:
-    """Regime probabilities for every row of x, used to condition the returns model.
-
-    Reindexes to the regime model's fit-time feature_list first: when the returns
-    model is retrained alone, x comes from the current FeatureEngine output, which
-    may have a different column order (or superset of columns) than whatever the
-    already-deployed regime model was fit on - TabPFN Client rejects that mismatch
-    with a 422 "columns differ" error.
-    """
-    ensure_tabpfn_authenticated()
-    probs = model.predict_proba(x[feature_list])
-    columns = [f"p_{REGIME_CLASSES[int(class_id)]}" for class_id in model.classes_]
-    return pd.DataFrame(probs, columns=columns, index=x.index)[REGIME_PROB_COLUMNS]
-
