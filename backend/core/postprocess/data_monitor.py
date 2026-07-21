@@ -7,6 +7,7 @@ import yaml
 from core.config_paths import DATA_SOURCES_YAML, FRESHNESS_SNAPSHOT
 from core.data.registry import DataRegistry
 from core.logging import get_logger
+from core.models.feature_prep import to_model_matrix
 from core.models.trainer import load_features
 
 logger = get_logger(__name__)
@@ -271,4 +272,94 @@ def model_input_freshness(
         "matrix_as_of": matrix_as_of.date().isoformat(),
         "pipeline_lag_days": lag_days,
         "pipeline_behind": lag_days is not None and lag_days > PIPELINE_LAG_MAX_DAYS,
+    }
+
+
+# The returns model's label horizon, in trading days. Used to derive how many
+# genuinely independent observations a window holds - mirrors
+# build_return_bucket_labels' horizon_trading_days default.
+LABEL_HORIZON_TRADING_DAYS = 20
+
+
+def _split_stats(matrix: pd.DataFrame, start: str, end: str) -> dict:
+    window = matrix.loc[start:end]
+    if window.empty:
+        return {"start": None, "end": None, "rows": 0, "weekday_rows": 0, "effective_n": 0}
+    weekday_rows = int((window.index.dayofweek < 5).sum())
+    return {
+        "start": window.index.min().date().isoformat(),
+        "end": window.index.max().date().isoformat(),
+        "rows": len(window),
+        "weekday_rows": weekday_rows,
+        # Overlapping forward-looking labels mean consecutive rows share almost
+        # all of their outcome window, so the count that matters for reading any
+        # metric is how many NON-overlapping windows fit - and weekend rows are
+        # forward-filled duplicates that cannot contribute one.
+        "effective_n": weekday_rows // LABEL_HORIZON_TRADING_DAYS,
+    }
+
+
+def training_dataset_summary() -> dict:
+    """Shape of the dataset the models are actually fit on.
+
+    The rest of this module reports feed health - is each source arriving, is
+    it drifting. None of it answers the questions a modeller asks first: what
+    period does the matrix cover, how many rows are there really, and where do
+    train/calibration/validation fall. Those gaps hid two things worth seeing:
+    a 540-day hole where 2025 should be (which is why a cutoff_date in 2026
+    yields a 2-row validation window), and the fact that no calibration set is
+    held out at all - calibrate_if_better fits on the validation set it then
+    reports against.
+    """
+    from core.models.trainer import TRAIN_END, TRAIN_START, VAL_END, VAL_START
+
+    try:
+        matrix = to_model_matrix(load_features("1990-01-01", "2100-01-01"))
+    except FileNotFoundError:
+        return {"available": False}
+    if matrix.empty:
+        return {"available": False}
+
+    gaps = matrix.index.to_series().diff().dt.days
+    largest_gap = int(gaps.max()) if gaps.notna().any() else 0
+    weekday_rows = int((matrix.index.dayofweek < 5).sum())
+
+    train = _split_stats(matrix, TRAIN_START, TRAIN_END)
+    validation = _split_stats(matrix, VAL_START, VAL_END)
+    after_val = _split_stats(matrix, str(pd.Timestamp(VAL_END) + pd.Timedelta(days=1)), "2100-01-01")
+
+    return {
+        "available": True,
+        "matrix": {
+            "start": matrix.index.min().date().isoformat(),
+            "end": matrix.index.max().date().isoformat(),
+            "rows": len(matrix),
+            "weekday_rows": weekday_rows,
+            # Sources are aligned to a calendar-day index and forward-filled, so
+            # weekends are carried-forward duplicates rather than observations.
+            "weekend_rows": len(matrix) - weekday_rows,
+            "largest_gap_days": largest_gap,
+            "largest_gap_at": gaps.idxmax().date().isoformat() if largest_gap else None,
+        },
+        "splits": [
+            {
+                "name": "Train",
+                # Declared vs actual: TRAIN_START predates the first row, so the
+                # window the config claims is not the window that was used.
+                "declared_start": TRAIN_START,
+                **train,
+            },
+            {
+                "name": "Calibration",
+                "declared_start": None,
+                "start": None,
+                "end": None,
+                "rows": 0,
+                "weekday_rows": 0,
+                "effective_n": 0,
+                "warning": "Not held out - the calibrator is fit on the validation set it is then scored against.",
+            },
+            {"name": "Validation", "declared_start": VAL_START, **validation},
+            {"name": "Unused (after validation)", "declared_start": None, **after_val},
+        ],
     }

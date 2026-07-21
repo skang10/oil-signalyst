@@ -148,6 +148,39 @@ export interface ModelStatus {
   };
   feature_coverage_7d: number;
   /**
+   * Shape of the dataset the models are fit on - coverage, row counts and
+   * split boundaries. `available: false` when no feature Parquet exists yet.
+   */
+  training_dataset:
+    | { available: false }
+    | {
+        available: true;
+        matrix: {
+          start: string;
+          end: string;
+          rows: number;
+          weekday_rows: number;
+          /** Calendar-day index with weekends forward-filled, so these are
+           *  carried-forward duplicates rather than observations. */
+          weekend_rows: number;
+          largest_gap_days: number;
+          largest_gap_at: string | null;
+        };
+        splits: {
+          name: string;
+          /** Configured start, when it differs from the first row actually present. */
+          declared_start: string | null;
+          start: string | null;
+          end: string | null;
+          rows: number;
+          weekday_rows: number;
+          /** Non-overlapping label windows - the count that matters for reading
+           *  any metric, given 20-day forward labels on daily rows. */
+          effective_n: number;
+          warning?: string;
+        }[];
+      };
+  /**
    * Not in spec §9's ModelStatus - added for Data Monitor's "Feature Missing
    * Rate" and "Feature Distribution Drift (PSI)" bar lists (§7.4), which the
    * HTML prototype requires but the spec's type omits (same gap class as

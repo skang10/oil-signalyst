@@ -9,6 +9,7 @@ from core.postprocess.data_monitor import (
     feature_coverage_7d,
     feature_missing_rates,
     model_input_freshness,
+    training_dataset_summary,
 )
 from core.models.metrics import PRIMARY_METRIC_KEY
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD
@@ -68,6 +69,8 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
         "data_sources": live_status,
         "model_input_freshness": await asyncio.to_thread(model_input_freshness, live_status),
         "feature_coverage_7d": feature_coverage_7d(),
+        # Parquet reads - off the event loop, same as the fetchers above.
+        "training_dataset": await asyncio.to_thread(training_dataset_summary),
         "feature_missing_rates": feature_missing_rates(),
         "feature_psi": [
             {"name": name, "psi": round(value, 4)}

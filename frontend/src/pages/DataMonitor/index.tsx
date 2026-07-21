@@ -6,6 +6,7 @@ import Card from '@/components/shared/Card';
 import MetricCard from '@/components/shared/MetricCard';
 import TagBadge from '@/components/shared/TagBadge';
 import { CATEGORY_TAG } from '@/lib/categoryColors';
+import TrainingDatasetCard from './TrainingDatasetCard';
 import { cn } from '@/lib/utils';
 
 export default function DataMonitorPage() {
@@ -26,7 +27,10 @@ export default function DataMonitorPage() {
 
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
-      <PageHeader title="Data Monitor" sub="Data Source Status · Feature Coverage · Publication Lag" />
+      <PageHeader
+        title="Data Monitor"
+        sub="Training Dataset · Data Source Status · Feature Coverage · Publication Lag"
+      />
 
       <div className="grid grid-cols-3 gap-[10px] mb-3">
         <MetricCard label="Data Sources" value={modelStatus.data_sources.length} sub={`${normalCount} normal · ${delayedCount} delayed`} />
@@ -44,6 +48,8 @@ export default function DataMonitorPage() {
           accentTop="warning"
         />
       </div>
+
+      <TrainingDatasetCard dataset={modelStatus.training_dataset} />
 
       <Card className="mb-3">
         <div className="flex items-center justify-between gap-[10px] mb-[10px]">
