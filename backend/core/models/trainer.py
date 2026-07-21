@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -79,6 +80,33 @@ def load_features(start: str, end: str) -> pd.DataFrame:
     return df[start:end]
 
 
+def _prepare_training_data(
+    train_end: str, val_start: str, val_end: str
+) -> tuple[pd.DataFrame, pd.DataFrame, str, dict]:
+    """Feature matrices, feature version, and every model type's labels.
+
+    Pure blocking work, kept in one function so run_full_training can push it
+    to a worker thread in a single hop: Parquet reads (load_features), the
+    sync DB read behind FeatureEngine's feature pool, and the label builders,
+    which fetch their source series over the network.
+    """
+    train_x = to_model_matrix(load_features(TRAIN_START, train_end))
+    val_x = to_model_matrix(load_features(val_start, val_end))
+    feature_version = FeatureEngine().feature_version
+    labels = {
+        "regime": (
+            build_regime_labels(TRAIN_START, train_end),
+            build_regime_labels(val_start, val_end),
+        ),
+        "eia": (build_eia_labels(TRAIN_START, train_end), build_eia_labels(val_start, val_end)),
+        "returns": (
+            build_return_bucket_labels(TRAIN_START, train_end),
+            build_return_bucket_labels(val_start, val_end),
+        ),
+    }
+    return train_x, val_x, feature_version, labels
+
+
 def _align(features: pd.DataFrame, target: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
     common = features.index.intersection(target.dropna().index)
     x = features.loc[common]
@@ -115,22 +143,13 @@ async def run_full_training(
     val_start = str((pd.Timestamp(cutoff_date) + pd.Timedelta(days=1)).date()) if cutoff_date else VAL_START
     val_end = str(datetime.now(UTC).date()) if cutoff_date else VAL_END
 
-    train_x = to_model_matrix(load_features(TRAIN_START, train_end))
-    val_x = to_model_matrix(load_features(val_start, val_end))
+    # Parquet reads, the DB-backed feature pool, and the label builders' source
+    # fetches are all blocking - see _prepare_training_data.
+    train_x, val_x, feature_version, labels = await asyncio.to_thread(
+        _prepare_training_data, train_end, val_start, val_end
+    )
     version = datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S")
-    feature_version = FeatureEngine().feature_version
 
-    labels = {
-        "regime": (
-            build_regime_labels(TRAIN_START, train_end),
-            build_regime_labels(val_start, val_end),
-        ),
-        "eia": (build_eia_labels(TRAIN_START, train_end), build_eia_labels(val_start, val_end)),
-        "returns": (
-            build_return_bucket_labels(TRAIN_START, train_end),
-            build_return_bucket_labels(val_start, val_end),
-        ),
-    }
     builders = {
         "regime": build_regime_model,
         "eia": build_eia_model,
@@ -170,12 +189,14 @@ async def run_full_training(
             )
 
         if model_type == "returns":
-            x_train = pd.concat(
-                [x_train, predict_regime_batch(regime_model, x_train, regime_feature_list)], axis=1
+            train_probs, val_probs = await asyncio.to_thread(
+                lambda: (
+                    predict_regime_batch(regime_model, x_train, regime_feature_list),
+                    predict_regime_batch(regime_model, x_val, regime_feature_list),
+                )
             )
-            x_val = pd.concat(
-                [x_val, predict_regime_batch(regime_model, x_val, regime_feature_list)], axis=1
-            )
+            x_train = pd.concat([x_train, train_probs], axis=1)
+            x_val = pd.concat([x_val, val_probs], axis=1)
 
         with mlflow.start_run(run_name=f"{model_type}_{version}") as run:
             mlflow.log_params(
@@ -189,7 +210,15 @@ async def run_full_training(
                     "feature_count": len(x_train.columns),
                 }
             )
-            model, metrics_train, metrics_val = builder(x_train, y_train, x_val, y_val)
+            # The dominant blocker: every TabPFN fit/predict inside the builders
+            # goes through tabpfn_client's synchronous httpx.Client, so running
+            # this inline froze the event loop for the whole run - the live-log
+            # SSE stream (api/routes/training.py) could not even be accepted
+            # until training finished, which is why the first log line took the
+            # entire run to appear in the UI.
+            model, metrics_train, metrics_val = await asyncio.to_thread(
+                builder, x_train, y_train, x_val, y_val
+            )
             if model_type == "regime":
                 regime_model = model
                 regime_feature_list = list(x_train.columns)
@@ -239,7 +268,7 @@ async def _save_model(
         "version": version,
         **(extra_artifact or {}),
     }
-    joblib.dump(artifact, file_path)
+    await asyncio.to_thread(joblib.dump, artifact, file_path)
 
     async with get_db() as db:
         await db.execute(
