@@ -9,7 +9,11 @@ from sqlalchemy import desc, func, select
 
 from api.dependencies import CurrentUser, DbSession, DSOnly
 from auth.jwt import JWTError, decode_access_token
-from core.models.trainer import TRAINABLE_MODEL_TYPES, run_full_training_with_log
+from core.models.trainer import (
+    TRAINABLE_MODEL_TYPES,
+    run_cross_validate_with_log,
+    run_full_training_with_log,
+)
 from db.database import AsyncSessionLocal, get_db
 from db.models import ModelVersion, TrainJob, User
 
@@ -118,6 +122,77 @@ async def start_training(
                 triggered_by_user_id=user.id,
                 model_types=model_types,
             )
+            async with get_db() as session:
+                job = await session.get(TrainJob, job_id)
+                if job:
+                    job.status = "complete"
+                    job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                    job.result = result
+                    session.add(job)
+        except Exception as exc:
+            async with get_db() as session:
+                job = await session.get(TrainJob, job_id)
+                if job:
+                    job.status = "failed"
+                    job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                    job.result = {"error": str(exc)}
+                    session.add(job)
+
+    background_tasks.add_task(_run)
+    return {"job_id": job_id, "status": "queued", "model_types": model_types}
+
+
+@router.post("/cross-validate", status_code=status.HTTP_202_ACCEPTED)
+async def start_cross_validate(
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+    user: DSOnly,
+    body: TrainStartRequest = TrainStartRequest(),
+) -> dict:
+    """Walk-forward cross-validation (the robust metric distribution). Runs as a
+    background job like training - it is slow (a fit per fold per model) and
+    deploys nothing. Shares the single-run guard so it can't overlap a training
+    run."""
+    job_id = str(uuid.uuid4())[:8]
+    model_types = body.model_types or list(TRAINABLE_MODEL_TYPES)
+
+    unknown = [t for t in model_types if t not in TRAINABLE_MODEL_TYPES]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Not cross-validatable: {', '.join(unknown)}. "
+            f"Trainable types: {', '.join(TRAINABLE_MODEL_TYPES)}.",
+        )
+
+    in_flight = (
+        await db.execute(select(TrainJob).where(TrainJob.status.in_(ACTIVE_JOB_STATUSES)).limit(1))
+    ).scalar_one_or_none()
+    if in_flight:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job {in_flight.id} is already {in_flight.status}. Wait for it to finish.",
+        )
+
+    db.add(
+        TrainJob(
+            id=job_id,
+            status="queued",
+            model_types=model_types,
+            triggered_by=user.id,
+            trigger_source="cross-validate",
+        )
+    )
+    await db.commit()
+
+    async def _run() -> None:
+        async with get_db() as session:
+            job = await session.get(TrainJob, job_id)
+            if job:
+                job.status = "running"
+                job.started_at = datetime.now(UTC).replace(tzinfo=None)
+                session.add(job)
+        try:
+            result = await run_cross_validate_with_log(job_id=job_id, model_types=model_types)
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)
                 if job:

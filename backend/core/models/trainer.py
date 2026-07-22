@@ -1,7 +1,8 @@
 import asyncio
 import os
+import statistics
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from numbers import Number
 
 import joblib
@@ -14,7 +15,7 @@ from core.logging import get_logger
 from core.models.eia import build_eia_model
 from core.models.feature_prep import to_model_matrix
 from core.models.labels import build_eia_labels, build_return_bucket_labels
-from core.models.metrics import PRIMARY_METRIC_KEY, evaluate_deployment_gate
+from core.models.metrics import HIGHER_IS_BETTER, PRIMARY_METRIC_KEY, beats_baseline, evaluate_deployment_gate
 from core.models.model_registry import ModelRegistry
 from core.models.returns import build_returns_model
 from db.database import get_db
@@ -394,3 +395,130 @@ async def run_full_training_with_log(
         "blocked_reasons": blocked,
         "mlflow_run_id": (result.get("returns") or {}).get("mlflow_run_id"),
     }
+
+
+# ---- Walk-forward cross-validation --------------------------------------
+
+# The first year tested. Earlier origins leave too little training history to be
+# worth a fold; from 2019 each fold still trains on 7+ years.
+CV_FIRST_TEST_YEAR = 2019
+
+
+def _cv_folds(today: str) -> list[dict]:
+    """Expanding-window folds: for each year from CV_FIRST_TEST_YEAR to now,
+    train on everything before it and test on that year. The purge is automatic
+    - per-window labels can't reach past the train window's end into the test
+    year (see the split comment above)."""
+    end_year = pd.Timestamp(today).year
+    folds = []
+    for year in range(CV_FIRST_TEST_YEAR, end_year + 1):
+        folds.append(
+            {
+                "fold": year,
+                "train_start": TRAIN_START,
+                "train_end": f"{year - 1}-12-31",
+                "test_start": f"{year}-01-01",
+                "test_end": today if year == end_year else f"{year}-12-31",
+            }
+        )
+    return folds
+
+
+def _run_cv_fold(fold: dict, model_types: list[str]) -> dict:
+    """Blocking: build one fold's train/test data, fit each model, return the
+    primary metric and baseline per type. Pushed to a worker thread by the
+    caller (TabPFN's client is synchronous)."""
+    train_x, train_lab = _window(fold["train_start"], fold["train_end"])
+    test_x, test_lab = _window(fold["test_start"], fold["test_end"])
+    builders = {"eia": build_eia_model, "returns": build_returns_model}
+
+    out = {}
+    for mt in model_types:
+        key = PRIMARY_METRIC_KEY[mt]
+        x_train, y_train = _align(train_x, train_lab[mt])
+        x_test, y_test = _align(test_x, test_lab[mt])
+        if x_train.empty or x_test.empty:
+            out[mt] = {"test_n": len(x_test), key: None, "baseline": None, "beat": None}
+            continue
+        _, _, metrics_test = builders[mt](x_train, y_train, x_test, y_test)
+        value = metrics_test.get(key)
+        baseline = (metrics_test.get("baseline") or {}).get(key)
+        out[mt] = {
+            "test_n": len(x_test),
+            key: value,
+            "baseline": baseline,
+            "beat": beats_baseline(key, value, baseline),
+        }
+    return out
+
+
+def _aggregate_cv(model_type: str, folds: list[dict]) -> dict:
+    """Mean/std/min/max of a model's primary metric across folds, plus how many
+    folds beat baseline - the point of CV is this distribution, not any one
+    number."""
+    key = PRIMARY_METRIC_KEY[model_type]
+    scored = [f for f in folds if f.get(key) is not None]
+    values = [f[key] for f in scored]
+    n_beat = sum(1 for f in scored if f.get("beat"))
+    return {
+        "metric": key,
+        "higher_is_better": key in HIGHER_IS_BETTER,
+        "n_folds": len(scored),
+        "mean": round(statistics.fmean(values), 4) if values else None,
+        "std": round(statistics.pstdev(values), 4) if len(values) > 1 else 0.0,
+        "min": round(min(values), 4) if values else None,
+        "max": round(max(values), 4) if values else None,
+        "n_beat_baseline": n_beat,
+        "folds": folds,
+    }
+
+
+async def cross_validate(
+    model_types: list[str] | None = None,
+    on_progress: Callable[[str], Awaitable[None]] | None = None,
+) -> dict:
+    """Walk-forward (expanding-origin) cross-validation - the robust view the
+    single train/test split can't give when effective n per year is ~12-20.
+    Fits each model on every fold and reports the metric's distribution across
+    folds. Deploys nothing."""
+    selected = [t for t in TRAINABLE_MODEL_TYPES if t in (model_types or TRAINABLE_MODEL_TYPES)]
+    if not selected:
+        raise ValueError(f"No trainable model types in {model_types}.")
+
+    folds = _cv_folds(str(date.today()))
+    per_model_folds: dict[str, list[dict]] = {mt: [] for mt in selected}
+
+    for fold in folds:
+        result = await asyncio.to_thread(_run_cv_fold, fold, selected)
+        for mt in selected:
+            per_model_folds[mt].append(
+                {"fold": fold["fold"], "test_start": fold["test_start"], **result[mt]}
+            )
+        if on_progress:
+            done = ", ".join(
+                f"{mt} {result[mt].get(PRIMARY_METRIC_KEY[mt])}" for mt in selected
+            )
+            await on_progress(f"Fold {fold['fold']} ({fold['test_start'][:4]}): {done}")
+
+    return {
+        "models": {mt: _aggregate_cv(mt, per_model_folds[mt]) for mt in selected},
+        "n_folds": len(folds),
+        "span": f"{folds[0]['test_start'][:4]}-{folds[-1]['test_start'][:4]}" if folds else "",
+    }
+
+
+async def run_cross_validate_with_log(job_id: str, model_types: list[str] | None = None) -> dict:
+    """Wraps cross_validate with per-fold log lines on the TrainJob, for the
+    same SSE stream the training run uses."""
+
+    async def log(line: str) -> None:
+        async with get_db() as db:
+            job = await db.get(TrainJob, job_id)
+            if job:
+                job.log_lines = (job.log_lines or []) + [f"[{_ts()}] {line}"]
+                db.add(job)
+
+    await log("Starting walk-forward cross-validation...")
+    result = await cross_validate(model_types=model_types, on_progress=log)
+    await log("Cross-validation complete.")
+    return result

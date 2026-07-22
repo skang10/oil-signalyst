@@ -222,9 +222,33 @@ export interface TrainJob {
     /** Per model type: why the gate blocked it. Absent when nothing was blocked. */
     blocked_reasons?: Record<string, string[]>;
     error?: string;
+    /** Present on a cross-validate job (trigger_source 'cross-validate'): the
+     *  walk-forward metric distribution per model type. */
+    models?: Record<string, CrossValidateModel>;
+    n_folds?: number;
+    span?: string;
   };
   // Present only when fetched with ?include_log=true (history detail panel).
   log_lines?: string[];
+}
+
+export interface CrossValidateModel {
+  metric: string;
+  higher_is_better: boolean;
+  n_folds: number;
+  mean: number | null;
+  std: number;
+  min: number | null;
+  max: number | null;
+  n_beat_baseline: number;
+  folds: {
+    fold: number;
+    test_start: string;
+    test_n: number;
+    baseline: number | null;
+    beat: boolean | null;
+    [metricKey: string]: number | string | boolean | null;
+  }[];
 }
 
 export type TrainTriggerSource = 'manual' | 'auto:psi' | 'auto:sunday' | 'agent';

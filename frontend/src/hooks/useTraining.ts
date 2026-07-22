@@ -33,6 +33,15 @@ export function useStartTraining() {
   });
 }
 
+/** Walk-forward cross-validation - a slow background job that reports a metric
+ *  distribution across folds and deploys nothing. */
+export function useStartCrossValidate() {
+  return useMutation({
+    mutationFn: (params: TrainParams) =>
+      api.post<TrainJob>('/api/train/cross-validate', params),
+  });
+}
+
 export function useTrainStatus(jobId: string | null) {
   return useSWR<TrainJob>(
     jobId ? swrKeys.trainStatus(jobId) : null,

@@ -15,9 +15,11 @@ const MODEL_OPTIONS: { type: string; label: string }[] = [
 
 export default function TrainConfigCard({
   onSubmit,
+  onCrossValidate,
   isPending,
 }: {
   onSubmit: (params: TrainParams) => void;
+  onCrossValidate: (params: TrainParams) => void;
   isPending: boolean;
 }) {
   // Both trainable models selected by default - the two are independent now
@@ -59,18 +61,25 @@ export default function TrainConfigCard({
         Fixed split: train 2012–2024, test 2025→today (held out).
       </div>
 
-      <button
-        type="button"
-        disabled={isPending || selected.size === 0}
-        onClick={() =>
-          onSubmit({
-            model_types: Array.from(selected),
-          })
-        }
-        className="mt-3 px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-surface-2 border border-border-strong hover:bg-surface-1 disabled:opacity-50"
-      >
-        {isPending ? 'Starting...' : 'Start Training'}
-      </button>
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          type="button"
+          disabled={isPending || selected.size === 0}
+          onClick={() => onSubmit({ model_types: Array.from(selected) })}
+          className="px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-surface-2 border border-border-strong hover:bg-surface-1 disabled:opacity-50"
+        >
+          {isPending ? 'Starting...' : 'Start Training'}
+        </button>
+        <button
+          type="button"
+          disabled={isPending || selected.size === 0}
+          onClick={() => onCrossValidate({ model_types: Array.from(selected) })}
+          title="Walk-forward cross-validation (~several minutes, deploys nothing)"
+          className="px-[14px] py-[6px] text-[12px] rounded-default cursor-pointer bg-none border border-border hover:bg-surface-1 disabled:opacity-50"
+        >
+          Cross-Validate
+        </button>
+      </div>
     </Card>
   );
 }
