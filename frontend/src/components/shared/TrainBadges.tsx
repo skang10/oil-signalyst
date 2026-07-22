@@ -32,6 +32,7 @@ const STATUS_KIND: Record<TrainJobSummary['status'], TagKind> = {
   running: 'blue',
   complete: 'green',
   failed: 'red',
+  cancelled: 'muted',
 };
 
 export function TrainStatusBadge({ status }: { status: TrainJobSummary['status'] }) {

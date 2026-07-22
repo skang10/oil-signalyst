@@ -199,7 +199,7 @@ export interface ModelStatus {
 
 export interface TrainJob {
   job_id: string;
-  status: 'queued' | 'running' | 'complete' | 'failed';
+  status: 'queued' | 'running' | 'complete' | 'failed' | 'cancelled';
   model_types: string[];
   started_at: string | null;
   completed_at: string | null;

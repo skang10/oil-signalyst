@@ -42,6 +42,14 @@ export function useStartCrossValidate() {
   });
 }
 
+/** Cooperatively cancel a running training / cross-validation job. Frees the
+ *  single-run guard immediately; the loop stops at the next checkpoint. */
+export function useStopJob() {
+  return useMutation({
+    mutationFn: (jobId: string) => api.post(`/api/train/stop/${jobId}`, {}),
+  });
+}
+
 export function useTrainStatus(jobId: string | null) {
   return useSWR<TrainJob>(
     jobId ? swrKeys.trainStatus(jobId) : null,

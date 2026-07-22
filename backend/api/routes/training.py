@@ -124,7 +124,8 @@ async def start_training(
             )
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)
-                if job:
+                # Don't resurrect a job the user cancelled mid-run.
+                if job and job.status == "running":
                     job.status = "complete"
                     job.completed_at = datetime.now(UTC).replace(tzinfo=None)
                     job.result = result
@@ -132,7 +133,7 @@ async def start_training(
         except Exception as exc:
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)
-                if job:
+                if job and job.status == "running":
                     job.status = "failed"
                     job.completed_at = datetime.now(UTC).replace(tzinfo=None)
                     job.result = {"error": str(exc)}
@@ -195,7 +196,8 @@ async def start_cross_validate(
             result = await run_cross_validate_with_log(job_id=job_id, model_types=model_types)
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)
-                if job:
+                # Don't resurrect a job the user cancelled mid-run.
+                if job and job.status == "running":
                     job.status = "complete"
                     job.completed_at = datetime.now(UTC).replace(tzinfo=None)
                     job.result = result
@@ -203,7 +205,7 @@ async def start_cross_validate(
         except Exception as exc:
             async with get_db() as session:
                 job = await session.get(TrainJob, job_id)
-                if job:
+                if job and job.status == "running":
                     job.status = "failed"
                     job.completed_at = datetime.now(UTC).replace(tzinfo=None)
                     job.result = {"error": str(exc)}
@@ -211,6 +213,33 @@ async def start_cross_validate(
 
     background_tasks.add_task(_run)
     return {"job_id": job_id, "status": "queued", "model_types": model_types}
+
+
+@router.post("/stop/{job_id}")
+async def stop_job(job_id: str, db: DbSession, user: DSOnly) -> dict:
+    """Cooperatively cancel a running training / cross-validation job.
+
+    Sets the job to 'cancelled', which frees the single-run guard immediately -
+    the guard reads the DB status, so a stuck job stops blocking new runs even
+    if its background thread is still finishing a TabPFN call it can't be
+    interrupted from (Python threads aren't killable). The training/CV loop
+    also checks this status between checkpoints and bails, and the final write
+    won't overwrite a 'cancelled' job. The in-flight fit still runs to
+    completion in the background; only future checkpoints are skipped.
+    """
+    del user
+    job = await db.get(TrainJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    if job.status not in ACTIVE_JOB_STATUSES:
+        return {"job_id": job_id, "status": job.status}
+    job.status = "cancelled"
+    job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+    job.log_lines = (job.log_lines or []) + [
+        "Cancellation requested - stopping at the next checkpoint."
+    ]
+    db.add(job)
+    return {"job_id": job_id, "status": "cancelled"}
 
 
 # Higher-is-better metrics; everything else (mae, brier) improves downward.

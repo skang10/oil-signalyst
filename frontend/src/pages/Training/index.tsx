@@ -4,6 +4,7 @@ import {
   refreshTrainJobs,
   useStartCrossValidate,
   useStartTraining,
+  useStopJob,
   useTrainStatus,
   useTrainLog,
 } from '@/hooks/useTraining';
@@ -24,8 +25,10 @@ export default function TrainingPage() {
   const [startError, setStartError] = useState<string | null>(null);
   const { mutateAsync: startTraining, isPending: trainPending } = useStartTraining();
   const { mutateAsync: startCrossValidate, isPending: cvPending } = useStartCrossValidate();
+  const { mutateAsync: stopJob, isPending: stopPending } = useStopJob();
   const { data: job } = useTrainStatus(jobId);
   const isPending = trainPending || cvPending;
+  const isRunning = job?.status === 'queued' || job?.status === 'running';
 
   useTrainLog(jobId, (line) => setLogLines((prev) => [...prev, line]));
 
@@ -84,6 +87,27 @@ export default function TrainingPage() {
       </div>
 
       {startError && <AlertBanner>Could not start training — {startError}</AlertBanner>}
+
+      {isRunning && (
+        <div className="flex items-center gap-3 mb-3 text-[12px] text-text-secondary">
+          <span>Running job {job?.job_id}…</span>
+          <button
+            type="button"
+            disabled={stopPending}
+            onClick={() => job && stopJob(job.job_id)}
+            className="px-[12px] py-[5px] text-[12px] rounded-default cursor-pointer bg-danger-bg text-danger border border-danger-border hover:opacity-80 disabled:opacity-50"
+          >
+            {stopPending ? 'Stopping…' : 'Stop'}
+          </button>
+          <span className="text-[11px] text-text-muted">
+            Frees the run lock now; the loop stops at the next checkpoint.
+          </span>
+        </div>
+      )}
+
+      {job?.status === 'cancelled' && (
+        <AlertBanner>Job {job.job_id} cancelled.</AlertBanner>
+      )}
 
       {job?.status === 'failed' && (
         <AlertBanner>

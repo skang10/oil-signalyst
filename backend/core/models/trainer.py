@@ -143,6 +143,7 @@ async def run_full_training(
     triggered_by_user_id: int | None = None,
     on_progress: Callable[[str], Awaitable[None]] | None = None,
     model_types: list[str] | None = None,
+    should_cancel: Callable[[], Awaitable[bool]] | None = None,
 ) -> dict:
     """Trains and deploys one model per selected type on the fixed two-way
     split: fit on train (2012-2024), report + gate on the held-out test window
@@ -174,6 +175,10 @@ async def run_full_training(
 
     results = {}
     for model_type in selected:
+        if should_cancel and await should_cancel():
+            if on_progress:
+                await on_progress("Cancelled before " + model_type + ".")
+            break
         builder = builders[model_type]
         train_y, test_y = labels[model_type]
         x_train, y_train = _align(matrices["train"], train_y)
@@ -339,6 +344,7 @@ async def run_full_training_with_log(
         triggered_by_user_id=triggered_by_user_id,
         on_progress=log,
         model_types=model_types,
+        should_cancel=lambda: _job_cancelled(job_id),
     )
     await log("Training run complete.")
 
@@ -476,19 +482,27 @@ def _aggregate_cv(model_type: str, folds: list[dict]) -> dict:
 async def cross_validate(
     model_types: list[str] | None = None,
     on_progress: Callable[[str], Awaitable[None]] | None = None,
+    should_cancel: Callable[[], Awaitable[bool]] | None = None,
 ) -> dict:
     """Walk-forward (expanding-origin) cross-validation - the robust view the
     single train/test split can't give when effective n per year is ~12-20.
     Fits each model on every fold and reports the metric's distribution across
-    folds. Deploys nothing."""
+    folds. Deploys nothing. Checks should_cancel between folds so a Stop takes
+    effect at the next fold boundary."""
     selected = [t for t in TRAINABLE_MODEL_TYPES if t in (model_types or TRAINABLE_MODEL_TYPES)]
     if not selected:
         raise ValueError(f"No trainable model types in {model_types}.")
 
     folds = _cv_folds(str(date.today()))
     per_model_folds: dict[str, list[dict]] = {mt: [] for mt in selected}
+    cancelled = False
 
     for fold in folds:
+        if should_cancel and await should_cancel():
+            cancelled = True
+            if on_progress:
+                await on_progress(f"Cancelled after {len(per_model_folds[selected[0]])} folds.")
+            break
         result = await asyncio.to_thread(_run_cv_fold, fold, selected)
         for mt in selected:
             per_model_folds[mt].append(
@@ -500,10 +514,12 @@ async def cross_validate(
             )
             await on_progress(f"Fold {fold['fold']} ({fold['test_start'][:4]}): {done}")
 
+    completed = per_model_folds[selected[0]]
     return {
         "models": {mt: _aggregate_cv(mt, per_model_folds[mt]) for mt in selected},
-        "n_folds": len(folds),
-        "span": f"{folds[0]['test_start'][:4]}-{folds[-1]['test_start'][:4]}" if folds else "",
+        "n_folds": len(completed),
+        "cancelled": cancelled,
+        "span": f"{completed[0]['test_start'][:4]}-{completed[-1]['test_start'][:4]}" if completed else "",
     }
 
 
@@ -519,6 +535,16 @@ async def run_cross_validate_with_log(job_id: str, model_types: list[str] | None
                 db.add(job)
 
     await log("Starting walk-forward cross-validation...")
-    result = await cross_validate(model_types=model_types, on_progress=log)
+    result = await cross_validate(
+        model_types=model_types, on_progress=log, should_cancel=lambda: _job_cancelled(job_id)
+    )
     await log("Cross-validation complete.")
     return result
+
+
+async def _job_cancelled(job_id: str) -> bool:
+    """True once the stop route has set the job to 'cancelled'. Read fresh from
+    the DB so a Stop from another request is seen at the next checkpoint."""
+    async with get_db() as db:
+        job = await db.get(TrainJob, job_id)
+        return bool(job and job.status == "cancelled")
