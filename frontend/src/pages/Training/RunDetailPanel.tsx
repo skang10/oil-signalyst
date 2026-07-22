@@ -3,6 +3,7 @@ import LogMono from '@/components/shared/LogMono';
 import { useDeployModel, useTrainJobDetail } from '@/hooks/useTraining';
 import { cn } from '@/lib/utils';
 import { METRIC_LABEL } from './ModelCompareCard';
+import CrossValidateCard from './CrossValidateCard';
 import type { TrainJobSummary } from '@/types/api';
 
 // Keys are `${model_type}_${metric}` (see backend trainer's result payload).
@@ -52,8 +53,14 @@ export default function RunDetailPanel({ job }: { job: TrainJobSummary }) {
     setRedeployed(true);
   }
 
+  // A cross-validation run carries a per-fold `models` map, not the train/deploy
+  // old/new metrics - render its distribution rather than an empty compare grid.
+  const isCv = Boolean(result?.models);
+
   return (
     <div className="bg-surface-0 border-t border-border p-[12px_14px]">
+      {isCv && detail && <CrossValidateCard job={detail} />}
+
       <div className={cn('grid gap-3', compareKeys.length > 0 && 'grid-cols-2')}>
         {compareKeys.length > 0 && (
           <div>
