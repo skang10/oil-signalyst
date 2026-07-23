@@ -6,9 +6,18 @@ export interface DailyReport {
   wti_price: number;
   wti_change_pct: number;
 
+  /**
+   * Model types served by a constant baseline instead of a trained model. When
+   * this is non-empty the sizing fields below are null on purpose - a baseline
+   * emits the training base rates and reads no features, so hedging / CVaR /
+   * Kelly derived from it would restate history as a recommendation. Null is
+   * an abstention and must render as such, never as 0.
+   */
+  baseline_models: string[];
+
   trader?: {
     signal: 'LONG' | 'SHORT' | 'FLAT';
-    kelly_position: number;
+    kelly_position: number | null;
     stop_loss_price: number;
     stop_loss_pct: number;
     expected_return: number;
@@ -22,10 +31,10 @@ export interface DailyReport {
 
   risk?: {
     var_95: number;
-    cvar_95: number;
+    cvar_95: number | null;
     current_exposure_mbbls: number;
-    hedge_ratio: number;
-    recommended_hedge_ratio: number;
+    hedge_ratio: number | null;
+    recommended_hedge_ratio: number | null;
     r3_historical_max_drawdown: number;
   };
 

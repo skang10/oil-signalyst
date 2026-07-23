@@ -5,6 +5,7 @@ import TagBadge from '@/components/shared/TagBadge';
 import DistChart from '@/components/shared/DistChart';
 import StressTestCard from '@/components/shared/StressTestCard';
 import { sampleNote, switchProbabilityText } from '@/lib/regime';
+import { isAbstained, pctOrAbstain } from '@/lib/abstain';
 
 export default function RiskView({ report }: { report: DailyReport }) {
   const risk = report.risk!;
@@ -23,7 +24,7 @@ export default function RiskView({ report }: { report: DailyReport }) {
         />
         <MetricCard
           label="CVaR (conditional expected loss)"
-          value={`${(risk.cvar_95 * 100).toFixed(1)}%`}
+          value={pctOrAbstain(risk.cvar_95, 1)}
           valueColor="danger"
           sub="Tail average loss, more conservative"
           accentTop="danger"
@@ -37,9 +38,13 @@ export default function RiskView({ report }: { report: DailyReport }) {
         />
         <MetricCard
           label="Hedge Ratio"
-          value={`${Math.round(risk.hedge_ratio * 100)}%`}
+          value={pctOrAbstain(risk.hedge_ratio)}
           valueColor="warning"
-          sub={`Raise to ${Math.round(risk.recommended_hedge_ratio * 100)}% recommended`}
+          sub={
+            isAbstained(risk.recommended_hedge_ratio)
+              ? 'Withheld — a baseline model is serving'
+              : `Raise to ${pctOrAbstain(risk.recommended_hedge_ratio)} recommended`
+          }
           subColor="warning"
           accentTop="warning"
         />
@@ -61,7 +66,7 @@ export default function RiskView({ report }: { report: DailyReport }) {
             </div>
             <div className="p-[6px_8px] bg-danger-bg rounded-default text-center">
               <div className="text-[10px] text-danger">CVaR 95%</div>
-              <div className="text-[13px] font-medium text-danger">{(risk.cvar_95 * 100).toFixed(1)}%</div>
+              <div className="text-[13px] font-medium text-danger">{pctOrAbstain(risk.cvar_95, 1)}</div>
             </div>
             <div className="p-[6px_8px] bg-surface-1 rounded-default text-center">
               <div className="text-[10px] text-text-muted">Price Range</div>
@@ -122,7 +127,11 @@ export default function RiskView({ report }: { report: DailyReport }) {
           <div className="flex flex-col gap-[6px] mb-[10px]">
             <div className="p-[8px_10px] bg-warning-bg border border-warning-border rounded-default">
               <div className="text-[11px] text-warning mb-[3px]">✈ Airlines (oil buyers)</div>
-              <div className="font-medium text-warning">Raise hedge ratio to {Math.round(risk.recommended_hedge_ratio * 100)}%</div>
+              <div className="font-medium text-warning">
+                {isAbstained(risk.recommended_hedge_ratio)
+                  ? 'Hedge sizing withheld — a baseline model is serving'
+                  : `Raise hedge ratio to ${pctOrAbstain(risk.recommended_hedge_ratio)}`}
+              </div>
               <div className="text-[11px] text-text-muted mt-[2px]">
                 Downside {Math.round(returns.downside_prob * 100)}%, tail {Math.round(returns.tail_prob * 100)}%, locking in cost is prudent
               </div>

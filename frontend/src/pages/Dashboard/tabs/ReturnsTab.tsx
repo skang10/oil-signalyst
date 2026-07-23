@@ -4,6 +4,7 @@ import Card from '@/components/shared/Card';
 import TagBadge from '@/components/shared/TagBadge';
 import DistChart from '@/components/shared/DistChart';
 import { formatUsd } from '@/lib/utils';
+import { isAbstained, pctOrAbstain } from '@/lib/abstain';
 
 export default function ReturnsTab() {
   const { role } = useRole();
@@ -72,7 +73,9 @@ export default function ReturnsTab() {
           <div className="border border-border rounded-default p-[10px_12px]">
             <div className="text-[11px] text-text-muted mb-[6px]">✈ Airlines (oil buyers)</div>
             <div className="font-medium text-danger mb-1">
-              Raise hedge ratio to {risk ? Math.round(risk.recommended_hedge_ratio * 100) : 75}%
+              {risk && isAbstained(risk.recommended_hedge_ratio)
+                ? 'Hedge sizing withheld — a baseline model is serving'
+                : `Raise hedge ratio to ${risk ? pctOrAbstain(risk.recommended_hedge_ratio) : '75%'}`}
             </div>
             <div className="text-[11px] text-text-muted leading-[1.6]">
               Downside {Math.round(returns.downside_prob * 100)}%, tail {Math.round(returns.tail_prob * 100)}% — locking in cost

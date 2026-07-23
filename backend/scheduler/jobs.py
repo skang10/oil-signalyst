@@ -15,6 +15,7 @@ from core.models.feature_prep import to_model_matrix
 from core.models.model_registry import ModelRegistry
 from core.models.regime import predict_regime
 from core.models.trainer import TRAINABLE_MODEL_TYPES, run_full_training_with_log
+from core.models.baseline_model import is_baseline_artifact
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
 from core.postprocess.data_monitor import write_freshness_snapshot
@@ -284,12 +285,21 @@ async def _ensure_prediction(
         user = await get_or_create_default_user(db)
         exposure_barrels = user.exposure_barrels
         regime_confidence_threshold = user.alert_regime_threshold
+    # Which model types are being served by a constant baseline rather than a
+    # trained model. Drives the suppression of sizing outputs in the decision and
+    # the notice on the report page.
+    baseline_models = [
+        model_type
+        for model_type, artifact in (("eia", eia_artifact), ("returns", returns_artifact))
+        if is_baseline_artifact(artifact)
+    ]
     decision = generate_decision(
         regime_probs,
         return_dist,
         current_price,
         exposure_barrels=exposure_barrels,
         regime_confidence_threshold=regime_confidence_threshold,
+        baseline_models=baseline_models,
     )
     shap_values = explain_prediction(regime_artifact, _vector_for(regime_artifact))
 

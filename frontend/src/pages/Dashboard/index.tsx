@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRole } from '@/context/RoleContext';
 import { ROLE_PERMISSIONS, type DashTab } from '@/types/roles';
 import { useModelStatus } from '@/hooks/useModelStatus';
+import { useReport } from '@/hooks/useReport';
 import AlertBanner from '@/components/shared/AlertBanner';
 import DashTabBar from './DashTabBar';
 import OverviewTab from './tabs/Overview';
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<DashTab>('overview');
   const { role } = useRole();
   const { data: modelStatus } = useModelStatus();
+  const { data: report } = useReport(role);
 
   useEffect(() => {
     if (role === 'trader' || role === 'risk') {
@@ -24,6 +26,10 @@ export default function Dashboard() {
   }, [role]);
 
   const alertModel = modelStatus?.models.find((m) => m.psi_alert);
+  // Non-empty when a model type failed the deployment gate and the constant
+  // baseline took over production. Stated up front, because several numbers
+  // further down the report are withheld as a direct consequence.
+  const onBaseline = report?.baseline_models ?? [];
 
   return (
     <div className="flex flex-col h-full">
@@ -33,6 +39,18 @@ export default function Dashboard() {
           <AlertBanner>
             {alertModel.type[0].toUpperCase() + alertModel.type.slice(1)} model PSI{' '}
             {(alertModel.metrics.psi ?? 0).toFixed(2)} exceeds alert threshold. Retraining recommended.
+          </AlertBanner>
+        )}
+        {onBaseline.length > 0 && (
+          <AlertBanner>
+            <span className="font-medium">
+              {onBaseline.join(' and ')} {onBaseline.length > 1 ? 'are' : 'is'} running on the
+              baseline, not a trained model.
+            </span>{' '}
+            No trained version beat a constant predictor built from the 2012–2024 base rates, so
+            that predictor is serving instead. It reads no features, so the forecast below is the
+            historical distribution rather than a view on today. Position sizing, hedge ratio, CVaR
+            and Kelly are withheld — they would restate history as a recommendation.
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}

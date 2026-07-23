@@ -90,6 +90,10 @@ def nest_daily_report(
         "role": role,
         "wti_price": price,
         "wti_change_pct": wti_change_pct,
+        # Model types served by a constant baseline instead of a trained model.
+        # Non-empty means several numbers below are deliberately null - the
+        # report page explains it rather than leaving them silently blank.
+        "baseline_models": decision.get("baseline_models") or [],
         "trader": {
             "signal": decision.get("direction", "FLAT"),
             "kelly_position": decision.get("kelly_position", 0.0),

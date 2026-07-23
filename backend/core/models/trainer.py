@@ -14,8 +14,15 @@ from core.config_paths import FEATURES_DIR, MLRUNS_DIR, MODELS_DIR
 from core.logging import get_logger
 from core.models.eia import build_eia_model
 from core.models.feature_prep import to_model_matrix
-from core.models.labels import build_eia_labels, build_return_bucket_labels
-from core.models.metrics import HIGHER_IS_BETTER, PRIMARY_METRIC_KEY, beats_baseline, evaluate_deployment_gate
+from core.models.labels import RETURN_BIN_LABELS, build_eia_labels, build_return_bucket_labels
+from core.models.baseline_model import build_baseline_model, is_baseline_version
+from core.models.metrics import (
+    HIGHER_IS_BETTER,
+    PRIMARY_METRIC_KEY,
+    beats_baseline,
+    evaluate_deployment_gate,
+    skill_score,
+)
 from core.models.model_registry import ModelRegistry
 from core.models.returns import build_returns_model
 from db.database import get_db
@@ -241,7 +248,84 @@ async def run_full_training(
                         f"{'; '.join(gate['reasons'])}"
                     )
 
+        if not gate["passed"]:
+            await _ensure_baseline_floor(
+                model_type=model_type,
+                version=version,
+                train_y=y_train,
+                test_y=y_test,
+                feature_list=list(x_train.columns),
+                on_progress=on_progress,
+            )
+
     return results
+
+
+async def _ensure_baseline_floor(
+    model_type: str,
+    version: str,
+    train_y,
+    test_y,
+    feature_list: list[str],
+    on_progress: Callable[[str], Awaitable[None]] | None = None,
+) -> None:
+    """Put the constant baseline into production if nothing better is there.
+
+    Only fires when the gate has just blocked a model, and only when whatever is
+    live is *itself* at or below zero skill - i.e. losing to a predictor that
+    ignores every feature. A live model with real skill is left alone; a failed
+    retrain is no reason to throw it away.
+
+    Without this, a blocked model leaves production holding the incumbent no
+    matter how bad it is, and the only lever is the manual override - which is
+    exactly how returns ended up live at -15.3% skill.
+    """
+    metric_key = PRIMARY_METRIC_KEY.get(model_type)
+    if not metric_key:
+        return
+
+    async with get_db() as db:
+        rows = await db.execute(
+            select(ModelVersion).where(
+                ModelVersion.model_type == model_type, ModelVersion.is_active.is_(True)
+            )
+        )
+        live = rows.scalars().first()
+
+    if live is not None:
+        oos = live.metrics_oos or {}
+        if is_baseline_version(oos):
+            return  # already on the floor
+        live_skill = skill_score(
+            metric_key, oos.get(metric_key), (oos.get("baseline") or {}).get(metric_key)
+        )
+        if live_skill is not None and live_skill > 0:
+            if on_progress:
+                await on_progress(
+                    f"{model_type}: keeping the live model (skill {live_skill:+.2%}) - "
+                    "it still beats the baseline."
+                )
+            return
+
+    n_classes = None if model_type == "eia" else len(RETURN_BIN_LABELS)
+    model, metrics = await asyncio.to_thread(
+        build_baseline_model, model_type, train_y, test_y, n_classes
+    )
+    await _save_model(
+        model_type=model_type,
+        version=f"baseline-{version}",
+        model=model,
+        feature_list=feature_list,
+        metrics_train={},
+        metrics_val=metrics,
+        activate=True,
+    )
+    if on_progress:
+        await on_progress(
+            f"{model_type}: no model beats the baseline, so the baseline is now serving "
+            f"({metric_key} {metrics[metric_key]}). Position sizing is suppressed while "
+            "it is live."
+        )
 
 
 async def _save_model(

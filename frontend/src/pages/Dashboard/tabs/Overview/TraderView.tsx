@@ -7,6 +7,7 @@ import DistChart from '@/components/shared/DistChart';
 import { formatUsd, lastBusinessDayLabels } from '@/lib/utils';
 import { IconBolt } from '@tabler/icons-react';
 import { REGIME_IDS, REGIME_LABELS, switchProbabilityText } from '@/lib/regime';
+import { isAbstained, pctOrAbstain } from '@/lib/abstain';
 
 export default function TraderView({ report }: { report: DailyReport }) {
   const trader = report.trader!;
@@ -45,7 +46,7 @@ export default function TraderView({ report }: { report: DailyReport }) {
         />
         <MetricCard
           label="Kelly Position"
-          value={`${Math.round(trader.kelly_position * 100)}%`}
+          value={pctOrAbstain(trader.kelly_position)}
           sub="Win/odds insufficient to enter"
         />
         <MetricCard
@@ -194,7 +195,11 @@ export default function TraderView({ report }: { report: DailyReport }) {
           <div className="text-center">
             <div className="text-[10px] text-text-muted">Kelly Position</div>
             <div className="text-[15px] font-medium text-text-muted">
-              {trader.kelly_position === 0 ? 'Flat' : `${Math.round(trader.kelly_position * 100)}%`}
+              {isAbstained(trader.kelly_position)
+                ? '—'
+                : trader.kelly_position === 0
+                  ? 'Flat'
+                  : pctOrAbstain(trader.kelly_position)}
             </div>
           </div>
         </div>
