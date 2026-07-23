@@ -19,8 +19,17 @@ export default function ModelCompareCard({ job }: { job: TrainJob }) {
   const [deployError, setDeployError] = useState<string | null>(null);
   const deploy = useDeployModel();
 
-  const { old_metrics, new_metrics, baselines, improvement_pct, blocked_reasons } =
+  const { old_metrics, new_metrics, baselines, old_baselines, old_versions, blocked_reasons } =
     job.result ?? {};
+
+  // Skill (1 - metric/baseline) rather than the raw metric, because each
+  // version is scored on its own test window and those differ in difficulty -
+  // the baseline absorbs that, so dividing by it is what makes the two sides
+  // comparable at all. Same reasoning as the Model Monitor comparison.
+  const skill = (value?: number | null, base?: number | null) =>
+    value == null || base == null || base === 0 ? null : 1 - value / base;
+  const fmtSkill = (v: number | null) =>
+    v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%`;
 
   // Previously this returned null outright, which silently removed the whole
   // card - Deploy button included - with no explanation.
@@ -38,6 +47,14 @@ export default function ModelCompareCard({ job }: { job: TrainJob }) {
   // Driven by new_metrics: a model type trained for the first time has no
   // old_metrics entry, and keying off old_metrics would hide it entirely.
   const keys = Object.keys(new_metrics);
+  const oldVersionLabel = Object.values(old_versions ?? {}).join(', ');
+  // A retrain on unchanged data and features reproduces the model exactly -
+  // TabPFN is deterministic - so identical numbers mean "nothing changed",
+  // not "something broke". Said outright, because a table of equal values and
+  // a 0.0% change reads as a bug.
+  const unchanged = keys.every(
+    (k) => old_metrics?.[k] != null && old_metrics[k] === new_metrics[k]
+  );
   const isBlocked = (type: string) => Boolean(blocked_reasons?.[type]?.length);
   const deployableTypes = job.model_types;
 
@@ -57,14 +74,20 @@ export default function ModelCompareCard({ job }: { job: TrainJob }) {
 
   return (
     <Card>
-      <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Old vs New Model Comparison</div>
-      <div className="grid grid-cols-5 border border-border rounded-default overflow-hidden text-[12px]">
-        <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted">Model</div>
+      <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[4px]">Old vs New Model Comparison</div>
+      <div className="text-[11px] text-text-muted mb-[10px]">
+        &ldquo;Old&rdquo; is the version that was live when this run started
+        {oldVersionLabel ? ` (${oldVersionLabel})` : ''}. Read the skill column across
+        the two: it divides out how hard each version&apos;s own test window was.
+      </div>
+      <div className="grid grid-cols-6 border border-border rounded-default overflow-hidden text-[12px]">
+        <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted">Metric</div>
         <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted text-right">Old</div>
         <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted text-right">New</div>
         {/* What the metric has to beat before it means anything. */}
         <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted text-right">Baseline</div>
-        <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted text-right">Change</div>
+        <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted text-right">Skill old</div>
+        <div className="p-[8px_10px] bg-surface-1 text-[11px] font-medium text-text-muted text-right">Skill new</div>
         {keys.map((key) => {
           const baseline = baselines?.[key];
           const value = new_metrics[key];
@@ -85,13 +108,22 @@ export default function ModelCompareCard({ job }: { job: TrainJob }) {
               </div>
               <div className="p-[8px_10px] border-t border-border text-right text-text-muted">{fmtMetric(baseline, 3)}</div>
               <div className="p-[8px_10px] border-t border-border text-right text-text-muted">
-                {improvement_pct == null ? '—' : `${improvement_pct.toFixed(1)}%`}
+                {fmtSkill(skill(old_metrics?.[key], old_baselines?.[key]))}
+              </div>
+              <div className="p-[8px_10px] border-t border-border text-right font-medium">
+                {fmtSkill(skill(value, baseline))}
               </div>
             </Fragment>
           );
         })}
       </div>
 
+      {unchanged && (
+        <div className="text-[11px] text-text-muted mt-[10px]">
+          Identical to the live model — retraining on unchanged data and features reproduces the
+          same model, so this run changed nothing.
+        </div>
+      )}
       {anyBlocked && (
         <div className="text-[11px] text-warning mt-[10px]">
           Not deployed automatically —{' '}

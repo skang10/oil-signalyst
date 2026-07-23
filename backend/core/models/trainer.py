@@ -492,12 +492,22 @@ async def _save_model(
     }
 
 
-async def _capture_active_metrics() -> dict:
+async def _capture_active_metrics() -> tuple[dict, dict]:
+    """Metrics and version string of whatever is live, captured before training.
+
+    The version travels too so the comparison can name what it is comparing
+    against - "old" is otherwise an unidentified number, and when a retrain
+    reproduces the same model the table reads as broken rather than as
+    "nothing changed".
+    """
     async with get_db() as db:
         rows = (
             await db.execute(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
         ).scalars().all()
-    return {version.model_type: (version.metrics_oos or {}) for version in rows}
+    return (
+        {version.model_type: (version.metrics_oos or {}) for version in rows},
+        {version.model_type: version.version for version in rows},
+    )
 
 
 def _ts() -> str:
@@ -522,7 +532,7 @@ async def run_full_training_with_log(
                 job.log_lines = (job.log_lines or []) + [f"[{_ts()}] {line}"]
                 db.add(job)
 
-    old_metrics_by_type = await _capture_active_metrics()
+    old_metrics_by_type, old_versions = await _capture_active_metrics()
     await log("Starting training run...")
     result = await run_full_training(
         triggered_by_user_id=triggered_by_user_id,
@@ -556,6 +566,18 @@ async def run_full_training_with_log(
     if old_eia_mae and new_eia_mae is not None:
         improvement_pct = round((new_eia_mae - old_eia_mae) / old_eia_mae * 100, 1)
 
+    # The old model's OWN baseline, so the UI can express both sides as skill.
+    # Raw metrics are not comparable across versions: each is scored on its own
+    # test window (2025 -> that version's training date) and those windows
+    # differ in difficulty, which is exactly what dividing by the baseline
+    # cancels out. See metrics.skill_score.
+    old_baselines = {
+        f"{model_type}_{PRIMARY_METRIC_KEY[model_type]}": (
+            (old_metrics_by_type.get(model_type) or {}).get("baseline") or {}
+        ).get(PRIMARY_METRIC_KEY[model_type])
+        for model_type in result
+    }
+
     # Baselines travel in their own map rather than as extra old/new_metrics
     # keys: ModelCompareCard builds its table rows from those dicts, so an added
     # key would render as a bogus row carrying the run-level improvement_pct.
@@ -575,6 +597,8 @@ async def run_full_training_with_log(
         "old_metrics": old_metrics,
         "new_metrics": new_metrics,
         "baselines": baselines,
+        "old_baselines": old_baselines,
+        "old_versions": old_versions,
         "improvement_pct": improvement_pct,
         "versions": {model_type: info["version"] for model_type, info in result.items()},
         "deployed": {model_type: info.get("deployed", True) for model_type, info in result.items()},

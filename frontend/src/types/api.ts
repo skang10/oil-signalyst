@@ -255,6 +255,12 @@ export interface TrainJob {
      * new_metrics entries, which would render as bogus comparison rows.
      */
     baselines?: Record<string, number | null>;
+    /** The previously deployed model's own baseline, so both sides can be
+     *  expressed as skill. Raw metrics are not comparable across versions -
+     *  each is scored on its own test window. */
+    old_baselines?: Record<string, number | null>;
+    /** Which version "old" refers to, per model type. */
+    old_versions?: Record<string, string>;
     improvement_pct?: number | null;
     versions?: Record<string, string>;
     /** Per model type: did it clear the deployment gate and go live? */

@@ -68,7 +68,7 @@ export default function RunDetailPanel({ job }: { job: TrainJobSummary }) {
               Old vs New Comparison
             </div>
             <div className="grid grid-cols-5 border border-border rounded-default overflow-hidden text-[11.5px] bg-surface-2">
-              <div className="p-[5px_9px] bg-surface-1 text-[10px] font-medium text-text-muted uppercase tracking-[0.4px]">Model</div>
+              <div className="p-[5px_9px] bg-surface-1 text-[10px] font-medium text-text-muted uppercase tracking-[0.4px]">Metric</div>
               <div className="p-[5px_9px] bg-surface-1 text-[10px] font-medium text-text-muted uppercase tracking-[0.4px] text-right">Old</div>
               <div className="p-[5px_9px] bg-surface-1 text-[10px] font-medium text-text-muted uppercase tracking-[0.4px] text-right">New</div>
               <div className="p-[5px_9px] bg-surface-1 text-[10px] font-medium text-text-muted uppercase tracking-[0.4px] text-right">Baseline</div>
