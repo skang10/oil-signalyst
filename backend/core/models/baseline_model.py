@@ -70,10 +70,18 @@ def build_baseline_model(model_type: str, train_y, test_y, n_classes: int | None
     if model_type == "eia":
         value = float(np.mean(np.asarray(train_y, dtype=float)))
         model = ConstantRegressor(value)
-        score = round(
-            float(np.mean(np.abs(np.asarray(test_y, dtype=float) - value))), 4
-        )
-        metrics = {metric_key: score, "baseline": {metric_key: score}}
+        y_test = np.asarray(test_y, dtype=float)
+        score = round(float(np.mean(np.abs(y_test - value))), 4)
+        residuals = y_test - value
+        metrics = {
+            metric_key: score,
+            "baseline": {metric_key: score},
+            # Same fields a trained eia model reports, so the report renders a
+            # baseline identically instead of special-casing it.
+            "direction_acc": round(float(np.mean(np.sign(y_test) == np.sign(value))), 4),
+            "residual_p10": round(float(np.percentile(residuals, 10)), 4),
+            "residual_p90": round(float(np.percentile(residuals, 90)), 4),
+        }
     else:
         counts = pd.Series(train_y).value_counts(normalize=True)
         frequencies = np.array([counts.get(c, 0.0) for c in range(n_classes)])

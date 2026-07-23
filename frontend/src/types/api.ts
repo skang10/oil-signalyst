@@ -49,20 +49,27 @@ export interface DailyReport {
 
   eia: {
     forecast_mb: number;
-    interval_80_low: number;
-    interval_80_high: number;
+    /** Empirical 80% band from the live model's out-of-sample residuals,
+     *  centred on the forecast. Null when the deployed version predates
+     *  residual tracking - omit the band, never substitute a guess. */
+    interval_80_low: number | null;
+    interval_80_high: number | null;
     consensus_mb: number;
     surprise_mb: number;
+    /** Only crude is forecast. There is no model and no labels for the other
+     *  three products, so they are permanently null - the one place in this
+     *  report where a number genuinely cannot be computed. */
     breakdown: {
       crude: number;
-      gasoline: number;
-      distillate: number;
-      cushing: number;
+      gasoline: number | null;
+      distillate: number | null;
+      cushing: number | null;
     };
     shap_drivers: { name: string; contribution_mb: number }[];
-    historical_direction_accuracy: number;
-    historical_mae: number;
-    consensus_mae: number;
+    /** The live model's own held-out figures, null if it recorded none. */
+    historical_direction_accuracy: number | null;
+    historical_mae: number | null;
+    consensus_mae: number | null;
   };
 
   regime: {
@@ -115,6 +122,13 @@ export interface DailyReport {
     downside_prob: number;
     tail_prob: number;
     upside_prob: number;
+    /**
+     * True when the 5% quantile fell inside an unbounded outer bucket, so VaR
+     * and CVaR are the bucket's representative value rather than a located
+     * quantile - they coincide, and must not be presented as distinct
+     * precision. See core/postprocess/return_distribution.py.
+     */
+    tail_resolution_limited: boolean;
   };
 }
 

@@ -97,7 +97,9 @@ export default function ResearcherView({
             </span>
           </div>
           <div className="text-[12px] text-text-secondary mb-2">
-            Market consensus {eia.consensus_mb.toFixed(1)} MB · Range {eia.interval_80_low.toFixed(1)}~{eia.interval_80_high.toFixed(1)} MB
+            Consensus {eia.consensus_mb.toFixed(1)} MB
+            {eia.interval_80_low !== null && eia.interval_80_high !== null &&
+              ` · 80% range ${eia.interval_80_low.toFixed(1)}~${eia.interval_80_high.toFixed(1)} MB`}
           </div>
           <div className="text-[12px] text-text-muted">
             Full SHAP + historical accuracy →{' '}

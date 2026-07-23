@@ -35,6 +35,14 @@ def build_eia_model(train_x, train_y, test_x, test_y):
             4,
         ),
         "baseline": regressor_baselines(train_y, test_y),
+        # Empirical 80% predictive interval, as offsets from the point forecast.
+        # Out-of-sample residuals deliberately: the report used to draw a
+        # hardcoded +/-1.7 band, roughly four times tighter than this model
+        # actually is, which made every forecast look far more precise than it
+        # was. Stored as offsets so the report can centre them on the day's
+        # forecast without recomputing anything.
+        "residual_p10": round(float(np.percentile(test_y - test_pred, 10)), 4),
+        "residual_p90": round(float(np.percentile(test_y - test_pred, 90)), 4),
     }
     # Recency diagnostic on the same predictions - reported, never gated on.
     metrics_test["recent"] = recent_window_metrics(

@@ -23,3 +23,12 @@ export function isAbstained(value: number | null | undefined): boolean {
 export function pctOrAbstain(value: number | null | undefined, digits = 0): string {
   return isAbstained(value) ? ABSTAINED : `${(value! * 100).toFixed(digits)}%`;
 }
+
+/** A plain number with an optional unit suffix, or the abstention dash. */
+export function numOrAbstain(
+  value: number | null | undefined,
+  digits = 1,
+  unit = ''
+): string {
+  return isAbstained(value) ? ABSTAINED : `${value!.toFixed(digits)}${unit}`;
+}

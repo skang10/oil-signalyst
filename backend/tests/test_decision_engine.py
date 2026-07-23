@@ -31,13 +31,23 @@ def test_cvar_95_is_negative_and_worse_than_var_downside_prob():
     assert decision["cvar_95"] < -0.05
 
 
-def test_cvar_95_is_zero_with_no_downside_probability():
+def test_cvar_95_is_the_worst_five_percent_not_every_loss():
+    """CVaR 95% is E[r | r <= VaR 95%], not E[r | r < 0].
+
+    The old implementation averaged over every negative bucket and returned 0.0
+    when there were none - which reads as "no risk" but was really "no losing
+    bucket to average". With all the mass positive the worst 5% of outcomes is
+    still a gain, and saying so is the point of the statistic.
+    """
     regime_probs = {"R1": 0.6, "R2": 0.1, "R3": 0.2, "R4": 0.1}
-    return_dist = {"lt_minus10": 0.0, "neg_10_0": 0.0, "pos_0_10": 0.5, "gt_10": 0.5}
+    all_positive = {"lt_minus10": 0.0, "neg_10_0": 0.0, "pos_0_10": 0.5, "gt_10": 0.5}
 
-    decision = generate_decision(regime_probs, return_dist, current_price=70.0)
+    assert generate_decision(regime_probs, all_positive, current_price=70.0)["cvar_95"] == 0.05
 
-    assert decision["cvar_95"] == 0.0
+    # And when a fat left tail holds more than 5% of the mass, CVaR sits inside
+    # it rather than being diluted by the milder losing bucket.
+    fat_tail = {"lt_minus10": 0.2, "neg_10_0": 0.3, "pos_0_10": 0.3, "gt_10": 0.2}
+    assert generate_decision(regime_probs, fat_tail, current_price=70.0)["cvar_95"] == -0.15
 
 
 def test_kelly_position_bounded_between_zero_and_one():
@@ -117,3 +127,26 @@ def test_baseline_returns_model_withholds_sizing():
     for field in ("hedge_ratio", "hedge_notional_barrels", "cvar_95", "kelly_position"):
         assert decision[field] is None, field
     assert decision["baseline_models"] == ["returns"]
+
+
+def test_return_distribution_statistics_are_computed_not_hardcoded():
+    """median/skewness/VaR were literals (0.02, -0.3) and a probability.
+
+    var_95 in particular held lt_minus10 + neg_10_0 - the total downside
+    PROBABILITY - which the risk view multiplied by the exposure to print a
+    dollar figure, so a 47% base rate rendered as "$4.7M at risk".
+    """
+    from core.postprocess import return_distribution as rd
+
+    climatology = {"lt_minus10": 0.1273, "neg_10_0": 0.3452, "pos_0_10": 0.3986, "gt_10": 0.1288}
+
+    # Median sits in the 0..+10% bucket, 2.75 points past the 47.25% below it.
+    assert round(rd.median(climatology), 4) == 0.0069
+    assert round(rd.skewness(climatology), 4) == -0.0819
+    # A return, and negative - not the 0.4725 downside probability.
+    assert rd.value_at_risk(climatology) == -0.15
+    assert rd.value_at_risk(climatology) < 0
+
+    # A quantile inside a bounded bucket is interpolated, not snapped.
+    interpolated = rd.quantile(climatology, 0.30)
+    assert -0.10 < interpolated < 0.0

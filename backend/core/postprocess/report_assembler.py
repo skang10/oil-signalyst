@@ -7,6 +7,7 @@ from core.logging import get_logger
 from core.models.labels import return_bucket_for_value
 from core.models.regime import dominant_regime
 from core.models.trainer import load_features
+from core.postprocess import return_distribution as rd
 from core.postprocess.regime_stats import (
     estimate_switch_probability,
     get_regime_duration,
@@ -38,11 +39,11 @@ async def assemble_daily_report(prediction: Prediction, snapshot: FeatureSnapsho
         "eia_forecast": prediction.eia_forecast,
         "decision": decision,
         "model_version": prediction.model_version.version if prediction.model_version else None,
-        "var_95": round(
-            (prediction.return_dist or {}).get("lt_minus10", 0.0)
-            + (prediction.return_dist or {}).get("neg_10_0", 0.0),
-            4,
-        ),
+        # The 5% quantile of the return distribution. This used to be
+        # lt_minus10 + neg_10_0 - the total downside PROBABILITY - which the
+        # risk view then multiplied by the exposure to print a dollar figure,
+        # so a 47% base rate became "$4.7M at risk".
+        "var_95": round(rd.value_at_risk(prediction.return_dist or {}), 4),
         "shap_values": prediction.shap_values or {},
         "feature_signals": _build_signal_list(features),
         "regime_duration_weeks": duration // 5,
@@ -57,7 +58,20 @@ async def assemble_daily_report(prediction: Prediction, snapshot: FeatureSnapsho
         "ovx": round(features.get("ovx", 0.0) or 0.0, 1),
         "cot_net_percentile": _cot_net_percentile(features.get("spec_net_pct"), prediction.date),
         "price_5d_history": _price_5d_history(prediction.date),
+        # Held-out metrics of whatever eia model is live, so the report can state
+        # its real accuracy instead of the hardcoded 0.712 / 1.3 / 1.9 it used to
+        # print - figures that flattered a model whose true direction accuracy is
+        # near a coin flip.
+        "eia_metrics": await _active_metrics("eia"),
     }
+
+
+async def _active_metrics(model_type: str) -> dict:
+    """metrics_oos of the currently deployed model of this type, or {}."""
+    from core.models.model_registry import ModelRegistry
+
+    version = await ModelRegistry.get_active_version(model_type)
+    return (version.metrics_oos or {}) if version else {}
 
 
 def nest_daily_report(
@@ -66,10 +80,9 @@ def nest_daily_report(
     """Wraps the raw assembled report into the frontend's nested DailyReport
     contract (trader/risk/eia/regime/returns sub-objects, per
     frontend/src/types/api.ts). Most fields are real data just reshaped; a
-    handful have no model backing today (EIA breakdown beyond crude, a
-    switch-trigger narrative, return-distribution moments beyond the 4-bucket
-    categorical) and are static placeholders, marked below - see the Phase
-    2.4 backend/frontend gap analysis."""
+    two still have no model backing - the per-product EIA breakdown (no model,
+    no labels) and the switch-trigger narrative - and are null or static,
+    marked below. Everything else is computed."""
     decision = raw["decision"] or {}
     return_dist = raw["return_dist"] or {}
     eia_forecast = raw["eia_forecast"] or {}
@@ -81,6 +94,7 @@ def nest_daily_report(
         else 0.0
     )
     shap_drivers = _shap_drivers(raw["shap_values"], raw["feature_signals"])
+    eia_metrics = raw.get("eia_metrics") or {}
     crude_mb = eia_forecast.get("crude", 0.0)
     tail_prob = round(return_dist.get("lt_minus10", 0.0) + return_dist.get("gt_10", 0.0), 4)
     upside_prob = round(return_dist.get("pos_0_10", 0.0) + return_dist.get("gt_10", 0.0), 4)
@@ -123,25 +137,47 @@ def nest_daily_report(
         },
         "eia": {
             "forecast_mb": crude_mb,
-            # Static placeholder: no confidence-interval output from the model today.
-            "interval_80_low": round(crude_mb - 1.7, 2),
-            "interval_80_high": round(crude_mb + 1.7, 2),
+            # Empirical 80% interval from the live model's out-of-sample
+            # residuals, centred on today's forecast. Null when the deployed
+            # version predates residual tracking - the UI omits the band rather
+            # than inventing one.
+            "interval_80_low": (
+                round(crude_mb + eia_metrics["residual_p10"], 2)
+                if "residual_p10" in eia_metrics
+                else None
+            ),
+            "interval_80_high": (
+                round(crude_mb + eia_metrics["residual_p90"], 2)
+                if "residual_p90" in eia_metrics
+                else None
+            ),
             "consensus_mb": eia_forecast.get("market_consensus", 0.0),
             "surprise_mb": eia_forecast.get("surprise", 0.0),
+            # Only crude is forecast. There is no gasoline/distillate/Cushing
+            # model and no labels for them, so unlike every other field here
+            # these genuinely cannot be computed - null, and the UI says so,
+            # rather than the -1.1 / 0.6 / -0.9 constants it used to show
+            # alongside the real crude number as though all four were forecasts.
             "breakdown": {
                 "crude": crude_mb,
-                # Static placeholders: model forecasts crude only, not per-product.
-                "gasoline": -1.1,
-                "distillate": 0.6,
-                "cushing": -0.9,
+                "gasoline": None,
+                "distillate": None,
+                "cushing": None,
             },
             "shap_drivers": [
                 {"name": d["name"], "contribution_mb": d["contribution"]} for d in shap_drivers
             ],
-            # Static placeholders: no rolling EIA accuracy tracking today.
-            "historical_direction_accuracy": 0.712,
-            "historical_mae": 1.3,
-            "consensus_mae": 1.9,
+            # The live model's own held-out figures.
+            "historical_direction_accuracy": eia_metrics.get("direction_acc"),
+            "historical_mae": eia_metrics.get("mae"),
+            # The model's MAE minus its edge over the rolling-consensus
+            # reference, i.e. what that reference itself scored. Null when the
+            # model did not record the comparison.
+            "consensus_mae": (
+                round(eia_metrics["mae"] - eia_metrics["mae_vs_consensus"], 4)
+                if "mae" in eia_metrics and "mae_vs_consensus" in eia_metrics
+                else None
+            ),
         },
         "regime": {
             "probabilities": raw["regime_probs"],
@@ -186,13 +222,20 @@ def nest_daily_report(
                 {"label": "> +10%", "pct": return_dist.get("gt_10", 0.0), "color": "accent"},
             ],
             "expected_return": decision.get("expected_ret", 0.0),
-            # Static placeholders: the 4-bucket categorical distribution has no
-            # resolution for a continuous median/skewness.
-            "median_return": 0.02,
-            "var_95": raw["var_95"],
-            "skewness": -0.3,
-            "price_range_low": round(price * 0.9, 2),
-            "price_range_high": round(price * 1.1, 2),
+            # All computed from the bucket distribution the model emits - see
+            # core/postprocess/return_distribution.py. These were a hardcoded
+            # median and skewness, and a var_95 that was actually the total
+            # downside PROBABILITY rendered as a return.
+            "median_return": round(rd.median(return_dist), 4),
+            "var_95": round(rd.value_at_risk(return_dist), 4),
+            "skewness": round(rd.skewness(return_dist), 4),
+            # 10th-90th percentile of the return distribution applied to spot,
+            # replacing an arbitrary +/-10% band unrelated to the forecast.
+            "price_range_low": round(price * (1 + rd.quantile(return_dist, 0.10)), 2),
+            "price_range_high": round(price * (1 + rd.quantile(return_dist, 0.90)), 2),
+            # True when the outer, unbounded buckets had to stand in for a
+            # quantile - VaR and CVaR then coincide and are bucket-limited.
+            "tail_resolution_limited": rd.quantile(return_dist, 0.05) == rd.RETURN_MIDPOINTS["lt_minus10"],
             "downside_prob": decision.get("downside_prob", 0.0),
             "tail_prob": tail_prob,
             "upside_prob": upside_prob,

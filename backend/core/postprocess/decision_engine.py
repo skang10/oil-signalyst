@@ -1,18 +1,8 @@
 from core.models.regime import dominant_regime
-
-RETURN_MIDPOINTS = {"lt_minus10": -0.15, "neg_10_0": -0.05, "pos_0_10": 0.05, "gt_10": 0.15}
-
-
-def _cvar_95(return_dist: dict) -> float:
-    """Conditional expected loss given the outcome falls in the downside tail
-    (the two below-zero return buckets), approximated from bucket midpoints."""
-    p_lt = return_dist.get("lt_minus10", 0.0)
-    p_neg = return_dist.get("neg_10_0", 0.0)
-    total_downside = p_lt + p_neg
-    if total_downside == 0:
-        return 0.0
-    weighted_loss = p_lt * RETURN_MIDPOINTS["lt_minus10"] + p_neg * RETURN_MIDPOINTS["neg_10_0"]
-    return round(weighted_loss / total_downside, 4)
+from core.postprocess.return_distribution import (
+    RETURN_MIDPOINTS,
+    conditional_value_at_risk,
+)
 
 
 def _kelly_position(return_dist: dict, expected_ret: float) -> float:
@@ -86,7 +76,7 @@ def generate_decision(
     hedge_ratio = min(max(downside_prob * 1.5, 0.0), 0.9)
     stop_loss = current_price * (0.92 if direction != "SHORT" else 1.08)
     stop_loss_pct = round((current_price - stop_loss) / current_price, 4)
-    cvar_95 = _cvar_95(return_dist)
+    cvar_95 = round(conditional_value_at_risk(return_dist), 4)
     kelly_position = _kelly_position(return_dist, expected_ret)
 
     baseline_models = baseline_models or []

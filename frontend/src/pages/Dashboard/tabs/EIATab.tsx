@@ -1,6 +1,7 @@
 import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
 import Card from '@/components/shared/Card';
+import { numOrAbstain, pctOrAbstain } from '@/lib/abstain';
 import TagBadge from '@/components/shared/TagBadge';
 import SHAPBar from '@/components/shared/SHAPBar';
 import InventoryBar from '@/components/shared/InventoryBar';
@@ -12,15 +13,21 @@ export default function EIATab() {
   if (!report) return <div className="text-text-muted text-[12px]">Loading...</div>;
 
   const eia = report.eia;
+  // Only crude has a model. The other three used to render as -1.1 / 0.6 /
+  // -0.9 constants beside the real crude forecast, indistinguishable from it.
   const breakdown = [
     { label: 'Crude', value: eia.breakdown.crude },
     { label: 'Gasoline', value: eia.breakdown.gasoline },
     { label: 'Distillate', value: eia.breakdown.distillate },
     { label: 'Cushing', value: eia.breakdown.cushing },
-  ];
-  const maxAbs = Math.max(...breakdown.map((b) => Math.abs(b.value)));
+  ].filter((b): b is { label: string; value: number } => b.value !== null);
+  const unmodelledProducts = 4 - breakdown.length;
+  const maxAbs = Math.max(...breakdown.map((b) => Math.abs(b.value)), 1e-9);
   const maxShap = Math.max(...eia.shap_drivers.map((d) => Math.abs(d.contribution_mb)));
-  const modelEdge = ((eia.historical_mae - eia.consensus_mae) / eia.consensus_mae) * 100;
+  const modelEdge =
+    eia.historical_mae !== null && eia.consensus_mae
+      ? ((eia.historical_mae - eia.consensus_mae) / eia.consensus_mae) * 100
+      : null;
 
   return (
     <>
@@ -41,11 +48,13 @@ export default function EIATab() {
         <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
           <span className="text-text-secondary">80% Confidence Interval</span>
           <span className="font-medium font-mono">
-            {eia.interval_80_low.toFixed(1)} MB ~ {eia.interval_80_high.toFixed(1)} MB
+            {eia.interval_80_low === null || eia.interval_80_high === null
+              ? '—'
+              : `${eia.interval_80_low.toFixed(1)} MB ~ ${eia.interval_80_high.toFixed(1)} MB`}
           </span>
         </div>
         <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
-          <span className="text-text-secondary">Market Consensus (Bloomberg survey)</span>
+          <span className="text-text-secondary">Consensus (4-week rolling mean)</span>
           <span className="font-medium font-mono">{eia.consensus_mb.toFixed(1)} MB</span>
         </div>
         <div className="flex justify-between items-center py-[7px] text-[12px]">
@@ -68,6 +77,11 @@ export default function EIATab() {
           {breakdown.map((b) => (
             <InventoryBar key={b.label} label={b.label} value={b.value} maxAbs={maxAbs} />
           ))}
+          {unmodelledProducts > 0 && (
+            <div className="text-[11px] text-text-muted">
+              Gasoline, distillate and Cushing are not forecast — the model covers crude only.
+            </div>
+          )}
         </div>
       </Card>
 
@@ -88,23 +102,25 @@ export default function EIATab() {
 
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
-            Model Historical Performance (Last 52 Weeks)
+            Model Performance (held-out test window)
           </div>
           <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
             <span className="text-text-secondary">Directional Accuracy (draw/build)</span>
-            <span className="font-medium text-success">{(eia.historical_direction_accuracy * 100).toFixed(1)}%</span>
+            <span className="font-medium">{pctOrAbstain(eia.historical_direction_accuracy, 1)}</span>
           </div>
           <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
             <span className="text-text-secondary">MAE (Mean Absolute Error)</span>
-            <span className="font-medium">{eia.historical_mae.toFixed(1)} MB</span>
+            <span className="font-medium">{numOrAbstain(eia.historical_mae, 2, ' MB')}</span>
           </div>
           <div className="flex justify-between items-center py-[7px] border-b border-border text-[12px]">
             <span className="text-text-secondary">vs Consensus MAE</span>
-            <span className="font-medium">{eia.consensus_mae.toFixed(1)} MB</span>
+            <span className="font-medium">{numOrAbstain(eia.consensus_mae, 2, ' MB')}</span>
           </div>
           <div className="flex justify-between items-center py-[7px] text-[12px]">
             <span className="text-text-secondary">Model Edge</span>
-            <span className="font-medium text-success">{modelEdge.toFixed(1)}%</span>
+            <span className="font-medium">
+              {modelEdge === null ? '—' : `${modelEdge.toFixed(1)}%`}
+            </span>
           </div>
           <div className="mt-2 text-[11px] text-text-muted">Most accurate for draws &gt;2 MB — matches current scenario</div>
         </Card>
