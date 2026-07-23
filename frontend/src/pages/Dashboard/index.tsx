@@ -43,10 +43,8 @@ export default function Dashboard() {
         )}
         {onBaseline.length > 0 && (
           <AlertBanner>
-            <span className="font-medium">
-              {onBaseline.join(' and ')} {onBaseline.length > 1 ? 'are' : 'is'} running on the
-              baseline, not a trained model.
-            </span>
+            {onBaseline.join(' and ')} {onBaseline.length > 1 ? 'are' : 'is'} running on the
+            baseline, not a trained model.
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
