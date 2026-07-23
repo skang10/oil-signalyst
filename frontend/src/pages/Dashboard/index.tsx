@@ -30,6 +30,16 @@ export default function Dashboard() {
   // baseline took over production. Stated up front, because several numbers
   // further down the report are withheld as a direct consequence.
   const onBaseline = report?.baseline_models ?? [];
+  // Reads as one phrase when both are on the baseline ("EIA and Return
+  // Forecasts") and still names only the affected one when a trained model is
+  // live for the other - the banner lists what is actually on the baseline, so
+  // a fixed both-models sentence would be wrong half the time.
+  const baselineSubject =
+    onBaseline.length > 1
+      ? 'EIA and Return Forecasts are'
+      : onBaseline[0] === 'eia'
+        ? 'EIA Forecast is'
+        : 'Return Forecast is';
 
   return (
     <div className="flex flex-col h-full">
@@ -43,8 +53,7 @@ export default function Dashboard() {
         )}
         {onBaseline.length > 0 && (
           <AlertBanner>
-            {onBaseline.join(' and ')} {onBaseline.length > 1 ? 'are' : 'is'} running on the
-            baseline model, not a trained model.
+            {baselineSubject} running on the baseline model, not a trained model.
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
