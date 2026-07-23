@@ -7,7 +7,7 @@ import SHAPBar from '@/components/shared/SHAPBar';
 import StressTestCard from '@/components/shared/StressTestCard';
 import { cn } from '@/lib/utils';
 import { IconCircleCheck, IconAlertTriangle } from '@tabler/icons-react';
-import { MODEL_KIND, MODEL_LABEL, fmt, isUnhealthy, metricText } from '@/lib/model-metrics';
+import { MODEL_KIND, MODEL_LABEL, fmt, isUnhealthy, metricText, recentText } from '@/lib/model-metrics';
 
 export default function ModelMonitorPage() {
   const { role } = useRole();
@@ -44,6 +44,14 @@ export default function ModelMonitorPage() {
               {isUnhealthy(m) ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
               {metricText(m)}
             </div>
+            {recentText(m) && (
+              <div
+                className="text-[10px] text-text-muted mt-[3px]"
+                title="Diagnostic only - too few independent observations to gate on. The deployment gate uses the full test window."
+              >
+                {recentText(m)}
+              </div>
+            )}
             <div className="text-[10px] text-text-muted mt-[3px]">{MODEL_KIND[m.type]}</div>
           </div>
         ))}

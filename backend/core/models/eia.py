@@ -3,7 +3,7 @@ from sklearn.metrics import mean_absolute_error
 from tabpfn_client import TabPFNRegressor
 
 from core.models.common import as_named_row
-from core.models.metrics import regressor_baselines
+from core.models.metrics import recent_window_metrics, regressor_baselines
 from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
 
@@ -36,6 +36,14 @@ def build_eia_model(train_x, train_y, test_x, test_y):
         ),
         "baseline": regressor_baselines(train_y, test_y),
     }
+    # Recency diagnostic on the same predictions - reported, never gated on.
+    metrics_test["recent"] = recent_window_metrics(
+        test_y,
+        lambda m: {
+            "mae": round(float(mean_absolute_error(test_y[m], test_pred[m])), 4),
+            "baseline": regressor_baselines(train_y, test_y[m]),
+        },
+    )
     return model, metrics_train, metrics_test
 
 

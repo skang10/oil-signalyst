@@ -126,6 +126,21 @@ export interface ModelStatus {
        */
       baseline: number | null;
       psi: number | null;
+      /**
+       * The same model rescored on just the trailing 6 months of the test
+       * window. A drift diagnostic, NOT a gate: at a 20-trading-day label
+       * horizon this window carries only ~6 independent observations, wide
+       * enough that the returns model reads as beating its baseline here while
+       * losing to it on the full window. Never drive health or deployment off
+       * this. Null for non-forecast models and pre-existing versions.
+       */
+      recent: {
+        primary: number | null;
+        baseline: number | null;
+        window_start: string | null;
+        n_rows: number | null;
+        effective_n: number | null;
+      } | null;
     };
     psi_alert: boolean;
   }[];

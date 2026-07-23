@@ -41,6 +41,21 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
         # reported as a state indicator with no score. is_forecast drives that
         # split in the UI.
         metric_key = PRIMARY_METRIC_KEY.get(version.model_type)
+        # The trailing-window rescore, for the UI to show beside the full-window
+        # figure. Diagnostic only - the deployment gate reads the full window,
+        # deliberately (see metrics.recent_window_metrics).
+        recent_raw = metrics_oos.get("recent") or {}
+        recent = (
+            {
+                "primary": recent_raw.get(metric_key),
+                "baseline": (recent_raw.get("baseline") or {}).get(metric_key),
+                "window_start": recent_raw.get("window_start"),
+                "n_rows": recent_raw.get("n_rows"),
+                "effective_n": recent_raw.get("effective_n"),
+            }
+            if metric_key and recent_raw
+            else None
+        )
         return {
             "type": version.model_type,
             "version": version.version,
@@ -53,6 +68,7 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
                 if metric_key
                 else None,
                 "psi": psi,
+                "recent": recent,
             },
             "psi_alert": psi_alert,
         }

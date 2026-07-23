@@ -27,6 +27,51 @@ HIGHER_IS_BETTER = {"accuracy", "direction_acc"}
 # floor on obvious degeneracy, not a sufficiency test.
 MIN_VAL_ROWS = 60
 
+# The forward-looking label horizon, in trading days. Two rows less than this
+# far apart describe overlapping futures, so the count of *independent*
+# observations in a window is roughly rows // LABEL_HORIZON_DAYS.
+LABEL_HORIZON_DAYS = 20
+
+# Length of the recency diagnostic below.
+RECENT_WINDOW_MONTHS = 6
+
+
+def recent_window_metrics(y_test, score) -> dict | None:
+    """Re-score the model on just the last RECENT_WINDOW_MONTHS of the test
+    window. A *diagnostic*, never a gate.
+
+    Deliberately not gated on, and the reason is measured rather than assumed.
+    Six months is ~110 labeled rows but only ~5 independent observations at a
+    20-trading-day horizon, and a block bootstrap of the returns model over
+    exactly this window put the model-minus-baseline Brier gap at +0.118 with a
+    95% CI of [-0.206, +0.481] - six times wider than the full window's and
+    straddling zero, i.e. no evidence of skill either way. On the full test
+    window the same model loses to climatology with 96% confidence. Gating on
+    six months would therefore have flipped `returns` from correctly blocked to
+    deployed, on noise.
+
+    What it is good for: the constant baselines drift with the market, so
+    comparing this against the full-window figure shows whether recent
+    conditions have moved away from what the model was fit on.
+
+    `score(mask)` returns the metric dict for the masked slice; the caller
+    supplies it so this stays model-type agnostic and reuses predictions that
+    were already computed, adding no TabPFN calls.
+    """
+    if len(y_test) == 0 or not isinstance(y_test.index, pd.DatetimeIndex):
+        return None
+    cutoff = y_test.index.max() - pd.DateOffset(months=RECENT_WINDOW_MONTHS)
+    mask = y_test.index >= cutoff
+    n_rows = int(mask.sum())
+    if n_rows == 0:
+        return None
+    return {
+        **score(mask),
+        "window_start": str(cutoff.date()),
+        "n_rows": n_rows,
+        "effective_n": n_rows // LABEL_HORIZON_DAYS,
+    }
+
 
 def classifier_baselines(y_train, y_val, n_classes: int) -> dict:
     """Majority-class accuracy and climatology Brier for a classification task.

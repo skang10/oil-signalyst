@@ -63,6 +63,28 @@ export function isUnhealthy(m: Model): boolean {
 }
 
 /**
+ * Secondary line: the same model rescored on the trailing 6 months.
+ *
+ * Kept out of metricText and isUnhealthy on purpose. It is there to show
+ * whether recent conditions have moved away from what the model was fit on -
+ * the constant baselines drift with the market, so the pair moving together
+ * says "harder period", the pair diverging says "the model is decaying". It is
+ * far too noisy to judge a model by: ~6 independent observations, which is why
+ * the deployment gate reads the full window instead.
+ */
+export function recentText(m: Model): string | null {
+  const r = m.metrics.recent;
+  if (!m.is_forecast || !r || r.primary === null) return null;
+  const digits = m.type === 'eia' ? 1 : 3;
+  const unit = m.type === 'eia' ? ' MB' : '';
+  const base =
+    r.baseline === null || r.baseline === undefined
+      ? ''
+      : ` / baseline ${fmt(r.baseline, digits)}${unit}`;
+  return `Last 6mo: ${fmt(r.primary, digits)}${unit}${base} · n≈${r.effective_n ?? '—'} independent`;
+}
+
+/**
  * One line per model. Single implementation - ModelMonitor and DSView each had
  * their own near-copy whose branch ordering differed, so the same model could
  * read differently on two pages.

@@ -32,10 +32,23 @@ def multiclass_brier(
     return float(np.mean(scores))
 
 
-def classifier_metrics(model: Any, x_val: np.ndarray, y_val: np.ndarray, n_classes: int) -> dict:
-    probs = model.predict_proba(x_val)
-    preds = model.predict(x_val)
+def classifier_scores(
+    y_val: np.ndarray,
+    probs: np.ndarray,
+    preds: np.ndarray,
+    classes: np.ndarray,
+    n_classes: int,
+) -> dict:
+    """The metric half of classifier_metrics, split out so a caller holding
+    already-computed predictions can score a subset of them (e.g. the recency
+    diagnostic's trailing slice) without a second round trip to TabPFN."""
     return {
         "accuracy": round(float(accuracy_score(y_val, preds)), 4),
-        "brier": round(multiclass_brier(y_val, probs, model.classes_, n_classes), 4),
+        "brier": round(multiclass_brier(y_val, probs, classes, n_classes), 4),
     }
+
+
+def classifier_metrics(model: Any, x_val: np.ndarray, y_val: np.ndarray, n_classes: int) -> dict:
+    return classifier_scores(
+        y_val, model.predict_proba(x_val), model.predict(x_val), model.classes_, n_classes
+    )

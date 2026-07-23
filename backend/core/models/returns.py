@@ -1,9 +1,9 @@
 import numpy as np
 from tabpfn_client import TabPFNClassifier
 
-from core.models.common import as_named_row, classifier_metrics
+from core.models.common import as_named_row, classifier_metrics, classifier_scores
 from core.models.labels import RETURN_BIN_LABELS
-from core.models.metrics import classifier_baselines
+from core.models.metrics import classifier_baselines, recent_window_metrics
 from core.models.tabpfn_setup import ensure_tabpfn_authenticated
 
 
@@ -21,8 +21,21 @@ def build_returns_model(train_x, train_y, test_x, test_y):
     model = TabPFNClassifier(balance_probabilities=True)
     model.fit(train_x, train_y)
     metrics_train = classifier_metrics(model, train_x, train_y, n_classes)
-    metrics_test = classifier_metrics(model, test_x, test_y, n_classes)
+    test_probs, test_preds = model.predict_proba(test_x), model.predict(test_x)
+    metrics_test = classifier_scores(
+        test_y, test_probs, test_preds, model.classes_, n_classes
+    )
     metrics_test["baseline"] = classifier_baselines(train_y, test_y, n_classes)
+    # Recency diagnostic on the same predictions - reported, never gated on.
+    metrics_test["recent"] = recent_window_metrics(
+        test_y,
+        lambda m: {
+            **classifier_scores(
+                test_y[m], test_probs[m], test_preds[m], model.classes_, n_classes
+            ),
+            "baseline": classifier_baselines(train_y, test_y[m], n_classes),
+        },
+    )
 
     metrics_train["bucket_counts"] = {
         RETURN_BIN_LABELS[int(k)]: int(v)
