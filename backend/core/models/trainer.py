@@ -114,9 +114,25 @@ def load_features(start: str, end: str) -> pd.DataFrame:
     return df[start:end]
 
 
+def _active_pool_columns() -> list[str]:
+    """Names of the features currently in the pool.
+
+    The Parquet matrix is the historical record and keeps every column ever
+    built, including ones since removed from the pool - removal is a status flip
+    precisely so it stays reversible. So the pool, not the Parquet, decides what
+    a model sees; without this filter a removed feature kept being trained on,
+    and its NaNs kept dropping rows through to_model_matrix's dropna().
+    """
+    from core.services.feature_pool import load_pool_sync
+
+    return [f["name"] for f in load_pool_sync()]
+
+
 def _window(a: str, b: str) -> tuple[pd.DataFrame, dict]:
     """The model matrix and per-type labels for one date window."""
-    x = to_model_matrix(load_features(a, b))
+    raw = load_features(a, b)
+    active = [c for c in _active_pool_columns() if c in raw.columns]
+    x = to_model_matrix(raw[sorted(active)])
     labels = {"eia": build_eia_labels(a, b)}
     return x, labels
 
