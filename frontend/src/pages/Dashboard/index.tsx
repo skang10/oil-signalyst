@@ -46,11 +46,7 @@ export default function Dashboard() {
             <span className="font-medium">
               {onBaseline.join(' and ')} {onBaseline.length > 1 ? 'are' : 'is'} running on the
               baseline, not a trained model.
-            </span>{' '}
-            No trained version beat a constant predictor built from the 2012–2024 base rates, so
-            that predictor is serving instead. It reads no features, so the forecast below is the
-            historical distribution rather than a view on today. Position sizing, hedge ratio, CVaR
-            and Kelly are withheld — they would restate history as a recommendation.
+            </span>
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
