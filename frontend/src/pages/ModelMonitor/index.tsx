@@ -6,6 +6,7 @@ import Card from '@/components/shared/Card';
 import SHAPBar from '@/components/shared/SHAPBar';
 import StressTestCard from '@/components/shared/StressTestCard';
 import ScoreComparisonCard from './ScoreComparisonCard';
+import NoDriversNotice from '@/components/shared/NoDriversNotice';
 import { cn } from '@/lib/utils';
 import { IconCircleCheck, IconAlertTriangle } from '@tabler/icons-react';
 import { MODEL_KIND, MODEL_LABEL, fmt, isUnhealthy, metricText, recentText } from '@/lib/model-metrics';
@@ -122,7 +123,11 @@ export default function ModelMonitorPage() {
             ))
           ) : (
             <div className="text-[11px] text-text-muted">
-              No prediction yet — run the daily pipeline to populate feature importances.
+              {report ? (
+                <NoDriversNotice status={report.regime.shap_status} />
+              ) : (
+                'No prediction yet — run the daily pipeline to populate feature importances.'
+              )}
             </div>
           )}
         </Card>

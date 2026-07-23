@@ -233,6 +233,10 @@ async def run_full_training(
                 version=version,
                 model=model,
                 feature_list=list(x_train.columns),
+                # KernelExplainer cost is linear in background size and every
+                # evaluation is a network round trip to hosted TabPFN, so this
+                # is a small k-means summary rather than the training set.
+                shap_background=_shap_background(x_train),
                 metrics_train=metrics_train,
                 metrics_val=metrics_test,
                 mlflow_run_id=run.info.run_id,
@@ -393,6 +397,22 @@ async def _ensure_baseline_floor(
         )
 
 
+def _shap_background(x_train: pd.DataFrame, k: int = 20):
+    """A compact reference sample for KernelExplainer.
+
+    k-means summary rather than a random subsample: it keeps the explainer's
+    background representative at a size the hosted-TabPFN round trips can
+    afford (cost is linear in this, once per explained prediction).
+    """
+    try:
+        import shap
+
+        return shap.kmeans(x_train, k)
+    except Exception as exc:  # never let this break a training run
+        logger.warning("SHAP background build failed", extra={"error": str(exc)})
+        return None
+
+
 async def _save_model(
     model_type: str,
     version: str,
@@ -402,6 +422,7 @@ async def _save_model(
     metrics_val: dict,
     mlflow_run_id: str | None = None,
     activate: bool = True,
+    shap_background=None,
 ) -> dict:
     """Persists the artifact and its ModelVersion row.
 
@@ -418,6 +439,12 @@ async def _save_model(
         "feature_list": feature_list,
         "model_type": model_type,
         "version": version,
+        # The reference sample KernelExplainer perturbs against. Nothing ever
+        # wrote it, so explain_prediction's `if background is None: return {}`
+        # guard fired for every model ever deployed and the report's SHAP
+        # drivers were silently empty in production the whole time. A baseline
+        # passes None deliberately - a constant predictor has no contributions.
+        "shap_background": shap_background,
     }
     await asyncio.to_thread(joblib.dump, artifact, file_path)
 

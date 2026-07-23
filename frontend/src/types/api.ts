@@ -65,7 +65,17 @@ export interface DailyReport {
       distillate: number | null;
       cushing: number | null;
     };
-    shap_drivers: { name: string; contribution_mb: number }[];
+    /** `contribution_share` is a normalised share of total attribution
+     *  across features (sums to 1), not million barrels. */
+    shap_drivers: { name: string; contribution_share: number }[];
+    /**
+     * Why shap_drivers may be empty. 'baseline' = the serving model reads no
+     * features, so contributions are zero by construction; 'no_model' = none
+     * deployed; 'unavailable' = the explainer could not run. These drivers are
+     * the EIA model's own - the tab used to render the *regime* model's values
+     * under a million-barrel label.
+     */
+    shap_status: 'ok' | 'baseline' | 'no_model' | 'unavailable';
     /** The live model's own held-out figures, null if it recorded none. */
     historical_direction_accuracy: number | null;
     historical_mae: number | null;
@@ -105,6 +115,8 @@ export interface DailyReport {
      * card, which the HTML prototype requires but the spec's type omits.
      */
     shap_drivers: { name: string; contribution: number; direction: 'bullish' | 'bearish' }[];
+    /** Why shap_drivers may be empty - see the EIA block's shap_status. */
+    shap_status: 'ok' | 'baseline' | 'no_model' | 'unavailable';
   };
 
   returns: {

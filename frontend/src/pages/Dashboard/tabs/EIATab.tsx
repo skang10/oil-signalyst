@@ -2,6 +2,7 @@ import { useRole } from '@/context/RoleContext';
 import { useReport } from '@/hooks/useReport';
 import Card from '@/components/shared/Card';
 import { numOrAbstain, pctOrAbstain } from '@/lib/abstain';
+import NoDriversNotice from '@/components/shared/NoDriversNotice';
 import TagBadge from '@/components/shared/TagBadge';
 import SHAPBar from '@/components/shared/SHAPBar';
 import InventoryBar from '@/components/shared/InventoryBar';
@@ -23,7 +24,7 @@ export default function EIATab() {
   ].filter((b): b is { label: string; value: number } => b.value !== null);
   const unmodelledProducts = 4 - breakdown.length;
   const maxAbs = Math.max(...breakdown.map((b) => Math.abs(b.value)), 1e-9);
-  const maxShap = Math.max(...eia.shap_drivers.map((d) => Math.abs(d.contribution_mb)));
+  const maxShap = Math.max(...eia.shap_drivers.map((d) => Math.abs(d.contribution_share)), 1e-9);
   const modelEdge =
     eia.historical_mae !== null && eia.consensus_mae
       ? ((eia.historical_mae - eia.consensus_mae) / eia.consensus_mae) * 100
@@ -88,14 +89,17 @@ export default function EIATab() {
       <div className="grid grid-cols-2 gap-[10px]">
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Key Drivers (SHAP)</div>
+          <NoDriversNotice status={eia.shap_status} />
           {eia.shap_drivers.map((d) => (
             <SHAPBar
               key={d.name}
               name={d.name}
-              widthPct={(Math.abs(d.contribution_mb) / maxShap) * 65}
-              displayValue={`${d.contribution_mb > 0 ? '+' : ''}${d.contribution_mb.toFixed(1)}`}
-              color={d.contribution_mb < 0 ? 'danger' : 'success'}
-              valueColor={d.contribution_mb < 0 ? 'danger' : 'success'}
+              widthPct={(Math.abs(d.contribution_share) / maxShap) * 65}
+              displayValue={`${(d.contribution_share * 100).toFixed(1)}%`}
+              // Neutral: these are normalised absolute magnitudes, so they are
+              // never negative - colouring by sign was always the same colour
+              // and implied a bullish/bearish reading the number does not carry.
+              color="accent"
             />
           ))}
         </Card>

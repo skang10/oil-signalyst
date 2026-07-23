@@ -44,6 +44,9 @@ async def assemble_daily_report(prediction: Prediction, snapshot: FeatureSnapsho
         # risk view then multiplied by the exposure to print a dollar figure,
         # so a 47% base rate became "$4.7M at risk".
         "var_95": round(rd.value_at_risk(prediction.return_dist or {}), 4),
+        # {"by_model": {type: {feature: contribution}}, "status": {type: reason}}.
+        # Older rows hold a flat {feature: contribution} dict of the regime
+        # model's values; _model_shap tolerates both.
         "shap_values": prediction.shap_values or {},
         "feature_signals": _build_signal_list(features),
         "regime_duration_weeks": duration // 5,
@@ -93,7 +96,10 @@ def nest_daily_report(
         if len(price_hist) >= 2 and price_hist[-2]
         else 0.0
     )
-    shap_drivers = _shap_drivers(raw["shap_values"], raw["feature_signals"])
+    eia_shap, eia_shap_status = _model_shap(raw["shap_values"], "eia")
+    regime_shap, regime_shap_status = _model_shap(raw["shap_values"], "regime")
+    eia_drivers = _shap_drivers(eia_shap, raw["feature_signals"])
+    regime_drivers = _shap_drivers(regime_shap, raw["feature_signals"])
     eia_metrics = raw.get("eia_metrics") or {}
     crude_mb = eia_forecast.get("crude", 0.0)
     tail_prob = round(return_dist.get("lt_minus10", 0.0) + return_dist.get("gt_10", 0.0), 4)
@@ -165,8 +171,15 @@ def nest_daily_report(
                 "cushing": None,
             },
             "shap_drivers": [
-                {"name": d["name"], "contribution_mb": d["contribution"]} for d in shap_drivers
+                # A normalised share of total attribution (the set sums to 1),
+                # NOT million barrels - it was named contribution_mb and rendered
+                # as "+0.2" beside a forecast in MB, which read as a barrel figure.
+                {"name": d["name"], "contribution_share": d["contribution"]}
+                for d in eia_drivers
             ],
+            # Why the list is empty, so the tab can explain itself instead of
+            # rendering a blank card.
+            "shap_status": eia_shap_status,
             # The live model's own held-out figures.
             "historical_direction_accuracy": eia_metrics.get("direction_acc"),
             "historical_mae": eia_metrics.get("mae"),
@@ -198,7 +211,8 @@ def nest_daily_report(
                 "Sustained break of key technical support/resistance, or a shift in "
                 "OPEC+ supply policy."
             ),
-            "shap_drivers": shap_drivers,
+            "shap_drivers": regime_drivers,
+            "shap_status": regime_shap_status,
         },
         "returns": {
             # `condition_description` used to sit here, reading "Regime {X}
@@ -241,6 +255,22 @@ def nest_daily_report(
             "upside_prob": upside_prob,
         },
     }
+
+
+def _model_shap(shap_values: dict, model_type: str) -> tuple[dict, str]:
+    """One model's contributions plus the reason there may be none.
+
+    Accepts the flat legacy shape (the regime model's values, stored before
+    contributions were tracked per model) so old predictions still render.
+    """
+    if not shap_values:
+        return {}, "unavailable"
+    if "by_model" in shap_values:
+        values = (shap_values.get("by_model") or {}).get(model_type) or {}
+        status = (shap_values.get("status") or {}).get(model_type) or "unavailable"
+        return values, status
+    legacy = shap_values if model_type == "regime" else {}
+    return legacy, "ok" if legacy else "unavailable"
 
 
 def _shap_drivers(shap_values: dict, feature_signals: list[dict], top_n: int = 6) -> list[dict]:

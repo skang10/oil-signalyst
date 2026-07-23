@@ -335,10 +335,26 @@ async def _ensure_prediction(
         regime_confidence_threshold=regime_confidence_threshold,
         baseline_models=baseline_models,
     )
-    # SHAP explains the regime model specifically, so it goes with it.
-    shap_values = (
-        explain_prediction(regime_artifact, _vector_for(regime_artifact)) if regime_artifact else {}
-    )
+    # Per model, because the report shows drivers on two tabs and they are not
+    # the same model. The EIA tab used to render the *regime* model's SHAP under
+    # a "million barrels" label - wrong model and wrong units - because there was
+    # only ever one dict here.
+    #
+    # A baseline is skipped rather than explained: it reads no features, so its
+    # contributions are zero by construction and running KernelExplainer over it
+    # would just spend round trips to prove that.
+    def _explain(model_type: str, artifact: dict | None) -> tuple[dict, str]:
+        if artifact is None:
+            return {}, "no_model"
+        if is_baseline_artifact(artifact):
+            return {}, "baseline"
+        values = explain_prediction(artifact, _vector_for(artifact))
+        return values, "ok" if values else "unavailable"
+
+    shap_by_model, shap_status = {}, {}
+    for model_type, artifact in (("eia", eia_artifact), ("regime", regime_artifact)):
+        shap_by_model[model_type], shap_status[model_type] = _explain(model_type, artifact)
+    shap_values = {"by_model": shap_by_model, "status": shap_status}
 
     # Provenance falls back to the returns model when regime is absent, rather
     # than leaving the row with no model at all - returns is what drives the

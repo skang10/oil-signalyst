@@ -6,6 +6,7 @@ import TagBadge from '@/components/shared/TagBadge';
 import SHAPBar from '@/components/shared/SHAPBar';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
 import NoRegimeModelNotice from '@/components/shared/NoRegimeModelNotice';
+import NoDriversNotice from '@/components/shared/NoDriversNotice';
 import DistChart from '@/components/shared/DistChart';
 import { IconSatellite, IconShip, IconChartLine } from '@tabler/icons-react';
 import { REGIME_IDS, REGIME_LABELS } from '@/lib/regime';
@@ -51,6 +52,7 @@ export default function ResearcherView({
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
             SHAP Feature Importance (Regime)
           </div>
+          <NoDriversNotice status={regime.shap_status} />
           {regime.shap_drivers.map((d) => (
             <SHAPBar
               key={d.name}
