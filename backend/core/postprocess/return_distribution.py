@@ -55,6 +55,29 @@ def quantile(dist: dict, q: float) -> float:
     return RETURN_MIDPOINTS[BUCKET_ORDER[-1]]
 
 
+def is_bucket_limited(dist: dict, q: float) -> bool:
+    """True when the q-quantile lands in an unbounded outer bucket.
+
+    Callers must surface this. The value returned for such a quantile is the
+    bucket's representative midpoint, not a located quantile - and with a
+    typical distribution BOTH the 10th and 90th land outside, which makes the
+    "80% interval" a constant +/-15% rather than anything read off the forecast.
+    Presenting that as a resolved confidence interval repeats the mistake of the
+    arbitrary +/-10% band it replaced.
+    """
+    cumulative = 0.0
+    for index, name in enumerate(BUCKET_ORDER):
+        weight = dist.get(name, 0.0)
+        if weight <= 0:
+            continue
+        if cumulative + weight >= q:
+            return not (
+                np.isfinite(RETURN_EDGES[index]) and np.isfinite(RETURN_EDGES[index + 1])
+            )
+        cumulative += weight
+    return True
+
+
 def mean(dist: dict) -> float:
     return sum(dist.get(name, 0.0) * RETURN_MIDPOINTS[name] for name in BUCKET_ORDER)
 

@@ -150,3 +150,28 @@ def test_return_distribution_statistics_are_computed_not_hardcoded():
     # A quantile inside a bounded bucket is interpolated, not snapped.
     interpolated = rd.quantile(climatology, 0.30)
     assert -0.10 < interpolated < 0.0
+
+
+def test_bucket_limited_flags_mark_unresolvable_quantiles():
+    """The outer buckets are unbounded, so a quantile landing in one is the
+    bucket's midpoint rather than a located value.
+
+    With a realistic distribution both the 10th and 90th percentiles land
+    outside, which makes the "80% price range" a constant +/-15% - the same
+    non-information as the arbitrary +/-10% band it replaced, and the reason it
+    has to be labelled rather than shown as a resolved interval.
+    """
+    from core.postprocess import return_distribution as rd
+
+    climatology = {"lt_minus10": 0.1273, "neg_10_0": 0.3452, "pos_0_10": 0.3986, "gt_10": 0.1288}
+    assert rd.is_bucket_limited(climatology, 0.05) is True
+    assert rd.is_bucket_limited(climatology, 0.10) is True
+    assert rd.is_bucket_limited(climatology, 0.90) is True
+    # The median lands in a bounded bucket and is genuinely interpolated.
+    assert rd.is_bucket_limited(climatology, 0.50) is False
+
+    # Thin tails: the quantiles fall inside bounded buckets and resolve properly.
+    thin = {"lt_minus10": 0.01, "neg_10_0": 0.49, "pos_0_10": 0.49, "gt_10": 0.01}
+    assert rd.is_bucket_limited(thin, 0.10) is False
+    assert rd.is_bucket_limited(thin, 0.90) is False
+    assert -0.10 < rd.quantile(thin, 0.10) < 0.0

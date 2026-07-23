@@ -13,6 +13,17 @@ export default function ReturnsTab() {
 
   const returns = report.returns;
   const risk = report.risk;
+  // Sign-driven, not fixed: expected return is currently +0.29% and was
+  // rendered in red regardless, as were skewness and VaR.
+  const signColor = (v: number) => (v < 0 ? 'text-danger' : 'text-success');
+  // Described from the value instead of the hardcoded "Left-skewed (fat
+  // downside tail)", which claimed a fat left tail at any skewness at all.
+  const skewText =
+    Math.abs(returns.skewness) < 0.1
+      ? 'Near-symmetric'
+      : returns.skewness < 0
+        ? 'Left-skewed (fat downside tail)'
+        : 'Right-skewed (fat upside tail)';
 
   return (
     <>
@@ -45,23 +56,37 @@ export default function ReturnsTab() {
       <div className="grid grid-cols-4 gap-[10px] mb-3">
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-2">Expected Return</div>
-          <div className="text-[22px] font-medium text-danger">{(returns.expected_return * 100).toFixed(1)}%</div>
+          <div className={`text-[22px] font-medium ${signColor(returns.expected_return)}`}>
+            {returns.expected_return > 0 ? '+' : ''}{(returns.expected_return * 100).toFixed(2)}%
+          </div>
         </Card>
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-2">VaR 95%</div>
-          <div className="text-[22px] font-medium text-danger">{(returns.var_95 * 100).toFixed(1)}%</div>
+          <div className="text-[22px] font-medium text-danger">
+            {returns.var_95_bucket_limited ? '\u2264 ' : ''}
+            {(returns.var_95 * 100).toFixed(1)}%
+          </div>
+          {returns.var_95_bucket_limited && (
+            <div className="text-[11px] text-text-muted mt-[3px]">
+              Bucket-limited — the 5% tail sits inside the unbounded &lt;−10% bucket
+            </div>
+          )}
         </Card>
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-2">Distribution Skewness</div>
-          <div className="text-[22px] font-medium text-danger">{returns.skewness.toFixed(2)}</div>
-          <div className="text-[11px] text-text-muted mt-[3px]">Left-skewed (fat downside tail)</div>
+          <div className={`text-[22px] font-medium ${signColor(returns.skewness)}`}>{returns.skewness.toFixed(2)}</div>
+          <div className="text-[11px] text-text-muted mt-[3px]">{skewText}</div>
         </Card>
         <Card>
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-2">Price Range</div>
           <div className="text-[18px] font-medium">
             ${returns.price_range_low}~${returns.price_range_high}
           </div>
-          <div className="text-[11px] text-text-muted mt-[3px]">80% confidence interval</div>
+          <div className="text-[11px] text-text-muted mt-[3px]">
+            {returns.price_range_bucket_limited
+              ? 'Bucket-limited — both ends fall in the unbounded outer buckets, so this is ±15% (their midpoints), not a resolved interval'
+              : '80% interval (10th–90th percentile)'}
+          </div>
         </Card>
       </div>
 
@@ -84,7 +109,11 @@ export default function ReturnsTab() {
           </div>
           <div className="border border-border rounded-default p-[10px_12px]">
             <div className="text-[11px] text-text-muted mb-[6px]">🛢 Oil producers (oil sellers)</div>
-            <div className="font-medium text-warning mb-1">Hold current hedge, do not increase</div>
+            <div className="font-medium text-warning mb-1">
+              {risk && isAbstained(risk.recommended_hedge_ratio)
+                ? 'Hedge sizing withheld — a baseline model is serving'
+                : 'Hold current hedge, do not increase'}
+            </div>
             <div className="text-[11px] text-text-muted leading-[1.6]">
               Upside {Math.round(returns.upside_prob * 100)}% intact — full hedge forgoes geopolitical upside
             </div>

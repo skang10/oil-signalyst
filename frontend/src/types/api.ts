@@ -135,12 +135,14 @@ export interface DailyReport {
     tail_prob: number;
     upside_prob: number;
     /**
-     * True when the 5% quantile fell inside an unbounded outer bucket, so VaR
-     * and CVaR are the bucket's representative value rather than a located
-     * quantile - they coincide, and must not be presented as distinct
-     * precision. See core/postprocess/return_distribution.py.
+     * True when the figure came from an unbounded outer bucket rather than a
+     * located quantile - the value is that bucket's representative midpoint.
+     * With a typical distribution both the 10th and 90th percentiles land
+     * outside, so the "80% range" is a constant +/-15%; it must be labelled as
+     * bucket-limited, not shown as a resolved interval.
      */
-    tail_resolution_limited: boolean;
+    var_95_bucket_limited: boolean;
+    price_range_bucket_limited: boolean;
   };
 }
 

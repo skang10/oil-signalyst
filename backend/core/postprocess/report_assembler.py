@@ -247,9 +247,14 @@ def nest_daily_report(
             # replacing an arbitrary +/-10% band unrelated to the forecast.
             "price_range_low": round(price * (1 + rd.quantile(return_dist, 0.10)), 2),
             "price_range_high": round(price * (1 + rd.quantile(return_dist, 0.90)), 2),
-            # True when the outer, unbounded buckets had to stand in for a
-            # quantile - VaR and CVaR then coincide and are bucket-limited.
-            "tail_resolution_limited": rd.quantile(return_dist, 0.05) == rd.RETURN_MIDPOINTS["lt_minus10"],
+            # Which figures came from an unbounded outer bucket rather than a
+            # located quantile, so the UI can mark them instead of implying a
+            # precision the four buckets do not have.
+            "var_95_bucket_limited": rd.is_bucket_limited(return_dist, rd.VAR_CONFIDENCE),
+            "price_range_bucket_limited": (
+                rd.is_bucket_limited(return_dist, 0.10)
+                or rd.is_bucket_limited(return_dist, 0.90)
+            ),
             "downside_prob": decision.get("downside_prob", 0.0),
             "tail_prob": tail_prob,
             "upside_prob": upside_prob,
