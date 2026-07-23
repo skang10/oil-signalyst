@@ -48,6 +48,55 @@ sources:
     release_day: 2
     lag_days: 0
 
+
+  # Components of the weekly crude balance identity:
+  #   dStocks = production + imports - exports - refinery runs (+ adjustment)
+  # The pool previously held only price/vol/positioning proxies for a quantity
+  # that is, physically, an accounting identity - none of its terms were present.
+  refinery_runs:
+    type: eia
+    series_id: "PET.WCRRIUS2.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  refinery_util:
+    type: eia
+    series_id: "PET.WPULEUS3.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  crude_production:
+    type: eia
+    series_id: "PET.WCRFPUS2.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  crude_imports:
+    type: eia
+    series_id: "PET.WCEIMUS2.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  crude_exports:
+    type: eia
+    series_id: "PET.WCREXUS2.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
+  # SPR releases move commercial stocks directly and are policy-driven, so they
+  # are not predictable from the price features the pool already has.
+  spr_stocks:
+    type: eia
+    series_id: "PET.WCSSTUS1.W"
+    freq: W
+    release_day: 2
+    lag_days: 0
+
   dxy:
     type: fred
     series_id: "DTWEXBGS"
