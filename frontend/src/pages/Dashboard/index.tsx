@@ -44,7 +44,7 @@ export default function Dashboard() {
         {onBaseline.length > 0 && (
           <AlertBanner>
             {onBaseline.join(' and ')} {onBaseline.length > 1 ? 'are' : 'is'} running on the
-            baseline, not a trained model.
+            baseline model, not a trained model.
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
