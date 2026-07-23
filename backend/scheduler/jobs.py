@@ -197,7 +197,9 @@ async def _ensure_feature_snapshot(
     FEATURES_DIR.mkdir(parents=True, exist_ok=True)
     engine = FeatureEngine(registry=registry)
     end = str(target_date + timedelta(days=1))
-    lookback_days = engine.required_lookback_days() + FEATURE_WARMUP_BUFFER_DAYS
+    # Calendar days, because `start` is a date - the engine's windows are
+    # counted in business-day rows and must be converted, not subtracted raw.
+    lookback_days = engine.required_lookback_calendar_days() + FEATURE_WARMUP_BUFFER_DAYS
     start = str(target_date - timedelta(days=lookback_days))
     features_df = engine.build(start, end)
 

@@ -1,4 +1,5 @@
 import hashlib
+import math
 import json
 from pathlib import Path
 
@@ -106,11 +107,30 @@ class FeatureEngine:
         return hashlib.md5(json.dumps(features, sort_keys=True).encode()).hexdigest()[:8]
 
     def required_lookback_days(self) -> int:
+        """Longest window any feature needs, in matrix ROWS (business days).
+
+        Rows, not calendar days - _window_days already converts a weekly
+        source's N-week window into N*ROWS_PER_WEEK rows. Anything sizing a
+        *fetch* window must convert back; see required_lookback_calendar_days.
+        """
         max_days = 0
         for feature in self.features:
             source_name = feature.get("source") or feature.get("source_a")
             max_days = max(max_days, self._window_days(feature, source_name))
         return max_days
+
+    def required_lookback_calendar_days(self) -> int:
+        """The same span expressed in calendar days, for sizing a fetch window.
+
+        A fetch is bounded by dates, but the windows above are counted in
+        business-day rows, and there are only ~5 of those per 7 calendar days.
+        Subtracting the row count as if it were days silently under-fetches by
+        ~29%: the pipeline asked for 610 calendar days to satisfy a 520-row
+        rolling window, got ~436 rows, and spec_net_pct came back all-NaN.
+        build() keeps only fully-formed rows, so one permanently-empty column
+        emptied the whole matrix and no prediction could be produced at all.
+        """
+        return math.ceil(self.required_lookback_days() * 7 / self.ROWS_PER_WEEK)
 
     # Rows per week on the matrix index. DataRegistry aligns every source onto
     # business days, so a weekly source's window of N weeks spans N*5 rows -
