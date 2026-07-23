@@ -264,16 +264,29 @@ async def _ensure_prediction(
         # below still reports the real problem if models are genuinely absent.
         logger.warning("Baseline bootstrap failed", extra={"error": str(exc)})
 
+    # The two forecasts are required - they are what the report is about, and
+    # ensure_baseline_models above guarantees at least a baseline for each.
     try:
-        regime_artifact = await ModelRegistry.get_active("regime")
         eia_artifact = await ModelRegistry.get_active("eia")
         returns_artifact = await ModelRegistry.get_active("returns")
     except ModelNotFoundError as exc:
         logger.info(
-            "Prediction skipped: no active models",
+            "Prediction skipped: no forecast models",
             extra={"date": str(target_date), "error": str(exc)},
         )
         return
+
+    # regime is optional. It is a frozen state descriptor with no observable
+    # outcome, so it is not trainable and has no baseline - a fresh system
+    # simply has none. It used to be fetched in the same try as the two
+    # forecasts, so its absence discarded eia and returns predictions that were
+    # perfectly computable, and the whole report 503'd on an empty prediction
+    # table. Downstream reads {} as "no regime call", which holds direction FLAT.
+    regime_artifact = None
+    try:
+        regime_artifact = await ModelRegistry.get_active("regime")
+    except ModelNotFoundError:
+        logger.info("No regime model - predicting without it", extra={"date": str(target_date)})
 
     def _vector_for(artifact: dict):
         """Feature vector ordered by THIS model's own fit-time feature_list.
@@ -290,7 +303,9 @@ async def _ensure_prediction(
             [feature_dict[name] for name in names], index=names, dtype=float
         ).to_numpy()
 
-    regime_probs = predict_regime(regime_artifact, _vector_for(regime_artifact))
+    regime_probs = (
+        predict_regime(regime_artifact, _vector_for(regime_artifact)) if regime_artifact else {}
+    )
     recent_inventory = registry.fetch(
         "crude_inventory",
         str(target_date - timedelta(days=60)),
@@ -320,7 +335,17 @@ async def _ensure_prediction(
         regime_confidence_threshold=regime_confidence_threshold,
         baseline_models=baseline_models,
     )
-    shap_values = explain_prediction(regime_artifact, _vector_for(regime_artifact))
+    # SHAP explains the regime model specifically, so it goes with it.
+    shap_values = (
+        explain_prediction(regime_artifact, _vector_for(regime_artifact)) if regime_artifact else {}
+    )
+
+    # Provenance falls back to the returns model when regime is absent, rather
+    # than leaving the row with no model at all - returns is what drives the
+    # decision, so it is the more meaningful anchor of the two anyway.
+    model_version_id = await ModelRegistry.get_active_version_id("regime")
+    if model_version_id is None:
+        model_version_id = await ModelRegistry.get_active_version_id("returns")
 
     async with get_db() as db:
         db.add(
@@ -331,7 +356,7 @@ async def _ensure_prediction(
                 eia_forecast=eia_forecast,
                 decision=decision,
                 shap_values=shap_values,
-                model_version_id=await ModelRegistry.get_active_version_id("regime"),
+                model_version_id=model_version_id,
                 feature_snapshot_id=snapshot_id,
             )
         )

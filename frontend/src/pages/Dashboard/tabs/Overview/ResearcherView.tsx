@@ -5,6 +5,7 @@ import Card from '@/components/shared/Card';
 import TagBadge from '@/components/shared/TagBadge';
 import SHAPBar from '@/components/shared/SHAPBar';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
+import NoRegimeModelNotice from '@/components/shared/NoRegimeModelNotice';
 import DistChart from '@/components/shared/DistChart';
 import { IconSatellite, IconShip, IconChartLine } from '@tabler/icons-react';
 import { REGIME_IDS, REGIME_LABELS } from '@/lib/regime';
@@ -23,6 +24,7 @@ export default function ResearcherView({
   onNavigateTab: Dispatch<SetStateAction<DashTab>>;
 }) {
   const regime = report.regime;
+  const regimeAvailable = report.regime_available;
   const eia = report.eia;
   const returns = report.returns;
   const maxAbs = Math.max(...regime.shap_drivers.map((d) => Math.abs(d.contribution)));
@@ -31,7 +33,7 @@ export default function ResearcherView({
     .map((id) => ({
       id,
       label: REGIME_LABELS[id],
-      prob: regime.probabilities[id],
+      prob: regime.probabilities[id] ?? 0,
       isDominant: id === regime.dominant,
     }))
     .sort((a, b) => b.prob - a.prob);
@@ -40,7 +42,7 @@ export default function ResearcherView({
     <>
       <div className="mb-3">
         <Card>
-          <RegimeGrid regimes={regimeItems} />
+          {regimeAvailable ? <RegimeGrid regimes={regimeItems} /> : <NoRegimeModelNotice compact />}
         </Card>
       </div>
 

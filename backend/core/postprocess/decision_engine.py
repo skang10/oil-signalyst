@@ -56,14 +56,27 @@ def generate_decision(
     expected_ret = sum(
         return_dist.get(bucket, 0.0) * midpoint for bucket, midpoint in RETURN_MIDPOINTS.items()
     )
+    # An empty regime_probs means no regime model is deployed at all. It is a
+    # frozen state descriptor with no observable outcome, so it is not
+    # retrainable and a fresh system has none - the forecasts it does have
+    # should still be served rather than the whole report withheld.
+    regime_available = bool(regime_probs)
     dominant = dominant_regime(regime_probs) or "R3"
     confidence = regime_probs.get(dominant, 0.0)
 
-    confident_enough = confidence >= regime_confidence_threshold
+    # No regime model reads as no confidence, which is the conservative branch:
+    # a directional position needs a regime call it cannot currently make.
+    confident_enough = regime_available and confidence >= regime_confidence_threshold
     if expected_ret > 0.02 and upside_prob > downside_prob and confident_enough:
         direction = "LONG"
         position_size = min(expected_ret / 0.05, 1.0)
-    elif expected_ret < -0.02 and downside_prob > upside_prob:
+    # SHORT gates on confidence too. It did not, which made the threshold mean
+    # "you may not go long without a confident regime call, but you may go
+    # short" - defensible as a risk-off lean, except the gate is about whether
+    # the regime signal can be trusted at all, and that is direction-agnostic.
+    # With no regime model the old form was plainly wrong: confidence is 0, so
+    # SHORT became the only reachable non-FLAT signal.
+    elif expected_ret < -0.02 and downside_prob > upside_prob and confident_enough:
         direction = "SHORT"
         position_size = min(abs(expected_ret) / 0.05, 1.0)
     else:
@@ -79,17 +92,22 @@ def generate_decision(
     baseline_models = baseline_models or []
     on_baseline = "returns" in baseline_models
 
+    regime_text = (
+        f"Dominant regime {dominant} ({confidence:.0%})."
+        if regime_available
+        else "No regime model deployed - directional signals are held FLAT."
+    )
+
     if on_baseline:
         rationale = (
             "The returns model in production is the constant baseline - it emits the "
             "2012-2024 bucket frequencies and reads no features. Position sizing, "
             "hedging, CVaR and Kelly are withheld: any number they produced would be "
-            "a restatement of the historical base rate, not a forecast. "
-            f"Dominant regime {dominant} ({confidence:.0%})."
+            f"a restatement of the historical base rate, not a forecast. {regime_text}"
         )
     else:
         rationale = (
-            f"Dominant regime {dominant} ({confidence:.0%}). "
+            f"{regime_text} "
             f"Downside risk {downside_prob:.0%}, expected return {expected_ret:+.1%}, "
             f"CVaR (95%) {cvar_95:+.1%}, Kelly size {kelly_position:.0%}."
         )
@@ -109,5 +127,8 @@ def generate_decision(
         # Surfaced all the way to the report page so the suppression is explained
         # where it is seen, not silently absent.
         "baseline_models": baseline_models,
+        # False when no regime model is deployed, so the report can show an
+        # empty state instead of asserting a dominant regime at 0% confidence.
+        "regime_available": regime_available,
         "rationale": rationale,
     }

@@ -3,6 +3,7 @@ import Card from '@/components/shared/Card';
 import MetricCard from '@/components/shared/MetricCard';
 import TagBadge from '@/components/shared/TagBadge';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
+import NoRegimeModelNotice from '@/components/shared/NoRegimeModelNotice';
 import DistChart from '@/components/shared/DistChart';
 import { formatUsd, lastBusinessDayLabels } from '@/lib/utils';
 import { IconBolt } from '@tabler/icons-react';
@@ -12,6 +13,7 @@ import { isAbstained, pctOrAbstain } from '@/lib/abstain';
 export default function TraderView({ report }: { report: DailyReport }) {
   const trader = report.trader!;
   const regime = report.regime;
+  const regimeAvailable = report.regime_available;
   const returns = report.returns;
   const eia = report.eia;
 
@@ -26,7 +28,7 @@ export default function TraderView({ report }: { report: DailyReport }) {
     .map((id) => ({
       id,
       label: REGIME_LABELS[id],
-      prob: regime.probabilities[id],
+      prob: regime.probabilities[id] ?? 0,
       isDominant: id === regime.dominant,
     }))
     .sort((a, b) => b.prob - a.prob);
@@ -109,7 +111,7 @@ export default function TraderView({ report }: { report: DailyReport }) {
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
             Market Regime
           </div>
-          <RegimeGrid regimes={regimeItems} />
+          {regimeAvailable ? <RegimeGrid regimes={regimeItems} /> : <NoRegimeModelNotice compact />}
           {/* Was "0% chance of regime switch in 4w" - a ratio over a handful of
               hand-drawn periods, phrased as a calibrated forecast on the tab a
               trader sizes positions from. */}

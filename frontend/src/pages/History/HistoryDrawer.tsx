@@ -38,7 +38,7 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
     ? REGIME_IDS.map((id) => ({
         id,
         label: REGIME_LABELS[id],
-        prob: detail.regime.probabilities[id],
+        prob: detail.regime.probabilities[id] ?? 0,
         isDominant: id === detail.regime.dominant,
       }))
     : [];
@@ -94,7 +94,7 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
                     label="Dominant Regime"
                     value={
                       <TagBadge kind="red">
-                        {detail.regime.dominant} · {Math.round(detail.regime.probabilities[detail.regime.dominant] * 100)}%
+                        {detail.regime.dominant} · {Math.round((detail.regime.probabilities[detail.regime.dominant] ?? 0) * 100)}%
                       </TagBadge>
                     }
                   />

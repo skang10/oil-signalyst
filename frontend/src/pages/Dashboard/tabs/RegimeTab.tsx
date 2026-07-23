@@ -3,6 +3,7 @@ import { useReport } from '@/hooks/useReport';
 import Card from '@/components/shared/Card';
 import TagBadge, { type TagKind } from '@/components/shared/TagBadge';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
+import NoRegimeModelNotice from '@/components/shared/NoRegimeModelNotice';
 
 import {
   REGIME_IDS,
@@ -29,13 +30,14 @@ export default function RegimeTab() {
   const { role } = useRole();
   const { data: report } = useReport(role);
   if (!report) return <div className="text-text-muted text-[12px]">Loading...</div>;
+  if (!report.regime_available) return <NoRegimeModelNotice />;
 
   const regime = report.regime;
   const regimeItems: RegimeGridItem[] = REGIME_IDS
     .map((id) => ({
       id,
       label: REGIME_LABELS[id],
-      prob: regime.probabilities[id],
+      prob: regime.probabilities[id] ?? 0,
       isDominant: id === regime.dominant,
       sub: REGIME_TRIGGER[id],
     }))

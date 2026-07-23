@@ -94,6 +94,12 @@ def nest_daily_report(
         # Non-empty means several numbers below are deliberately null - the
         # report page explains it rather than leaving them silently blank.
         "baseline_models": decision.get("baseline_models") or [],
+        # False when no regime model is deployed. The regime block below is
+        # still populated (its historical statistics are hand-curated and do not
+        # come from the model), but `probabilities` is empty and `dominant`
+        # carries no evidence - the UI must show an empty state rather than
+        # render R3 at 0% as though it were a call.
+        "regime_available": bool(raw["regime_probs"]),
         "trader": {
             "signal": decision.get("direction", "FLAT"),
             "kelly_position": decision.get("kelly_position", 0.0),

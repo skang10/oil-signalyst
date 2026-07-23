@@ -15,6 +15,15 @@ export interface DailyReport {
    */
   baseline_models: string[];
 
+  /**
+   * False when no regime model is deployed. `regime.probabilities` is then {}
+   * and `regime.dominant` is a fallback carrying no evidence, so views must
+   * show an empty state rather than render a regime call at 0%. Regime is a
+   * frozen state descriptor with no observable outcome - it is not trainable
+   * and has no baseline, so a fresh system legitimately has none.
+   */
+  regime_available: boolean;
+
   trader?: {
     signal: 'LONG' | 'SHORT' | 'FLAT';
     kelly_position: number | null;
@@ -57,7 +66,8 @@ export interface DailyReport {
   };
 
   regime: {
-    probabilities: Record<'R1' | 'R2' | 'R3' | 'R4', number>;
+    /** Empty when regime_available is false. */
+    probabilities: Partial<Record<'R1' | 'R2' | 'R3' | 'R4', number>>;
     dominant: 'R1' | 'R2' | 'R3' | 'R4';
     duration_weeks: number;
     historical_avg_duration: number;
@@ -370,7 +380,8 @@ export interface HistoryDetail {
     risk_recommendation: string;
   };
   regime: {
-    probabilities: Record<'R1' | 'R2' | 'R3' | 'R4', number>;
+    /** Empty when regime_available is false. */
+    probabilities: Partial<Record<'R1' | 'R2' | 'R3' | 'R4', number>>;
     dominant: 'R1' | 'R2' | 'R3' | 'R4';
     duration_weeks: number;
     switch_probability_4w: number;

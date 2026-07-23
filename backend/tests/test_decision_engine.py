@@ -71,3 +71,49 @@ def test_regime_confidence_threshold_gates_long_signal():
         regime_probs, return_dist, current_price=70.0, regime_confidence_threshold=0.9
     )
     assert strict["direction"] != "LONG"
+
+
+def test_no_regime_model_holds_direction_flat():
+    """Empty regime_probs means no regime model is deployed at all.
+
+    It is a frozen state descriptor with no observable outcome, so it is not
+    trainable and has no baseline - a fresh system simply has none, and the
+    eia/returns forecasts should still be served. But a directional position
+    needs a regime call, so the absence must read as no confidence.
+    """
+    strongly_bearish = {"lt_minus10": 0.6, "neg_10_0": 0.3, "pos_0_10": 0.05, "gt_10": 0.05}
+    decision = generate_decision({}, strongly_bearish, current_price=70.0)
+
+    assert decision["regime_available"] is False
+    assert decision["direction"] == "FLAT"
+    assert decision["position_size"] == 0.0
+    assert "No regime model deployed" in decision["rationale"]
+
+
+def test_short_requires_regime_confidence_like_long():
+    """SHORT used to skip the confidence gate that LONG had to clear.
+
+    The gate asks whether the regime signal can be trusted at all, which is
+    direction-agnostic; with the asymmetry, a low-confidence regime forbade
+    going long while still permitting a short.
+    """
+    strongly_bearish = {"lt_minus10": 0.6, "neg_10_0": 0.3, "pos_0_10": 0.05, "gt_10": 0.05}
+    unconfident = {"R1": 0.26, "R2": 0.25, "R3": 0.25, "R4": 0.24}
+
+    assert generate_decision(unconfident, strongly_bearish, 70.0)["direction"] == "FLAT"
+    # Same distribution, a confident regime call - now the short is allowed.
+    confident = {"R1": 0.7, "R2": 0.1, "R3": 0.1, "R4": 0.1}
+    assert generate_decision(confident, strongly_bearish, 70.0)["direction"] == "SHORT"
+
+
+def test_baseline_returns_model_withholds_sizing():
+    """A constant baseline restates the historical base rate; sizing derived
+    from it would be an actionable recommendation carrying no information.
+    Withheld as None, never 0.0 - zero is itself a recommendation."""
+    climatology = {"lt_minus10": 0.127, "neg_10_0": 0.346, "pos_0_10": 0.398, "gt_10": 0.129}
+    confident = {"R1": 0.7, "R2": 0.1, "R3": 0.1, "R4": 0.1}
+    decision = generate_decision(confident, climatology, 68.0, baseline_models=["returns"])
+
+    for field in ("hedge_ratio", "hedge_notional_barrels", "cvar_95", "kelly_position"):
+        assert decision[field] is None, field
+    assert decision["baseline_models"] == ["returns"]
