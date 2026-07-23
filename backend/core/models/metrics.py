@@ -110,6 +110,31 @@ def regressor_baselines(y_train, y_val) -> dict:
     return {"mae": round(float(np.mean(np.abs(y_val - float(np.mean(y_train))))), 4)}
 
 
+def skill_score(metric_key: str, value: float | None, baseline: float | None) -> float | None:
+    """How much of the baseline's error the model actually removed.
+
+    0 = no better than the constant baseline, 1 = perfect, negative = worse than
+    predicting the base rates. The point of expressing it this way is that it is
+    comparable ACROSS evaluation windows, which the raw metric is not: every
+    model version is scored on its own test window (2025 -> its training date),
+    and those windows differ in difficulty. The baseline absorbs that difficulty,
+    because it is rescored on the same window - so dividing by it cancels most of
+    the window effect out.
+
+    Concretely, the eia model went from MAE 5.1461 to 5.1038 across two versions,
+    which reads as a 0.8% improvement. But its baseline fell from 5.1704 to
+    5.1402 over the same pair, i.e. the newer window was simply easier. In skill
+    terms the gain is +0.47% -> +0.71%, so roughly two thirds of the apparent
+    improvement was the window, not the model.
+    """
+    if value is None or baseline is None:
+        return None
+    if metric_key in HIGHER_IS_BETTER:
+        # Bounded-[0,1] metrics (accuracy): the share of the achievable headroom.
+        return None if baseline >= 1 else round((value - baseline) / (1 - baseline), 4)
+    return None if baseline == 0 else round(1 - value / baseline, 4)
+
+
 def beats_baseline(metric_key: str, value: float | None, baseline: float | None) -> bool | None:
     """None when the comparison cannot be made (either side missing)."""
     if value is None or baseline is None:

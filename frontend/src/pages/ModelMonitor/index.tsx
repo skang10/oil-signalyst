@@ -5,6 +5,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import Card from '@/components/shared/Card';
 import SHAPBar from '@/components/shared/SHAPBar';
 import StressTestCard from '@/components/shared/StressTestCard';
+import ScoreComparisonCard from './ScoreComparisonCard';
 import { cn } from '@/lib/utils';
 import { IconCircleCheck, IconAlertTriangle } from '@tabler/icons-react';
 import { MODEL_KIND, MODEL_LABEL, fmt, isUnhealthy, metricText, recentText } from '@/lib/model-metrics';
@@ -56,6 +57,8 @@ export default function ModelMonitorPage() {
           </div>
         ))}
       </div>
+
+      <ScoreComparisonCard models={modelStatus.models} />
 
       {/* Read-only: what a freshly trained model must clear to auto-deploy.
           Rules come from the backend (deployment_gate_criteria) so the panel

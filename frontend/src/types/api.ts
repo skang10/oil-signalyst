@@ -141,7 +141,31 @@ export interface ModelStatus {
         n_rows: number | null;
         effective_n: number | null;
       } | null;
+      /**
+       * Share of the baseline's error the model removed: 0 = no better than the
+       * constant baseline, negative = worse than it. Comparable across model
+       * versions in a way the raw metric is not, because each version is scored
+       * on its own test window and the baseline absorbs that window's
+       * difficulty. See core/models/metrics.py::skill_score.
+       */
+      skill: number | null;
     };
+    /** Which metric `primary` holds - 'mae' for eia, 'brier' for returns. */
+    metric_key: string | null;
+    /** Whether this version cleared the deployment gate. False here with the
+     *  model still live means it was promoted by hand through deploy_service. */
+    gate_passed: boolean | null;
+    /** The version this one displaced in production. Null when the live model
+     *  is the first ever deployed for its type. Gate-blocked versions are never
+     *  candidates - they never served a prediction. */
+    previous: {
+      version: string;
+      primary: number | null;
+      baseline: number | null;
+      skill: number | null;
+      deployed_at: string | null;
+      gate_passed: boolean | null;
+    } | null;
     psi_alert: boolean;
   }[];
   data_sources: {

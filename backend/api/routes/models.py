@@ -11,7 +11,7 @@ from core.postprocess.data_monitor import (
     model_input_freshness,
     training_dataset_summary,
 )
-from core.models.metrics import PRIMARY_METRIC_KEY, deployment_gate_criteria
+from core.models.metrics import PRIMARY_METRIC_KEY, deployment_gate_criteria, skill_score
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_current_psi
 from core.services.deploy_service import do_deploy
 from db.models import ModelVersion
@@ -24,6 +24,20 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
     del user
     rows = await db.execute(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
     versions = rows.scalars().all()
+
+    # What each live model replaced in production. Deliberately keyed on
+    # deployed_at rather than created_at: a version the deployment gate blocked
+    # was still saved, but it never served a prediction, so comparing against it
+    # would answer a question nobody is asking. Most-recently-deployed
+    # non-active version per type = the one the current model displaced.
+    prev_rows = await db.execute(
+        select(ModelVersion)
+        .where(ModelVersion.deployed_at.is_not(None), ModelVersion.is_active.is_(False))
+        .order_by(ModelVersion.deployed_at.desc())
+    )
+    previous_by_type: dict[str, ModelVersion] = {}
+    for row in prev_rows.scalars().all():
+        previous_by_type.setdefault(row.model_type, row)
 
     # Computed live from the Parquet matrix, not read from the latest
     # FeatureSnapshot row - that row's stored value was all zeros because PSI's
@@ -56,20 +70,45 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
             if metric_key and recent_raw
             else None
         )
+        primary = metrics_oos.get(metric_key) if metric_key else None
+        baseline = (metrics_oos.get("baseline") or {}).get(metric_key) if metric_key else None
+
+        def _side(v: ModelVersion | None) -> dict | None:
+            """One row of the live-vs-baseline-vs-previous comparison."""
+            if v is None or not metric_key:
+                return None
+            oos = v.metrics_oos or {}
+            value = oos.get(metric_key)
+            base = (oos.get("baseline") or {}).get(metric_key)
+            return {
+                "version": v.version,
+                "primary": value,
+                "baseline": base,
+                "skill": skill_score(metric_key, value, base),
+                "deployed_at": str(v.deployed_at) if v.deployed_at else None,
+                # Each version is scored on its own window, so the UI can say so
+                # rather than implying the raw numbers are directly comparable.
+                "gate_passed": (oos.get("deployment_gate") or {}).get("passed"),
+            }
+
         return {
             "type": version.model_type,
             "version": version.version,
             "deployed_at": str(version.deployed_at) if version.deployed_at else None,
             "mlflow_run_id": version.mlflow_run_id,
             "is_forecast": metric_key is not None,
+            "metric_key": metric_key,
             "metrics": {
-                "primary": metrics_oos.get(metric_key) if metric_key else None,
-                "baseline": (metrics_oos.get("baseline") or {}).get(metric_key)
-                if metric_key
-                else None,
+                "primary": primary,
+                "baseline": baseline,
+                "skill": skill_score(metric_key, primary, baseline) if metric_key else None,
                 "psi": psi,
                 "recent": recent,
             },
+            # The version this one displaced in production; null when the live
+            # model is the first ever deployed for its type.
+            "previous": _side(previous_by_type.get(version.model_type)),
+            "gate_passed": (metrics_oos.get("deployment_gate") or {}).get("passed"),
             "psi_alert": psi_alert,
         }
 

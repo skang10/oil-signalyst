@@ -28,6 +28,22 @@ export function fmt(value: number | null | undefined, digits: number, scale = 1)
   return value === null || value === undefined ? '—' : (value * scale).toFixed(digits);
 }
 
+/** Unit suffix for a model type's primary metric. Brier is unitless. */
+export function metricUnit(type: Model['type']): string {
+  return type === 'eia' ? ' MB' : '';
+}
+
+/**
+ * Skill as a percentage. Signed always - the sign IS the finding, since a
+ * negative skill means the model lost to a predictor that ignores every
+ * feature. `delta` renders it as a change in percentage points instead.
+ */
+export function fmtSkill(skill: number | null | undefined, delta = false): string {
+  if (skill === null || skill === undefined) return '—';
+  const pct = skill * 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}${delta ? 'pp' : '%'}`;
+}
+
 function primaryText(m: Model): string {
   if (m.type === 'eia') return `MAE ${fmt(m.metrics.primary, 1)} MB`;
   return `Brier ${fmt(m.metrics.primary, 3)}`;
