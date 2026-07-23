@@ -5,21 +5,18 @@ type Model = ModelStatus['models'][number];
 export const MODEL_LABEL: Record<Model['type'], string> = {
   regime: 'Market Regime',
   eia: 'EIA Forecast Model',
-  returns: 'Returns Model',
 };
 
 /**
  * Regime is a state description, not a forecast, so it gets a different
  * subtitle and no score. The dividing line the backend uses is whether the
  * thing has an observable outcome to be checked against: EIA is scored against
- * the inventory change EIA later publishes and returns against the realized
- * 20-day return, while regime was only ever compared to a hardcoded table of
- * transition dates.
+ * the inventory change EIA later publishes, while regime was only ever compared
+ * to a hardcoded table of transition dates.
  */
 export const MODEL_KIND: Record<Model['type'], string> = {
   regime: 'State indicator — not scored',
   eia: 'Forecast',
-  returns: 'Forecast',
 };
 
 // metrics.* are null until first recorded (types/api.ts) - show a placeholder
@@ -28,7 +25,7 @@ export function fmt(value: number | null | undefined, digits: number, scale = 1)
   return value === null || value === undefined ? '—' : (value * scale).toFixed(digits);
 }
 
-/** Unit suffix for a model type's primary metric. Brier is unitless. */
+/** Unit suffix for a model type's primary metric. */
 export function metricUnit(type: Model['type']): string {
   return type === 'eia' ? ' MB' : '';
 }
@@ -45,15 +42,12 @@ export function fmtSkill(skill: number | null | undefined, delta = false): strin
 }
 
 function primaryText(m: Model): string {
-  if (m.type === 'eia') return `MAE ${fmt(m.metrics.primary, 1)} MB`;
-  return `Brier ${fmt(m.metrics.primary, 3)}`;
+  return `MAE ${fmt(m.metrics.primary, 1)} MB`;
 }
 
 function baselineText(m: Model): string | null {
   if (m.metrics.baseline === null || m.metrics.baseline === undefined) return null;
-  return m.type === 'eia'
-    ? `baseline ${fmt(m.metrics.baseline, 1)} MB`
-    : `baseline ${fmt(m.metrics.baseline, 3)}`;
+  return `baseline ${fmt(m.metrics.baseline, 1)} MB`;
 }
 
 /** True when the model beats its baseline; null when it cannot be judged. */
@@ -61,7 +55,7 @@ export function beatsBaseline(m: Model): boolean | null {
   const { primary, baseline } = m.metrics;
   if (!m.is_forecast || primary === null || baseline === null || baseline === undefined)
     return null;
-  // Every forecast metric here (MAE, Brier) is lower-is-better.
+  // The one forecast metric here (MAE) is lower-is-better.
   return primary < baseline;
 }
 
@@ -91,8 +85,8 @@ export function isUnhealthy(m: Model): boolean {
 export function recentText(m: Model): string | null {
   const r = m.metrics.recent;
   if (!m.is_forecast || !r || r.primary === null) return null;
-  const digits = m.type === 'eia' ? 1 : 3;
-  const unit = m.type === 'eia' ? ' MB' : '';
+  const digits = 1;
+  const unit = metricUnit(m.type);
   const base =
     r.baseline === null || r.baseline === undefined
       ? ''

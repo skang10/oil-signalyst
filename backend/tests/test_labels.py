@@ -1,6 +1,6 @@
 import pandas as pd
 
-from core.models.labels import build_eia_labels, build_regime_labels, build_return_bucket_labels
+from core.models.labels import build_eia_labels, build_regime_labels
 
 
 class FakeRegistry:
@@ -23,11 +23,6 @@ def test_regime_labels_uses_transition_series():
     labels = build_regime_labels("2024-01-01", "2024-01-03")
     assert labels.tolist() == ["R3", "R3", "R3"]
 
-
-def test_return_bucket_labels_use_trading_observations():
-    labels = build_return_bucket_labels("2024-01-01", "2024-02-15", registry=FakeRegistry())
-    assert labels.index[0] == pd.Timestamp("2024-01-01")
-    assert labels.iloc[0] == 3
 
 
 def test_eia_labels_are_independent_from_feature_columns():

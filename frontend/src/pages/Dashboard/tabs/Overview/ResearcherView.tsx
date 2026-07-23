@@ -7,7 +7,6 @@ import SHAPBar from '@/components/shared/SHAPBar';
 import RegimeGrid, { type RegimeGridItem } from '@/components/shared/RegimeGrid';
 import NoRegimeModelNotice from '@/components/shared/NoRegimeModelNotice';
 import NoDriversNotice from '@/components/shared/NoDriversNotice';
-import DistChart from '@/components/shared/DistChart';
 import { IconSatellite, IconShip, IconChartLine } from '@tabler/icons-react';
 import { REGIME_IDS, REGIME_LABELS } from '@/lib/regime';
 
@@ -27,7 +26,6 @@ export default function ResearcherView({
   const regime = report.regime;
   const regimeAvailable = report.regime_available;
   const eia = report.eia;
-  const returns = report.returns;
   const maxAbs = Math.max(...regime.shap_drivers.map((d) => Math.abs(d.contribution)));
 
   const regimeItems: RegimeGridItem[] = REGIME_IDS
@@ -115,25 +113,6 @@ export default function ResearcherView({
           </div>
         </Card>
 
-        <Card>
-          <div className="flex items-center justify-between mb-[10px]">
-            <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium">
-              Return Distribution (Next 20 Days)
-            </div>
-            <TagBadge kind="red">Downside {Math.round(returns.downside_prob * 100)}%</TagBadge>
-          </div>
-          <DistChart buckets={returns.buckets} height={60} />
-          <div className="mt-[6px] text-[12px] text-text-muted">
-            Stats summary + full breakdown →{' '}
-            <button
-              type="button"
-              className="px-[10px] py-[2px] text-[11px] border border-border-strong bg-surface-2 rounded-default cursor-pointer hover:bg-surface-1"
-              onClick={() => onNavigateTab('returns')}
-            >
-              Returns Detail ↗
-            </button>
-          </div>
-        </Card>
       </div>
     </>
   );

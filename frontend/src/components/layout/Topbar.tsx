@@ -50,9 +50,10 @@ export default function Topbar({
   // first WS message arrives or if the socket is disconnected.
   const price = wsPrice ?? report?.wti_price;
   const changePct = wsChangePct ?? report?.wti_change_pct;
-  // Live Brent-WTI spread from the ticker; fall back to the report's stored
-  // spread (present only for the trader role) until the first WS tick lands.
-  const spread = wsSpread ?? report?.trader?.brent_wti_spread ?? null;
+  // Live Brent-WTI spread from the ticker. The report no longer carries a
+  // stored fallback - that lived on the trader block, which went with the
+  // return forecast - so the spread is blank until the first WS tick lands.
+  const spread = wsSpread ?? null;
 
   return (
     <div className="h-[46px] shrink-0 bg-surface-2 border-b border-border flex items-center px-4 gap-[10px]">

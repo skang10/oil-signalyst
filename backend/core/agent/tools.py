@@ -112,7 +112,7 @@ TOOLS: list[dict] = [
                 "properties": {
                     "model_types": {
                         "type": "array",
-                        "items": {"type": "string", "enum": ["regime", "eia", "returns"]},
+                        "items": {"type": "string", "enum": ["eia"]},
                     },
                     "gap_days": {"type": "integer"},
                     "n_splits": {"type": "integer"},
@@ -129,7 +129,7 @@ TOOLS: list[dict] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "model_type": {"type": "string", "enum": ["regime", "eia", "returns"]},
+                    "model_type": {"type": "string", "enum": ["eia"]},
                     "job_id": {"type": "string"},
                 },
                 "required": ["model_type", "job_id"],

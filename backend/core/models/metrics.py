@@ -11,26 +11,27 @@ that kind of model cannot silently replace a working one.
 import numpy as np
 import pandas as pd
 
-from core.models.common import multiclass_brier
 
 # Single source of truth - api/routes/models.py and core/models/trainer.py both
 # import this rather than keeping their own copies in sync by hand.
-PRIMARY_METRIC_KEY = {"eia": "mae", "returns": "brier"}
+PRIMARY_METRIC_KEY = {"eia": "mae"}
 
 # Metrics where a larger number is better; everything else improves downward.
 HIGHER_IS_BETTER = {"accuracy", "direction_acc"}
 
 # A validation window shorter than this cannot support any honest claim about
-# generalization. Overlapping forward-looking labels make the effective sample
-# far smaller than the row count (the returns model's 20-trading-day horizon
-# means ~250 daily rows carry only ~12 independent observations), so this is a
-# floor on obvious degeneracy, not a sufficiency test.
+# generalization. It is a floor on obvious degeneracy, not a sufficiency test -
+# see ROWS_PER_INDEPENDENT_OBSERVATION for why the row count overstates things.
 MIN_VAL_ROWS = 60
 
-# The forward-looking label horizon, in trading days. Two rows less than this
-# far apart describe overlapping futures, so the count of *independent*
-# observations in a window is roughly rows // LABEL_HORIZON_DAYS.
-LABEL_HORIZON_DAYS = 20
+# Daily rows per genuinely independent observation.
+#
+# EIA publishes weekly, and build_eia_labels broadcasts each week's change onto
+# every business day of that week - so five consecutive rows carry the SAME
+# label and only differ in their features. A 400-row test window is really ~80
+# weekly events. (This was 20 while the 20-trading-day returns model existed,
+# which is the wrong divisor for a weekly target.)
+ROWS_PER_INDEPENDENT_OBSERVATION = 5
 
 # Length of the recency diagnostic below.
 RECENT_WINDOW_MONTHS = 6
@@ -40,15 +41,13 @@ def recent_window_metrics(y_test, score) -> dict | None:
     """Re-score the model on just the last RECENT_WINDOW_MONTHS of the test
     window. A *diagnostic*, never a gate.
 
-    Deliberately not gated on, and the reason is measured rather than assumed.
-    Six months is ~110 labeled rows but only ~5 independent observations at a
-    20-trading-day horizon, and a block bootstrap of the returns model over
-    exactly this window put the model-minus-baseline Brier gap at +0.118 with a
-    95% CI of [-0.206, +0.481] - six times wider than the full window's and
-    straddling zero, i.e. no evidence of skill either way. On the full test
-    window the same model loses to climatology with 96% confidence. Gating on
-    six months would therefore have flipped `returns` from correctly blocked to
-    deployed, on noise.
+    Deliberately not gated on, and the reason was measured rather than assumed.
+    Six months of daily rows is only ~26 independent weekly EIA prints, and a
+    block bootstrap over exactly this window (on the returns model, when it
+    existed) produced a model-minus-baseline interval six times wider than the
+    full window's and straddling zero - no evidence of skill either way, while
+    the full window was decisive. Gating on a short window flips verdicts on
+    noise.
 
     What it is good for: the constant baselines drift with the market, so
     comparing this against the full-window figure shows whether recent
@@ -69,31 +68,10 @@ def recent_window_metrics(y_test, score) -> dict | None:
         **score(mask),
         "window_start": str(cutoff.date()),
         "n_rows": n_rows,
-        "effective_n": n_rows // LABEL_HORIZON_DAYS,
+        "effective_n": n_rows // ROWS_PER_INDEPENDENT_OBSERVATION,
     }
 
 
-def classifier_baselines(y_train, y_val, n_classes: int) -> dict:
-    """Majority-class accuracy and climatology Brier for a classification task.
-
-    Climatology = predict the training set's class frequencies, constantly, for
-    every validation row. It is the honest "I learned nothing from the features
-    but I did learn the base rates" reference. Uses multiclass_brier so the
-    one-vs-rest averaging matches classifier_metrics exactly.
-    """
-    y_val = np.asarray(y_val)
-    if len(y_val) == 0:
-        return {"accuracy": None, "brier": None}
-
-    train_counts = pd.Series(y_train).value_counts(normalize=True)
-    frequencies = np.array([train_counts.get(c, 0.0) for c in range(n_classes)])
-
-    val_counts = pd.Series(y_val).value_counts()
-    majority_accuracy = float(val_counts.iloc[0] / len(y_val)) if len(val_counts) else 0.0
-
-    probs = np.tile(frequencies, (len(y_val), 1))
-    brier = multiclass_brier(y_val, probs, np.arange(n_classes), n_classes)
-    return {"accuracy": round(majority_accuracy, 4), "brier": round(float(brier), 4)}
 
 
 def regressor_baselines(y_train, y_val) -> dict:
@@ -152,12 +130,8 @@ def deployment_gate_criteria() -> list[dict]:
             "rule": f"at least {MIN_VAL_ROWS} rows",
         },
         {
-            "label": "Distinct classes",
-            "rule": "at least 2 (classifiers only)",
-        },
-        {
             "label": "Beats baseline",
-            "rule": "returns: Brier below climatology · eia: MAE below train-mean",
+            "rule": "eia: MAE below the train-mean constant",
         },
     ]
 

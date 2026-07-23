@@ -4,7 +4,6 @@ import { useModelStatus } from '@/hooks/useModelStatus';
 import PageHeader from '@/components/shared/PageHeader';
 import Card from '@/components/shared/Card';
 import SHAPBar from '@/components/shared/SHAPBar';
-import StressTestCard from '@/components/shared/StressTestCard';
 import ScoreComparisonCard from './ScoreComparisonCard';
 import NoDriversNotice from '@/components/shared/NoDriversNotice';
 import { cn } from '@/lib/utils';
@@ -133,7 +132,6 @@ export default function ModelMonitorPage() {
         </Card>
       </div>
 
-      {report && <StressTestCard title="Stress Test" />}
     </div>
   );
 }

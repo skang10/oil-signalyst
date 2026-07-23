@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRole } from '@/context/RoleContext';
-import { ROLE_PERMISSIONS, type DashTab } from '@/types/roles';
+import type { DashTab } from '@/types/roles';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import { useReport } from '@/hooks/useReport';
 import AlertBanner from '@/components/shared/AlertBanner';
@@ -8,7 +8,6 @@ import DashTabBar from './DashTabBar';
 import OverviewTab from './tabs/Overview';
 import EIATab from './tabs/EIATab';
 import RegimeTab from './tabs/RegimeTab';
-import ReturnsTab from './tabs/ReturnsTab';
 import ChartsTab from './tabs/ChartsTab';
 
 export default function Dashboard() {
@@ -17,29 +16,12 @@ export default function Dashboard() {
   const { data: modelStatus } = useModelStatus();
   const { data: report } = useReport(role);
 
-  useEffect(() => {
-    if (role === 'trader' || role === 'risk') {
-      setActiveTab((prev) => (ROLE_PERMISSIONS.dimmedDashTabs.includes(prev) ? 'overview' : prev));
-    }
-    // Only bounce on role change - dimmed tabs must stay manually clickable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
 
   const alertModel = modelStatus?.models.find((m) => m.psi_alert);
   // Non-empty when a model type failed the deployment gate and the constant
   // baseline took over production. Stated up front, because several numbers
   // further down the report are withheld as a direct consequence.
   const onBaseline = report?.baseline_models ?? [];
-  // Reads as one phrase when both are on the baseline ("EIA and Return
-  // Forecasts") and still names only the affected one when a trained model is
-  // live for the other - the banner lists what is actually on the baseline, so
-  // a fixed both-models sentence would be wrong half the time.
-  const baselineSubject =
-    onBaseline.length > 1
-      ? 'EIA and Return Forecasts are'
-      : onBaseline[0] === 'eia'
-        ? 'EIA Forecast is'
-        : 'Return Forecast is';
 
   return (
     <div className="flex flex-col h-full">
@@ -53,13 +35,12 @@ export default function Dashboard() {
         )}
         {onBaseline.length > 0 && (
           <AlertBanner>
-            {baselineSubject} running on the baseline model, not a trained model.
+            EIA Forecast is running on the baseline model, not a trained model.
           </AlertBanner>
         )}
         {activeTab === 'overview' && <OverviewTab onNavigateTab={setActiveTab} />}
         {activeTab === 'eia' && <EIATab />}
         {activeTab === 'regime' && <RegimeTab />}
-        {activeTab === 'returns' && <ReturnsTab />}
         {activeTab === 'charts' && <ChartsTab />}
       </div>
     </div>

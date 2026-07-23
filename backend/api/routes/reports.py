@@ -16,7 +16,6 @@ from core.postprocess.report_assembler import (
     build_history_response,
     nest_daily_report,
 )
-from core.postprocess.stress_test import get_r3_max_drawdown, run_stress_test
 from db.crud import get_recent_predictions
 from db.models import FeatureSnapshot, Prediction
 
@@ -48,15 +47,9 @@ async def get_daily_report(role: str, db: DbSession, user: CurrentUser) -> dict:
 
     snapshot = await _get_snapshot(db, prediction)
     raw = await assemble_daily_report(prediction, snapshot)
-    exposure_barrels = user.exposure_barrels or 100_000
-    r3_max_drawdown = await get_r3_max_drawdown()
-    return nest_daily_report(raw, role, exposure_barrels, r3_max_drawdown)
+    return nest_daily_report(raw, role)
 
 
-@router.get("/stress")
-async def get_stress_test(user: CurrentUser) -> dict:
-    del user
-    return await run_stress_test()
 
 
 @router.get("/history")

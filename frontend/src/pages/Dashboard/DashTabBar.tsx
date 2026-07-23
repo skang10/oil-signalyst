@@ -1,5 +1,4 @@
 import { Fragment } from 'react';
-import { useRole } from '@/context/RoleContext';
 import { ROLE_PERMISSIONS, type DashTab } from '@/types/roles';
 import { cn } from '@/lib/utils';
 
@@ -15,11 +14,6 @@ import { cn } from '@/lib/utils';
 const TABS: { key: DashTab; label: string; startsGroup?: boolean }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'eia', label: 'EIA Inventory Forecast', startsGroup: true },
-  // Horizon in the label because a return forecast without one says nothing,
-  // and "Dist." read as an abbreviation for anything from distance to
-  // distribution while naming the model's output shape rather than the
-  // question a reader is asking.
-  { key: 'returns', label: '20-Day WTI Return Forecast' },
   { key: 'regime', label: 'Regime', startsGroup: true },
   { key: 'charts', label: 'Market Data' },
 ];
@@ -31,14 +25,10 @@ export default function DashTabBar({
   activeTab: DashTab;
   onTabChange: (tab: DashTab) => void;
 }) {
-  const { role } = useRole();
-
   return (
     <div className="flex border-b border-border bg-surface-2 shrink-0 px-[18px]">
       {TABS.map((tab) => {
-        const dimmed =
-          ROLE_PERMISSIONS.dimmedDashTabs.includes(tab.key) &&
-          (role === 'trader' || role === 'risk');
+        const dimmed = ROLE_PERMISSIONS.dimmedDashTabs.includes(tab.key);
         const active = tab.key === activeTab;
         return (
           <Fragment key={tab.key}>

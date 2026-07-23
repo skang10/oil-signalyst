@@ -127,7 +127,7 @@ async def _compute_feature_correlation(signal_name: str) -> dict:
 
 async def _check_leakage(gap_days: int, n_splits: int = 5) -> dict:
     # Real check, not a hardcoded pass: the deepest forward-looking label in
-    # this project is the returns model's 20-trading-day bucket
+    # this project's forecast horizon
     # (core/models/labels.py::build_return_bucket_labels) - a gap smaller
     # than that horizon means the validation split's earliest rows are
     # labeled using data that overlaps the training window. n_splits isn't

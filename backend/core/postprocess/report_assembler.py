@@ -4,10 +4,8 @@ import pandas as pd
 
 from core.data.registry import DataRegistry
 from core.logging import get_logger
-from core.models.labels import return_bucket_for_value
 from core.models.regime import dominant_regime
 from core.models.trainer import load_features
-from core.postprocess import return_distribution as rd
 from core.postprocess.regime_stats import (
     estimate_switch_probability,
     get_regime_duration,
@@ -35,15 +33,9 @@ async def assemble_daily_report(prediction: Prediction, snapshot: FeatureSnapsho
         "price": features.get("wti") or decision.get("current_price"),
         "dominant_regime": dominant,
         "regime_probs": regime_probs,
-        "return_dist": prediction.return_dist,
         "eia_forecast": prediction.eia_forecast,
         "decision": decision,
         "model_version": prediction.model_version.version if prediction.model_version else None,
-        # The 5% quantile of the return distribution. This used to be
-        # lt_minus10 + neg_10_0 - the total downside PROBABILITY - which the
-        # risk view then multiplied by the exposure to print a dollar figure,
-        # so a 47% base rate became "$4.7M at risk".
-        "var_95": round(rd.value_at_risk(prediction.return_dist or {}), 4),
         # {"by_model": {type: {feature: contribution}}, "status": {type: reason}}.
         # Older rows hold a flat {feature: contribution} dict of the regime
         # model's values; _model_shap tolerates both.
@@ -77,17 +69,14 @@ async def _active_metrics(model_type: str) -> dict:
     return (version.metrics_oos or {}) if version else {}
 
 
-def nest_daily_report(
-    raw: dict, role: str, exposure_barrels: float, r3_max_drawdown: float
-) -> dict:
+def nest_daily_report(raw: dict, role: str) -> dict:
     """Wraps the raw assembled report into the frontend's nested DailyReport
-    contract (trader/risk/eia/regime/returns sub-objects, per
+    contract (eia/regime sub-objects, per
     frontend/src/types/api.ts). Most fields are real data just reshaped; a
     two still have no model backing - the per-product EIA breakdown (no model,
     no labels) and the switch-trigger narrative - and are null or static,
     marked below. Everything else is computed."""
     decision = raw["decision"] or {}
-    return_dist = raw["return_dist"] or {}
     eia_forecast = raw["eia_forecast"] or {}
     price = raw["price"] or 0.0
     price_hist = raw["price_5d_history"] or []
@@ -102,8 +91,6 @@ def nest_daily_report(
     regime_drivers = _shap_drivers(regime_shap, raw["feature_signals"])
     eia_metrics = raw.get("eia_metrics") or {}
     crude_mb = eia_forecast.get("crude", 0.0)
-    tail_prob = round(return_dist.get("lt_minus10", 0.0) + return_dist.get("gt_10", 0.0), 4)
-    upside_prob = round(return_dist.get("pos_0_10", 0.0) + return_dist.get("gt_10", 0.0), 4)
 
     return {
         "date": raw["date"],
@@ -120,27 +107,6 @@ def nest_daily_report(
         # carries no evidence - the UI must show an empty state rather than
         # render R3 at 0% as though it were a call.
         "regime_available": bool(raw["regime_probs"]),
-        "trader": {
-            "signal": decision.get("direction", "FLAT"),
-            "kelly_position": decision.get("kelly_position", 0.0),
-            "stop_loss_price": decision.get("stop_loss"),
-            "stop_loss_pct": decision.get("stop_loss_pct", 0.0),
-            "expected_return": decision.get("expected_ret", 0.0),
-            "price_5d_history": price_hist,
-            "price_5d_high": max(price_hist) if price_hist else price,
-            "price_5d_low": min(price_hist) if price_hist else price,
-            "brent_wti_spread": raw["brent_wti_spread"],
-            "cot_net_percentile": raw["cot_net_percentile"],
-            "ovx": raw["ovx"],
-        },
-        "risk": {
-            "var_95": raw["var_95"],
-            "cvar_95": decision.get("cvar_95", 0.0),
-            "current_exposure_mbbls": round(exposure_barrels / 1_000_000, 4),
-            "hedge_ratio": decision.get("hedge_ratio", 0.0),
-            "recommended_hedge_ratio": decision.get("hedge_ratio", 0.0),
-            "r3_historical_max_drawdown": r3_max_drawdown,
-        },
         "eia": {
             "forecast_mb": crude_mb,
             # Empirical 80% interval from the live model's out-of-sample
@@ -214,51 +180,6 @@ def nest_daily_report(
             "shap_drivers": regime_drivers,
             "shap_status": regime_shap_status,
         },
-        "returns": {
-            # `condition_description` used to sit here, reading "Regime {X}
-            # dominant with N% downside probability" - a leftover from when the
-            # returns model took regime probabilities as input. It no longer
-            # does, so the sentence described a conditioning that does not
-            # happen. Dropped rather than reworded: there is no generated
-            # narrative to replace it with.
-            "buckets": [
-                {"label": "< -10%", "pct": return_dist.get("lt_minus10", 0.0), "color": "danger"},
-                {
-                    "label": "-10% to 0%",
-                    "pct": return_dist.get("neg_10_0", 0.0),
-                    "color": "warning",
-                },
-                {
-                    "label": "0% to +10%",
-                    "pct": return_dist.get("pos_0_10", 0.0),
-                    "color": "success",
-                },
-                {"label": "> +10%", "pct": return_dist.get("gt_10", 0.0), "color": "accent"},
-            ],
-            "expected_return": decision.get("expected_ret", 0.0),
-            # All computed from the bucket distribution the model emits - see
-            # core/postprocess/return_distribution.py. These were a hardcoded
-            # median and skewness, and a var_95 that was actually the total
-            # downside PROBABILITY rendered as a return.
-            "median_return": round(rd.median(return_dist), 4),
-            "var_95": round(rd.value_at_risk(return_dist), 4),
-            "skewness": round(rd.skewness(return_dist), 4),
-            # 10th-90th percentile of the return distribution applied to spot,
-            # replacing an arbitrary +/-10% band unrelated to the forecast.
-            "price_range_low": round(price * (1 + rd.quantile(return_dist, 0.10)), 2),
-            "price_range_high": round(price * (1 + rd.quantile(return_dist, 0.90)), 2),
-            # Which figures came from an unbounded outer bucket rather than a
-            # located quantile, so the UI can mark them instead of implying a
-            # precision the four buckets do not have.
-            "var_95_bucket_limited": rd.is_bucket_limited(return_dist, rd.VAR_CONFIDENCE),
-            "price_range_bucket_limited": (
-                rd.is_bucket_limited(return_dist, 0.10)
-                or rd.is_bucket_limited(return_dist, 0.90)
-            ),
-            "downside_prob": decision.get("downside_prob", 0.0),
-            "tail_prob": tail_prob,
-            "upside_prob": upside_prob,
-        },
     }
 
 
@@ -299,14 +220,10 @@ def _shap_drivers(shap_values: dict, feature_signals: list[dict], top_n: int = 6
 def build_history_response(predictions: list[Prediction]) -> dict:
     """Reshapes recent Prediction rows into the frontend's HistoryResponse
     contract: a per-day prediction list plus rolling accuracy metrics.
-    Accuracy is scored only against genuinely observed outcomes: real
-    crude_inventory changes for eia, realized forward returns for the return
-    distribution. Regime is deliberately absent - it has no observable outcome
-    to be scored against."""
-    empty_accuracy = {
-        "eia_directional_acc": 0.0,
-        "returns_brier": 0.0,
-    }
+    Accuracy is scored only against a genuinely observed outcome: the real
+    crude_inventory change. Regime is deliberately absent - it has no
+    observable outcome to be scored against."""
+    empty_accuracy = {"eia_directional_acc": 0.0}
     if not predictions:
         return {"predictions": [], "rolling_accuracy": empty_accuracy}
 
@@ -322,9 +239,6 @@ def build_history_response(predictions: list[Prediction]) -> dict:
 
     rows = []
     eia_hits, eia_total = 0, 0
-    brier_scores = []
-    bucket_order = ["lt_minus10", "neg_10_0", "pos_0_10", "gt_10"]
-
     for p in predictions:
         regime_probs = p.regime_probs or {}
         dominant = dominant_regime(regime_probs)
@@ -335,11 +249,7 @@ def build_history_response(predictions: list[Prediction]) -> dict:
                 "date": str(p.date),
                 "wti_price": decision.get("current_price"),
                 "regime_dominant": dominant,
-                "signal": decision.get("direction", "FLAT"),
-                "expected_return": decision.get("expected_ret", 0.0),
-                "downside_prob": decision.get("downside_prob", 0.0),
                 "eia_forecast_mb": eia_forecast.get("crude"),
-                "actual_return": p.actual_return,
             }
         )
 
@@ -351,14 +261,6 @@ def build_history_response(predictions: list[Prediction]) -> dict:
                 if (actual_chg > 0) == (eia_forecast["crude"] > 0):
                     eia_hits += 1
 
-        if p.actual_return is not None and p.return_dist:
-            actual_bucket = return_bucket_for_value(p.actual_return)
-            brier_scores.append(
-                sum(
-                    (p.return_dist.get(b, 0.0) - (1.0 if b == actual_bucket else 0.0)) ** 2
-                    for b in bucket_order
-                )
-            )
 
     return {
         "predictions": rows,
@@ -366,12 +268,8 @@ def build_history_response(predictions: list[Prediction]) -> dict:
             # No regime entry: it used to compare the model's dominant regime
             # against build_regime_series(), i.e. a hardcoded table of 17 dates.
             # That measures agreement with a constant, not accuracy - unlike the
-            # two below, which score against observed inventory and realized
-            # returns.
+            # entry below, which scores against observed inventory.
             "eia_directional_acc": round(eia_hits / eia_total, 4) if eia_total else 0.0,
-            "returns_brier": round(sum(brier_scores) / len(brier_scores), 4)
-            if brier_scores
-            else 0.0,
         },
     }
 
@@ -398,11 +296,7 @@ def build_history_detail(
         "wti_price": decision.get("current_price"),
         "model_version": prediction.model_version.version if prediction.model_version else None,
         "summary": {
-            "signal": decision.get("direction", "FLAT"),
-            "expected_return": decision.get("expected_ret", 0.0),
-            "downside_prob": decision.get("downside_prob", 0.0),
             "eia_forecast_mb": eia_forecast.get("crude"),
-            "risk_recommendation": decision.get("rationale", ""),
         },
         "regime": {
             "probabilities": regime_probs,
@@ -421,7 +315,6 @@ def build_history_detail(
         ],
         "outcome": {
             "eia_actual_mb": eia_actual_mb,
-            "actual_return": prediction.actual_return,
         },
     }
 

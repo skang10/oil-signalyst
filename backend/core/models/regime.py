@@ -9,8 +9,7 @@ a model against a hardcoded lookup table is not accuracy, so the training
 path, its metrics, and its GMM cross-check have been removed.
 
 What remains is inference from the frozen artifact, which still supplies the
-dashboard's probability distribution, decision_engine's confidence gate, the
-SHAP drivers card, and stress_test.
+dashboard's probability distribution and the SHAP drivers card.
 """
 
 import numpy as np

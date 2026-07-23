@@ -20,11 +20,8 @@ from core.models.trainer import (
     run_full_training_with_log,
 )
 from core.models.baseline_model import is_baseline_artifact
-from core.models.returns import predict_returns
-from core.postprocess.decision_engine import generate_decision
 from core.postprocess.data_monitor import write_freshness_snapshot
 from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_and_store_psi
-from core.postprocess.outcome_backfill import backfill_outcomes
 from core.postprocess.shap_explainer import explain_prediction
 from core.postprocess.signal_charts import refresh_signal_charts
 from db.crud import get_feature_snapshot_by_date, get_or_create_default_user, get_prediction_by_date
@@ -74,7 +71,6 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
             snapshot_id,
             registry,
         )
-        await backfill_outcomes(target_date)
         await _maybe_auto_retrain(target_date)
         # New market data landed - rebuild the Evaluate-page chart cache in
         # the background so tomorrow's first page views stay instant.
@@ -268,10 +264,9 @@ async def _ensure_prediction(
     # ensure_baseline_models above guarantees at least a baseline for each.
     try:
         eia_artifact = await ModelRegistry.get_active("eia")
-        returns_artifact = await ModelRegistry.get_active("returns")
     except ModelNotFoundError as exc:
         logger.info(
-            "Prediction skipped: no forecast models",
+            "Prediction skipped: no forecast model",
             extra={"date": str(target_date), "error": str(exc)},
         )
         return
@@ -312,29 +307,11 @@ async def _ensure_prediction(
         str(target_date),
     )
     eia_forecast = predict_eia(eia_artifact, _vector_for(eia_artifact), recent_inventory)
-    return_dist = predict_returns(returns_artifact, _vector_for(returns_artifact))
     recent_wti = registry.fetch("wti", str(target_date - timedelta(days=7)), str(target_date))
     current_price = float(recent_wti.dropna().iloc[-1])
-    async with get_db() as db:
-        user = await get_or_create_default_user(db)
-        exposure_barrels = user.exposure_barrels
-        regime_confidence_threshold = user.alert_regime_threshold
-    # Which model types are being served by a constant baseline rather than a
-    # trained model. Drives the suppression of sizing outputs in the decision and
-    # the notice on the report page.
-    baseline_models = [
-        model_type
-        for model_type, artifact in (("eia", eia_artifact), ("returns", returns_artifact))
-        if is_baseline_artifact(artifact)
-    ]
-    decision = generate_decision(
-        regime_probs,
-        return_dist,
-        current_price,
-        exposure_barrels=exposure_barrels,
-        regime_confidence_threshold=regime_confidence_threshold,
-        baseline_models=baseline_models,
-    )
+    # Which model types are served by a constant baseline rather than a trained
+    # model - drives the notice on the report page.
+    baseline_models = ["eia"] if is_baseline_artifact(eia_artifact) else []
     # Per model, because the report shows drivers on two tabs and they are not
     # the same model. The EIA tab used to render the *regime* model's SHAP under
     # a "million barrels" label - wrong model and wrong units - because there was
@@ -361,16 +338,19 @@ async def _ensure_prediction(
     # decision, so it is the more meaningful anchor of the two anyway.
     model_version_id = await ModelRegistry.get_active_version_id("regime")
     if model_version_id is None:
-        model_version_id = await ModelRegistry.get_active_version_id("returns")
+        model_version_id = await ModelRegistry.get_active_version_id("eia")
 
     async with get_db() as db:
         db.add(
             Prediction(
                 date=target_date,
                 regime_probs=regime_probs,
-                return_dist=return_dist,
                 eia_forecast=eia_forecast,
-                decision=decision,
+                decision={
+                    "current_price": round(current_price, 2),
+                    "baseline_models": baseline_models,
+                    "regime_available": bool(regime_probs),
+                },
                 shap_values=shap_values,
                 model_version_id=model_version_id,
                 feature_snapshot_id=snapshot_id,

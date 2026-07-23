@@ -14,7 +14,7 @@ from core.config_paths import FEATURES_DIR, MLRUNS_DIR, MODELS_DIR
 from core.logging import get_logger
 from core.models.eia import build_eia_model
 from core.models.feature_prep import to_model_matrix
-from core.models.labels import RETURN_BIN_LABELS, build_eia_labels, build_return_bucket_labels
+from core.models.labels import build_eia_labels
 from core.models.baseline_model import build_baseline_model, is_baseline_version
 from core.models.metrics import (
     HIGHER_IS_BETTER,
@@ -24,7 +24,6 @@ from core.models.metrics import (
     skill_score,
 )
 from core.models.model_registry import ModelRegistry
-from core.models.returns import build_returns_model
 from db.database import get_db
 from db.models import ModelVersion, TrainJob
 from features.engine import FeatureEngine
@@ -58,10 +57,17 @@ VAL_START = TEST_START
 
 MLFLOW_EXPERIMENT = "oil-signalyst"
 
-# 'regime' is absent by design: it describes the current market state rather
-# than forecasting anything with an observable outcome, so there is nothing to
-# train it against. See core/models/regime.py.
-TRAINABLE_MODEL_TYPES = ("eia", "returns")
+# EIA inventory change is the only forecast target.
+#
+# 'regime' describes the current market state rather than forecasting anything
+# with an observable outcome, so there is nothing to train it against.
+# 'returns' - the 20-trading-day WTI return bucket - was removed after
+# measurement rather than taste: it never beat climatology (Brier 0.1998 vs
+# 0.1734, and it won only 1 of 8 walk-forward folds), which is roughly the
+# expected result for monthly oil direction. Its daily overlapping windows also
+# carried only ~19 independent observations per test window, too few to
+# establish an edge even if one existed.
+TRAINABLE_MODEL_TYPES = ("eia",)
 
 
 def _init_mlflow() -> None:
@@ -111,10 +117,7 @@ def load_features(start: str, end: str) -> pd.DataFrame:
 def _window(a: str, b: str) -> tuple[pd.DataFrame, dict]:
     """The model matrix and per-type labels for one date window."""
     x = to_model_matrix(load_features(a, b))
-    labels = {
-        "eia": build_eia_labels(a, b),
-        "returns": build_return_bucket_labels(a, b),
-    }
+    labels = {"eia": build_eia_labels(a, b)}
     return x, labels
 
 
@@ -175,10 +178,7 @@ async def run_full_training(
     matrices, feature_version, labels = await asyncio.to_thread(_prepare_training_data, test_end)
     version = datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S")
 
-    builders = {
-        "eia": build_eia_model,
-        "returns": build_returns_model,
-    }
+    builders = {"eia": build_eia_model}
 
     results = {}
     for model_type in selected:
@@ -217,9 +217,8 @@ async def run_full_training(
             )
             # Gate on the held-out TEST window: how many rows, and (for the
             # classifier) how many distinct classes it actually contained.
-            n_test_classes = None if model_type == "eia" else int(pd.Series(y_test).nunique())
             gate = evaluate_deployment_gate(
-                model_type, metrics_test, n_val_rows=len(x_test), n_val_classes=n_test_classes
+                model_type, metrics_test, n_val_rows=len(x_test), n_val_classes=None
             )
             metrics_test["deployment_gate"] = gate
 
@@ -370,7 +369,7 @@ async def _ensure_baseline_floor(
                 )
             return
 
-    n_classes = None if model_type == "eia" else len(RETURN_BIN_LABELS)
+    n_classes = None
     model, metrics = await asyncio.to_thread(
         build_baseline_model, model_type, train_y, test_y, n_classes
     )
@@ -384,16 +383,9 @@ async def _ensure_baseline_floor(
         activate=True,
     )
     if on_progress:
-        # Only the returns distribution feeds position sizing, so only that
-        # baseline suppresses it (decision_engine.generate_decision).
-        suffix = (
-            " Position sizing, hedging, CVaR and Kelly are suppressed while it is live."
-            if model_type == "returns"
-            else ""
-        )
         await on_progress(
             f"{model_type}: no model beats the baseline, so the baseline is now serving "
-            f"({metric_key} {metrics[metric_key]})." + suffix
+            f"({metric_key} {metrics[metric_key]})."
         )
 
 
@@ -526,7 +518,7 @@ async def run_full_training_with_log(
 
     new_metrics_by_type = {model_type: info["metrics"] for model_type, info in result.items()}
     # Frontend's TrainJob.result expects flat {model_type}_{primary_metric}
-    # keys (e.g. "returns_brier"), not the nested per-model-type dicts above -
+    # keys (e.g. "eia_mae"), not the nested per-model-type dicts above -
     # see ModelCompareCard.tsx's METRIC_LABEL map.
     old_metrics = {
         f"{model_type}_{PRIMARY_METRIC_KEY[model_type]}": (old_metrics_by_type.get(model_type) or {}).get(
@@ -541,16 +533,12 @@ async def run_full_training_with_log(
         for model_type in result
     }
 
-    old_returns_brier = (old_metrics_by_type.get("returns") or {}).get("brier")
-    new_returns_brier = (new_metrics_by_type.get("returns") or {}).get("brier")
+    # Run-level headline change, on the one target there is: eia MAE.
+    old_eia_mae = (old_metrics_by_type.get("eia") or {}).get("mae")
+    new_eia_mae = (new_metrics_by_type.get("eia") or {}).get("mae")
     improvement_pct = None
-    # new_returns_brier is None whenever "returns" isn't among the trained
-    # model types - without the second check this raised TypeError and marked
-    # an otherwise-successful regime/eia-only job as failed.
-    if old_returns_brier and new_returns_brier is not None:
-        improvement_pct = round(
-            (new_returns_brier - old_returns_brier) / old_returns_brier * 100, 1
-        )
+    if old_eia_mae and new_eia_mae is not None:
+        improvement_pct = round((new_eia_mae - old_eia_mae) / old_eia_mae * 100, 1)
 
     # Baselines travel in their own map rather than as extra old/new_metrics
     # keys: ModelCompareCard builds its table rows from those dicts, so an added
@@ -575,7 +563,7 @@ async def run_full_training_with_log(
         "versions": {model_type: info["version"] for model_type, info in result.items()},
         "deployed": {model_type: info.get("deployed", True) for model_type, info in result.items()},
         "blocked_reasons": blocked,
-        "mlflow_run_id": (result.get("returns") or {}).get("mlflow_run_id"),
+        "mlflow_run_id": (result.get("eia") or {}).get("mlflow_run_id"),
     }
 
 
@@ -612,7 +600,7 @@ def _run_cv_fold(fold: dict, model_types: list[str]) -> dict:
     caller (TabPFN's client is synchronous)."""
     train_x, train_lab = _window(fold["train_start"], fold["train_end"])
     test_x, test_lab = _window(fold["test_start"], fold["test_end"])
-    builders = {"eia": build_eia_model, "returns": build_returns_model}
+    builders = {"eia": build_eia_model}
 
     out = {}
     for mt in model_types:

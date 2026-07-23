@@ -1,13 +1,11 @@
-export type Role = 'trader' | 'risk' | 'researcher' | 'ds';
+export type Role = 'researcher' | 'ds';
 
 export const ROLE_LABELS: Record<Role, string> = {
-  trader: 'Trader',
-  risk: 'Risk',
   researcher: 'Researcher',
   ds: 'DS',
 };
 
-export const ROLES: Role[] = ['trader', 'risk', 'researcher', 'ds'];
+export const ROLES: Role[] = ['researcher', 'ds'];
 
 export type SidebarPage =
   | 'dashboard'
@@ -18,7 +16,7 @@ export type SidebarPage =
   | 'training'
   | 'settings';
 
-export type DashTab = 'overview' | 'eia' | 'regime' | 'returns' | 'charts';
+export type DashTab = 'overview' | 'eia' | 'regime' | 'charts';
 
 interface RolePermissions {
   pages: Record<SidebarPage, Role[]>;
@@ -31,22 +29,23 @@ interface RolePermissions {
 
 export const ROLE_PERMISSIONS: RolePermissions = {
   pages: {
-    dashboard: ['trader', 'risk', 'researcher', 'ds'],
-    history: ['trader', 'risk', 'researcher', 'ds'],
+    dashboard: ['researcher', 'ds'],
+    history: ['researcher', 'ds'],
     signals: ['researcher', 'ds'],
     'data-monitor': ['ds'],
     'model-monitor': ['ds'],
     training: ['ds'],
-    settings: ['trader', 'risk', 'researcher', 'ds'],
+    settings: ['researcher', 'ds'],
   },
   dashTabs: {
-    overview: ['trader', 'risk', 'researcher', 'ds'],
-    eia: ['trader', 'risk', 'researcher', 'ds'],
-    regime: ['trader', 'risk', 'researcher', 'ds'],
-    returns: ['trader', 'risk', 'researcher', 'ds'],
-    charts: ['trader', 'risk', 'researcher', 'ds'],
+    overview: ['researcher', 'ds'],
+    eia: ['researcher', 'ds'],
+    regime: ['researcher', 'ds'],
+    charts: ['researcher', 'ds'],
   },
-  dimmedDashTabs: ['eia', 'regime', 'returns'],
+  // Was for the trader/risk roles, which had no use for the modelling tabs.
+  // Both roles are gone with the returns forecast, so nothing is dimmed.
+  dimmedDashTabs: [],
   // Adopting/snoozing signals is reversible research work; removing pool
   // features can break the daily pipeline until retrain, so it stays DS-only.
   // Enforced server-side too (backend/api/dependencies.py) - these flags

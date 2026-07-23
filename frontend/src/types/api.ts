@@ -24,28 +24,7 @@ export interface DailyReport {
    */
   regime_available: boolean;
 
-  trader?: {
-    signal: 'LONG' | 'SHORT' | 'FLAT';
-    kelly_position: number | null;
-    stop_loss_price: number;
-    stop_loss_pct: number;
-    expected_return: number;
-    price_5d_history: number[];
-    price_5d_high: number;
-    price_5d_low: number;
-    brent_wti_spread: number;
-    cot_net_percentile: number;
-    ovx: number;
-  };
 
-  risk?: {
-    var_95: number;
-    cvar_95: number | null;
-    current_exposure_mbbls: number;
-    hedge_ratio: number | null;
-    recommended_hedge_ratio: number | null;
-    r3_historical_max_drawdown: number;
-  };
 
   eia: {
     forecast_mb: number;
@@ -119,36 +98,11 @@ export interface DailyReport {
     shap_status: 'ok' | 'baseline' | 'no_model' | 'unavailable';
   };
 
-  returns: {
-    buckets: {
-      label: string;
-      pct: number;
-      color: 'danger' | 'warning' | 'success' | 'accent';
-    }[];
-    expected_return: number;
-    median_return: number;
-    var_95: number;
-    skewness: number;
-    price_range_low: number;
-    price_range_high: number;
-    downside_prob: number;
-    tail_prob: number;
-    upside_prob: number;
-    /**
-     * True when the figure came from an unbounded outer bucket rather than a
-     * located quantile - the value is that bucket's representative midpoint.
-     * With a typical distribution both the 10th and 90th percentiles land
-     * outside, so the "80% range" is a constant +/-15%; it must be labelled as
-     * bucket-limited, not shown as a resolved interval.
-     */
-    var_95_bucket_limited: boolean;
-    price_range_bucket_limited: boolean;
-  };
 }
 
 export interface ModelStatus {
   models: {
-    type: 'regime' | 'eia' | 'returns';
+    type: 'regime' | 'eia';
     version: string;
     // Nullable: deployed_at/mlflow_run_id are unset for never-deployed
     // versions, metrics.primary when the training run didn't record the
@@ -159,7 +113,7 @@ export interface ModelStatus {
     /**
      * False for 'regime', which describes the current market state rather than
      * forecasting anything with an observable outcome - so it carries no score
-     * and must not be rendered alongside eia/returns as if it did. See
+     * and must not be rendered alongside eia as if it did. See
      * core/models/metrics.py::PRIMARY_METRIC_KEY.
      */
     is_forecast: boolean;
@@ -197,7 +151,7 @@ export interface ModelStatus {
        */
       skill: number | null;
     };
-    /** Which metric `primary` holds - 'mae' for eia, 'brier' for returns. */
+    /** Which metric `primary` holds - 'mae' for the eia model. */
     metric_key: string | null;
     /** Whether this version cleared the deployment gate. False here with the
      *  model still live means it was promoted by hand through deploy_service. */
