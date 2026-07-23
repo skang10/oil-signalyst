@@ -32,7 +32,7 @@ export default function HistoryPage() {
             <span className="text-text-muted w-[68px] shrink-0 text-[11px]">{formatShortDate(p.date)}</span>
             <TagBadge kind="red">{p.regime_dominant}</TagBadge>
             <span className="flex-1 text-text-secondary">
-              Expected {(p.expected_return * 100).toFixed(1)}% · Downside {Math.round(p.downside_prob * 100)}%
+              WTI {p.wti_price == null ? '—' : `$${p.wti_price.toFixed(2)}`}
             </span>
             <span className={`text-[11px] ${(p.eia_forecast_mb ?? 0) < 0 ? 'text-text-muted' : 'text-success'}`}>
               EIA {p.eia_forecast_mb == null ? '—' : `${p.eia_forecast_mb > 0 ? '+' : ''}${p.eia_forecast_mb.toFixed(1)} MB`}
@@ -55,14 +55,6 @@ export default function HistoryPage() {
             <div className="text-[11px] text-text-muted">EIA Directional Acc.</div>
             <div className="text-[20px] font-medium mt-[2px]">
               {Math.round((history?.rolling_accuracy.eia_directional_acc ?? 0) * 100)}%
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] text-text-muted">Return Dist. Brier</div>
-            {/* Same ?? guard as the tile above - without it this rendered
-                blank while SWR was still loading. */}
-            <div className="text-[20px] font-medium mt-[2px]">
-              {(history?.rolling_accuracy.returns_brier ?? 0).toFixed(2)}
             </div>
           </div>
         </div>

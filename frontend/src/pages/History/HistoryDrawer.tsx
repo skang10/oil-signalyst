@@ -98,15 +98,6 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
                       </TagBadge>
                     }
                   />
-                  <CfgRow label="Signal" value={<span className="text-text-muted">{detail.summary.signal}</span>} />
-                  <CfgRow
-                    label="Expected Return (20d)"
-                    value={<span className="text-danger">{(detail.summary.expected_return * 100).toFixed(1)}%</span>}
-                  />
-                  <CfgRow
-                    label="Downside Risk"
-                    value={<span className="text-danger">{Math.round(detail.summary.downside_prob * 100)}%</span>}
-                  />
                   <CfgRow
                     label="EIA Forecast"
                     value={
@@ -115,7 +106,6 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
                       </span>
                     }
                   />
-                  <CfgRow label="Risk Recommendations" value={detail.summary.risk_recommendation} />
                 </div>
               )}
 
@@ -160,18 +150,6 @@ export default function HistoryDrawer({ date, onClose }: { date: string | null; 
                       ) : (
                         <span className={detail.outcome.eia_actual_mb < 0 ? 'text-danger' : 'text-success'}>
                           {detail.outcome.eia_actual_mb.toFixed(1)} MB
-                        </span>
-                      )
-                    }
-                  />
-                  <CfgRow
-                    label="Actual Return"
-                    value={
-                      detail.outcome.actual_return === null ? (
-                        <span className="text-[11px] text-text-muted">Window closes in 28 days</span>
-                      ) : (
-                        <span className={detail.outcome.actual_return < 0 ? 'text-danger' : 'text-success'}>
-                          {(detail.outcome.actual_return * 100).toFixed(1)}%
                         </span>
                       )
                     }

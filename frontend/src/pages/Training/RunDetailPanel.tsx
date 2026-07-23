@@ -7,7 +7,7 @@ import CrossValidateCard from './CrossValidateCard';
 import type { TrainJobSummary } from '@/types/api';
 
 // Keys are `${model_type}_${metric}` (see backend trainer's result payload).
-// Every trained metric today (eia_mae, returns_brier) improves downward; the
+// The one trained metric today (eia_mae) improves downward; the
 // _accuracy branch is kept so a higher-is-better metric added later is not
 // silently coloured backwards.
 function isImprovement(key: string, oldValue: number, newValue: number): boolean {

@@ -246,7 +246,7 @@ export interface TrainJob {
   result?: {
     // Metric values are null when they have no backing: old_metrics on the
     // first-ever training of a model type (no prior active version),
-    // improvement_pct whenever "returns" isn't among the trained types.
+    // improvement_pct when there is no prior version to compare against.
     // A failed job's result carries only `error`.
     old_metrics?: Record<string, number | null>;
     new_metrics?: Record<string, number | null>;
@@ -331,12 +331,8 @@ export interface HistoryPrediction {
   date: string;
   wti_price: number | null;
   regime_dominant: 'R1' | 'R2' | 'R3' | 'R4';
-  signal: 'LONG' | 'SHORT' | 'FLAT';
-  expected_return: number;
-  downside_prob: number;
   // Null when the stored prediction has no EIA forecast component.
   eia_forecast_mb: number | null;
-  actual_return: number | null;
 }
 
 export interface HistoryResponse {
@@ -346,7 +342,6 @@ export interface HistoryResponse {
   // dates, which measures agreement with a constant, not accuracy.
   rolling_accuracy: {
     eia_directional_acc: number;
-    returns_brier: number;
   };
 }
 
@@ -355,11 +350,7 @@ export interface HistoryDetail {
   wti_price: number | null;
   model_version: string | null;
   summary: {
-    signal: 'LONG' | 'SHORT' | 'FLAT';
-    expected_return: number;
-    downside_prob: number;
     eia_forecast_mb: number | null;
-    risk_recommendation: string;
   };
   regime: {
     /** Empty when regime_available is false. */
@@ -377,7 +368,6 @@ export interface HistoryDetail {
   features: { name: string; widthPct: number; value: number }[];
   outcome: {
     eia_actual_mb: number | null;
-    actual_return: number | null;
   };
 }
 

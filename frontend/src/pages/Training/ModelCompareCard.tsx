@@ -4,12 +4,11 @@ import { useDeployModel } from '@/hooks/useTraining';
 import type { TrainJob } from '@/types/api';
 
 export const METRIC_LABEL: Record<string, string> = {
-  returns_brier: 'Return Dist. Brier',
   eia_mae: 'EIA MAE',
 };
 
 // old_metrics values are null on the first-ever training of a model type
-// (no prior active version), improvement_pct when "returns" wasn't trained -
+// (no prior active version) -
 // see types/api.ts's TrainJob.result.
 function fmtMetric(value: number | null | undefined, digits: number): string {
   return value == null ? '—' : value.toFixed(digits);

@@ -3,14 +3,12 @@ import Card from '@/components/shared/Card';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { TrainParams } from '@/types/api';
 
-// 'regime' is deliberately absent - it describes the current market state
-// rather than forecasting an observable outcome, so there is nothing to train
-// it against and the backend rejects it (api/routes/training.py). It now
-// serves from a frozen artifact. These two forecast against real outcomes:
-// the inventory change EIA later publishes, and the realized 20-day return.
+// EIA inventory change is the only trainable target. 'regime' describes the
+// current market state rather than forecasting an observable outcome, so there
+// is nothing to score it against and the backend rejects it; the 20-day return
+// forecast was removed after it failed to beat climatology.
 const MODEL_OPTIONS: { type: string; label: string }[] = [
   { type: 'eia', label: 'EIA Forecast' },
-  { type: 'returns', label: 'Return Dist.' },
 ];
 
 export default function TrainConfigCard({
@@ -22,9 +20,6 @@ export default function TrainConfigCard({
   onCrossValidate: (params: TrainParams) => void;
   isPending: boolean;
 }) {
-  // Both trainable models selected by default - the two are independent now
-  // that returns no longer conditions on regime, so the common case is
-  // retraining the whole forecast set together.
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(MODEL_OPTIONS.map((o) => o.type))
   );

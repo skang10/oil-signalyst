@@ -5,7 +5,6 @@ import type { CrossValidateModel, TrainJob } from '@/types/api';
 
 const MODEL_LABEL: Record<string, string> = {
   eia: 'EIA Inventory',
-  returns: '20-Day Return',
 };
 
 function fmt(v: number | null, digits: number): string {
