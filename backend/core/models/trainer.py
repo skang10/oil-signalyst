@@ -261,6 +261,65 @@ async def run_full_training(
     return results
 
 
+async def ensure_baseline_models(
+    model_types: list[str] | None = None,
+    on_progress: Callable[[str], Awaitable[None]] | None = None,
+) -> list[str]:
+    """Give every trainable type a serving model when it has none at all.
+
+    The floor in _ensure_baseline_floor only applies after a training run - it
+    reacts to a gate failure. This is the cold-start half: on an empty database
+    nothing has ever been trained, so nothing reacts, and the pipeline used to
+    just log "no active models" and produce nothing until someone trained by
+    hand. A baseline needs no fitting - it is the training labels' base rates -
+    so there is no reason to make the operator wait for a TabPFN run before the
+    system can serve.
+
+    Only fills genuine gaps: a type with any active version, baseline or
+    trained, is left untouched. Returns the types it installed.
+
+    Note this covers the trainable types only. 'regime' has no baseline because
+    it has no observable outcome to take base rates over - it is a state
+    descriptor, not a forecast (see core/models/regime.py).
+    """
+    selected = [t for t in TRAINABLE_MODEL_TYPES if t in (model_types or TRAINABLE_MODEL_TYPES)]
+
+    missing = []
+    async with get_db() as db:
+        for model_type in selected:
+            rows = await db.execute(
+                select(ModelVersion).where(
+                    ModelVersion.model_type == model_type, ModelVersion.is_active.is_(True)
+                )
+            )
+            if rows.scalars().first() is None:
+                missing.append(model_type)
+
+    if not missing:
+        return []
+
+    if on_progress:
+        await on_progress(f"No model serving {', '.join(missing)} - installing baselines.")
+
+    test_end = str(datetime.now(UTC).date())
+    matrices, _, labels = await asyncio.to_thread(_prepare_training_data, test_end)
+    installed = []
+    for model_type in missing:
+        train_y, test_y = labels[model_type]
+        x_train, y_train = _align(matrices["train"], train_y)
+        _, y_test = _align(matrices["test"], test_y)
+        await _ensure_baseline_floor(
+            model_type=model_type,
+            version=datetime.now(UTC).strftime("%Y.%m.%d.%H%M%S"),
+            train_y=y_train,
+            test_y=y_test,
+            feature_list=list(x_train.columns),
+            on_progress=on_progress,
+        )
+        installed.append(model_type)
+    return installed
+
+
 async def _ensure_baseline_floor(
     model_type: str,
     version: str,
@@ -321,10 +380,16 @@ async def _ensure_baseline_floor(
         activate=True,
     )
     if on_progress:
+        # Only the returns distribution feeds position sizing, so only that
+        # baseline suppresses it (decision_engine.generate_decision).
+        suffix = (
+            " Position sizing, hedging, CVaR and Kelly are suppressed while it is live."
+            if model_type == "returns"
+            else ""
+        )
         await on_progress(
             f"{model_type}: no model beats the baseline, so the baseline is now serving "
-            f"({metric_key} {metrics[metric_key]}). Position sizing is suppressed while "
-            "it is live."
+            f"({metric_key} {metrics[metric_key]})." + suffix
         )
 
 

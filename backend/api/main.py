@@ -44,7 +44,26 @@ async def lifespan(app: FastAPI):
     from core.postprocess.data_monitor import write_freshness_snapshot
 
     freshness_task = asyncio.create_task(asyncio.to_thread(write_freshness_snapshot))
+
+    # Fire-and-forget as well: on an empty model table, install the constant
+    # baselines so the app serves a forecast (the training base rates, clearly
+    # labelled as such) instead of an empty state that only a manual training
+    # run can clear. No fitting involved, but it does read the feature Parquet
+    # and the label sources, so it stays off the startup path. A failure here
+    # is logged and ignored - it must not stop the API from coming up.
+    from core.models.trainer import ensure_baseline_models
+
+    async def _bootstrap_baselines() -> None:
+        try:
+            installed = await ensure_baseline_models()
+            if installed:
+                logger.info("Installed baseline models", extra={"model_types": installed})
+        except Exception as exc:
+            logger.warning("Baseline bootstrap failed", extra={"error": str(exc)})
+
+    baseline_task = asyncio.create_task(_bootstrap_baselines())
     yield
+    baseline_task.cancel()
     prewarm_task.cancel()
     freshness_task.cancel()
     logger.info("Shutting down oil-signalyst API")

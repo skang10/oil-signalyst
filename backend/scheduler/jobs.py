@@ -14,7 +14,11 @@ from core.models.eia import predict_eia
 from core.models.feature_prep import to_model_matrix
 from core.models.model_registry import ModelRegistry
 from core.models.regime import predict_regime
-from core.models.trainer import TRAINABLE_MODEL_TYPES, run_full_training_with_log
+from core.models.trainer import (
+    TRAINABLE_MODEL_TYPES,
+    ensure_baseline_models,
+    run_full_training_with_log,
+)
 from core.models.baseline_model import is_baseline_artifact
 from core.models.returns import predict_returns
 from core.postprocess.decision_engine import generate_decision
@@ -244,6 +248,19 @@ async def _ensure_prediction(
         existing = await get_prediction_by_date(db, target_date)
         if existing:
             return
+
+    # Cold start: with an empty model table there is nothing to predict with and
+    # nothing that would react - the gate-driven floor only fires after a
+    # training run. Baselines need no fitting, so install them rather than
+    # sitting idle until someone trains by hand.
+    try:
+        installed = await ensure_baseline_models()
+        if installed:
+            logger.info("Installed baseline models", extra={"model_types": installed})
+    except Exception as exc:
+        # Never fail the day's pipeline over the bootstrap - the get_active
+        # below still reports the real problem if models are genuinely absent.
+        logger.warning("Baseline bootstrap failed", extra={"error": str(exc)})
 
     try:
         regime_artifact = await ModelRegistry.get_active("regime")
