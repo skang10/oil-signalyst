@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 
 const MODES: { key: RetrainMode; label: string }[] = [
   { key: 'auto', label: 'Auto — retrain when ≥2 degradation signals fire' },
-  { key: 'psi', label: 'Trigger on PSI threshold breach' },
   { key: 'sunday', label: 'Auto every Sunday' },
   { key: 'manual', label: 'Manual only' },
 ];
@@ -43,8 +42,9 @@ export default function AutoTriggerCard() {
         ))}
       </div>
       <div className="mt-2 text-[11px] text-text-muted">
-        Checked after each daily pipeline run · PSI mode uses your alert threshold ({userConfig.alert_psi_threshold}) ·
-        Auto retrains only when at least two of {'{'}PSI drift, rolling directional accuracy below 50%, Page-Hinkley loss alarm{'}'} fire together
+        Checked after each daily pipeline run · Auto retrains only when at least two of{' '}
+        {'{'}rolling directional accuracy below 50%, Page-Hinkley loss alarm, joint feature drift{'}'} fire together.
+        PSI is shown for context only and never triggers a retrain.
       </div>
     </Card>
   );

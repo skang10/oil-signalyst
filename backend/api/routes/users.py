@@ -20,7 +20,7 @@ class UserConfigUpdate(BaseModel):
     alert_eia_threshold: float | None = None
     alert_psi_threshold: float | None = None
     alert_channel: str | None = None
-    retrain_mode: Literal["manual", "psi", "sunday", "auto"] | None = None
+    retrain_mode: Literal["manual", "sunday", "auto"] | None = None
 
 
 @router.get("/me")

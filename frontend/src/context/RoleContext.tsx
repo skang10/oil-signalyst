@@ -3,7 +3,7 @@ import type { Role } from '@/types/roles';
 import { api } from '@/lib/api';
 import { useAuth } from './AuthContext';
 
-export type RetrainMode = 'manual' | 'psi' | 'sunday' | 'auto';
+export type RetrainMode = 'manual' | 'sunday' | 'auto';
 
 /**
  * Field names deliberately mirror the backend's User columns /

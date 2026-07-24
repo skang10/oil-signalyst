@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import desc, select, text
+from sqlalchemy import select, text
 
 from core.config_paths import FEATURES_DIR
 from core.data.registry import DataRegistry
@@ -21,11 +21,7 @@ from core.models.trainer import (
 )
 from core.models.baseline_model import is_baseline_artifact
 from core.postprocess.data_monitor import write_freshness_snapshot
-from core.postprocess.drift_monitor import (
-    PSI_RETRAIN_THRESHOLD,
-    compute_and_store_psi,
-    compute_current_psi,
-)
+from core.postprocess.drift_monitor import adversarial_drift_auc, compute_and_store_psi
 from core.postprocess.performance_monitor import (
     DIRECTION_FLOOR,
     backfill_prediction_outcomes,
@@ -119,14 +115,20 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
 
 async def _maybe_auto_retrain(target_date: date) -> None:
     """Honors the Training page's auto-trigger mode (users.retrain_mode):
-    'psi' retrains when the day's max feature PSI breaches the user's alert
-    threshold, 'sunday' retrains on Sundays, 'auto' retrains only when at least
-    two independent degradation signals fire together (PSI drift, a rolling
-    directional hit-rate below chance, or a Page-Hinkley alarm on the residual
-    loss) - so a lone calm-window PSI blip cannot force a retrain, and a stable
-    input distribution hiding a P(y|X) shift still gets caught, 'manual'
-    (default) never does. Creates a real TrainJob row so the run shows up in the
-    Training page's
+    'sunday' retrains on Sundays, 'auto' retrains only when at least two
+    independent degradation signals fire together - a rolling directional
+    hit-rate below chance, a Page-Hinkley alarm on the residual loss, or joint
+    (multi-feature) drift - so no single noisy signal can force a retrain, and a
+    P(y|X) shift under a stable input distribution still gets caught, 'manual'
+    (default) never does.
+
+    Deliberately does NOT trigger on PSI: per-feature PSI is a weak, easily
+    misfiring signal for this market (it flags a calm slice of a multi-regime
+    reference, and misses relationship shifts entirely), so it is kept for
+    display only and never drives a retrain. Joint drift (adversarial
+    validation) is the drift signal used here instead.
+
+    Creates a real TrainJob row so the run shows up in the Training page's
     status/log endpoints exactly like a manually started job. Deploy stays
     manual either way - auto-retrain only produces the old-vs-new comparison.
     Failures are logged, never propagated - a broken retrain must not mark
@@ -135,31 +137,14 @@ async def _maybe_auto_retrain(target_date: date) -> None:
         async with get_db() as db:
             user = await get_or_create_default_user(db)
             mode = user.retrain_mode or "manual"
-            psi_threshold = user.alert_psi_threshold or PSI_RETRAIN_THRESHOLD
             user_id = user.id
 
-        if mode == "psi":
-            async with get_db() as db:
-                row = await db.execute(
-                    select(FeatureSnapshot).order_by(desc(FeatureSnapshot.date)).limit(1)
-                )
-                snapshot = row.scalar_one_or_none()
-            psi_scores = snapshot.psi_scores if snapshot else None
-            max_psi = max(psi_scores.values()) if psi_scores else None
-            if max_psi is None or max_psi <= psi_threshold:
-                return
-            trigger = f"PSI breach ({round(max_psi, 3)} > {psi_threshold})"
-        elif mode == "sunday":
+        if mode == "sunday":
             if target_date.weekday() != 6:
                 return
             trigger = "Sunday schedule"
         elif mode == "auto":
             signals = []
-
-            psi_scores = await asyncio.to_thread(compute_current_psi)
-            max_psi = max(psi_scores.values()) if psi_scores else None
-            if max_psi is not None and max_psi > psi_threshold:
-                signals.append(f"PSI {round(max_psi, 3)} > {psi_threshold}")
 
             async with get_db() as db:
                 perf = await rolling_performance(db)
@@ -169,6 +154,10 @@ async def _maybe_auto_retrain(target_date: date) -> None:
             ph = perf.get("page_hinkley") or {}
             if ph.get("alarm"):
                 signals.append(f"Page-Hinkley {ph.get('stat')}")
+
+            joint = await asyncio.to_thread(adversarial_drift_auc)
+            if joint.get("alert"):
+                signals.append(f"joint drift AUC {joint.get('auc')}")
 
             # Two-of-three: any single signal on its own is too noisy to justify
             # burning a training run on.

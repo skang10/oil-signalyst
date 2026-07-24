@@ -62,14 +62,16 @@ export function beatsBaseline(m: Model): boolean | null {
 /**
  * Whether a model should read as healthy on the status cards.
  *
- * Drift was the only thing these cards reacted to, so a model losing to its own
- * baseline - which can be deployed by override through deploy_service - showed
- * the same green check as one that was working. Losing to the baseline is the
- * more fundamental failure of the two: drift says the inputs moved, this says
- * the model never beat guessing.
+ * Two things drive this: the model beating its train-time baseline at all (a
+ * model that loses to guessing can still be promoted by override through
+ * deploy_service), and the live out-of-sample signals for the forecast model
+ * (see livePerformanceUnhealthy). PSI drift is deliberately NOT one of them -
+ * per-feature PSI is too weak and noisy a signal for this market to gate health
+ * on, so it is shown for context but never turns a model amber. Joint drift
+ * (adversarial validation), which PSI cannot see, is what feeds health instead.
  */
 export function isUnhealthy(m: Model, liveUnhealthy = false): boolean {
-  return m.psi_alert || beatsBaseline(m) === false || (m.is_forecast && liveUnhealthy);
+  return beatsBaseline(m) === false || (m.is_forecast && liveUnhealthy);
 }
 
 /**
@@ -125,9 +127,8 @@ export function metricText(m: Model): string {
   const head = baseline ? `${primaryText(m)} / ${baseline}` : primaryText(m);
   // Named rather than left to colour alone - "below baseline" is the whole
   // finding, and it should survive a screenshot or a colourblind reader.
-  const notes = [
-    beatsBaseline(m) === false ? 'below baseline' : null,
-    m.psi_alert ? 'drift' : null,
-  ].filter(Boolean);
+  // PSI is shown as a number for context but is not a health note - it does not
+  // gate health (see isUnhealthy), so it must not read as a warning here either.
+  const notes = [beatsBaseline(m) === false ? 'below baseline' : null].filter(Boolean);
   return notes.length ? `${head} · ${psi} — ${notes.join(', ')}` : `${head} · ${psi}`;
 }
