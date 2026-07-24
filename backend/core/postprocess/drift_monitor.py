@@ -16,6 +16,12 @@ PSI_RECENT_SNAPSHOTS = 90
 PSI_RETRAIN_THRESHOLD = 0.20
 PSI_MIN_ACTUAL_SAMPLES = 2 * PSI_BINS
 
+# Adversarial-validation cutoff. A classifier that can separate the training
+# window from recent production at AUC >= this is seeing a joint feature shift
+# that per-feature PSI can miss (a change in how features move *together*).
+# 0.5 = indistinguishable; 1.0 = trivially separable.
+ADVERSARIAL_AUC_ALERT = 0.75
+
 
 # Percentile clip for the bin edges. The reference spans 2012-2023, which
 # includes the 2020 negative-oil-price period where pct_change-based features
@@ -112,6 +118,68 @@ def compute_current_psi() -> dict[str, float]:
         return compute_psi_scores(reference_df, recent_df)
     except Exception as exc:
         logger.warning("PSI computation failed", extra={"error": str(exc)})
+        return {}
+
+
+def adversarial_drift_auc() -> dict:
+    """Joint feature drift via adversarial validation.
+
+    PSI checks each feature's marginal distribution one at a time, so it is
+    blind to a change in the *relationship* between features - the correlation
+    structure can shift while every marginal looks unchanged. Here a classifier
+    is asked to tell training-window rows (label 0) from recent-production rows
+    (label 1): if it cannot (AUC ~ 0.5), the joint distribution is stable; if it
+    can (high AUC), something moved that PSI would not report.
+
+    Cross-validated by calendar-month blocks (GroupKFold) rather than a random
+    shuffle, so a row's autocorrelated neighbour cannot sit in train while it is
+    scored in test and inflate the AUC. HistGradientBoosting is used because it
+    handles the feature matrix's NaNs natively - no imputation that would itself
+    look like drift. Fails soft: returns {} rather than raising into a caller.
+    """
+    try:
+        import numpy as _np
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        from sklearn.metrics import roc_auc_score
+        from sklearn.model_selection import GroupKFold
+        from sklearn.utils.class_weight import compute_sample_weight
+
+        feature_names = [f["name"] for f in FeatureEngine().features]
+        reference_df = load_features(TRAIN_START, TRAIN_END)[feature_names]
+        matrix = load_features(VAL_START, str(date.today()))
+        recent_df = matrix[feature_names].tail(PSI_RECENT_SNAPSHOTS)
+        if len(recent_df) < 20 or len(reference_df) < 20:
+            return {}
+
+        combined = pd.concat([reference_df, recent_df])
+        y = _np.r_[_np.zeros(len(reference_df)), _np.ones(len(recent_df))]
+        groups = combined.index.to_period("M").astype(str).to_numpy()
+        x = combined.to_numpy(dtype=float)
+
+        n_pos_groups = len(set(groups[len(reference_df):]))
+        n_splits = max(2, min(5, n_pos_groups))
+        if len(set(groups)) < n_splits:
+            return {}
+
+        aucs = []
+        for train_idx, test_idx in GroupKFold(n_splits=n_splits).split(x, y, groups):
+            if len(set(y[test_idx])) < 2 or len(set(y[train_idx])) < 2:
+                continue
+            clf = HistGradientBoostingClassifier(max_depth=3, max_iter=100, random_state=0)
+            clf.fit(
+                x[train_idx],
+                y[train_idx],
+                sample_weight=compute_sample_weight("balanced", y[train_idx]),
+            )
+            proba = clf.predict_proba(x[test_idx])[:, 1]
+            aucs.append(roc_auc_score(y[test_idx], proba))
+
+        if not aucs:
+            return {}
+        auc = round(float(_np.mean(aucs)), 4)
+        return {"auc": auc, "alert": auc >= ADVERSARIAL_AUC_ALERT, "n_folds": len(aucs)}
+    except Exception as exc:
+        logger.warning("Adversarial drift computation failed", extra={"error": str(exc)})
         return {}
 
 

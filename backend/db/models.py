@@ -55,6 +55,13 @@ class Prediction(Base):
     eia_forecast = Column(JSON)
     shap_values = Column(JSON)
     decision = Column(JSON)
+    # The realized EIA crude-inventory change (million barrels) this prediction
+    # is scored against, written by performance_monitor.backfill_prediction_outcomes
+    # once the next weekly print has landed. The column name is a leftover from
+    # the removed returns model (migration 0002 added actual_return + outcome_correct);
+    # reused here rather than adding a new migration - it holds the realized change,
+    # not a return.
+    actual_return = Column(Float, nullable=True)
     outcome_correct = Column(Boolean, nullable=True)
     model_version_id = Column(Integer, ForeignKey("model_versions.id"), nullable=True)
     feature_snapshot_id = Column(Integer, ForeignKey("feature_snapshots.id"), nullable=True)

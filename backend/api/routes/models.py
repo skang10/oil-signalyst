@@ -12,7 +12,12 @@ from core.postprocess.data_monitor import (
     training_dataset_summary,
 )
 from core.models.metrics import PRIMARY_METRIC_KEY, deployment_gate_criteria, skill_score
-from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_current_psi
+from core.postprocess.drift_monitor import (
+    PSI_RETRAIN_THRESHOLD,
+    adversarial_drift_auc,
+    compute_current_psi,
+)
+from core.postprocess.performance_monitor import rolling_performance
 from core.services.deploy_service import do_deploy
 from db.models import ModelVersion
 
@@ -115,9 +120,15 @@ async def get_model_status(db: DbSession, user: CurrentUser) -> dict:
     models_out = [_model_entry(version) for version in versions]
 
     live_status = await asyncio.to_thread(data_source_status)
+    # Rolling out-of-sample performance scored against realized EIA prints, and
+    # joint (multi-feature) drift - the two signals PSI alone cannot provide.
+    live_performance = await rolling_performance(db)
+    joint_drift = await asyncio.to_thread(adversarial_drift_auc)
     return {
         "models": models_out,
         "data_sources": live_status,
+        "live_performance": live_performance,
+        "joint_drift": joint_drift,
         "model_input_freshness": await asyncio.to_thread(model_input_freshness, live_status),
         "feature_coverage_7d": feature_coverage_7d(),
         # Parquet reads - off the event loop, same as the fetchers above.

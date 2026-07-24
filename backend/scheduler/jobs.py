@@ -21,7 +21,16 @@ from core.models.trainer import (
 )
 from core.models.baseline_model import is_baseline_artifact
 from core.postprocess.data_monitor import write_freshness_snapshot
-from core.postprocess.drift_monitor import PSI_RETRAIN_THRESHOLD, compute_and_store_psi
+from core.postprocess.drift_monitor import (
+    PSI_RETRAIN_THRESHOLD,
+    compute_and_store_psi,
+    compute_current_psi,
+)
+from core.postprocess.performance_monitor import (
+    DIRECTION_FLOOR,
+    backfill_prediction_outcomes,
+    rolling_performance,
+)
 from core.postprocess.shap_explainer import explain_prediction
 from core.postprocess.signal_charts import refresh_signal_charts
 from db.crud import get_feature_snapshot_by_date, get_or_create_default_user, get_prediction_by_date
@@ -71,6 +80,10 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
             snapshot_id,
             registry,
         )
+        # Score any past predictions whose next-week EIA print has now landed, so
+        # the rolling-performance signals the auto retrain trigger reads below are
+        # current. Fail-soft inside; never blocks the pipeline.
+        await backfill_prediction_outcomes(registry)
         await _maybe_auto_retrain(target_date)
         # New market data landed - rebuild the Evaluate-page chart cache in
         # the background so tomorrow's first page views stay instant.
@@ -107,8 +120,13 @@ async def run_daily_pipeline(target_date: date | None = None) -> None:
 async def _maybe_auto_retrain(target_date: date) -> None:
     """Honors the Training page's auto-trigger mode (users.retrain_mode):
     'psi' retrains when the day's max feature PSI breaches the user's alert
-    threshold, 'sunday' retrains on Sundays, 'manual' (default) never does.
-    Creates a real TrainJob row so the run shows up in the Training page's
+    threshold, 'sunday' retrains on Sundays, 'auto' retrains only when at least
+    two independent degradation signals fire together (PSI drift, a rolling
+    directional hit-rate below chance, or a Page-Hinkley alarm on the residual
+    loss) - so a lone calm-window PSI blip cannot force a retrain, and a stable
+    input distribution hiding a P(y|X) shift still gets caught, 'manual'
+    (default) never does. Creates a real TrainJob row so the run shows up in the
+    Training page's
     status/log endpoints exactly like a manually started job. Deploy stays
     manual either way - auto-retrain only produces the old-vs-new comparison.
     Failures are logged, never propagated - a broken retrain must not mark
@@ -135,6 +153,28 @@ async def _maybe_auto_retrain(target_date: date) -> None:
             if target_date.weekday() != 6:
                 return
             trigger = "Sunday schedule"
+        elif mode == "auto":
+            signals = []
+
+            psi_scores = await asyncio.to_thread(compute_current_psi)
+            max_psi = max(psi_scores.values()) if psi_scores else None
+            if max_psi is not None and max_psi > psi_threshold:
+                signals.append(f"PSI {round(max_psi, 3)} > {psi_threshold}")
+
+            async with get_db() as db:
+                perf = await rolling_performance(db)
+            dir_acc = perf.get("directional_acc")
+            if dir_acc is not None and dir_acc < DIRECTION_FLOOR:
+                signals.append(f"directional {dir_acc} < {DIRECTION_FLOOR}")
+            ph = perf.get("page_hinkley") or {}
+            if ph.get("alarm"):
+                signals.append(f"Page-Hinkley {ph.get('stat')}")
+
+            # Two-of-three: any single signal on its own is too noisy to justify
+            # burning a training run on.
+            if len(signals) < 2:
+                return
+            trigger = "auto (" + "; ".join(signals) + ")"
         else:
             return
 
