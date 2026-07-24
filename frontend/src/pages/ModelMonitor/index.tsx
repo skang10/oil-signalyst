@@ -26,8 +26,12 @@ export default function ModelMonitorPage() {
     );
   if (!modelStatus) return <div className="p-[18px] text-text-muted text-[12px]">Loading...</div>;
 
-  const shapDrivers = report?.regime.shap_drivers ?? [];
-  const maxShap = Math.max(...shapDrivers.map((d) => Math.abs(d.contribution)), 1e-9);
+  // EIA, not regime: EIA is the only deployed forecast model, so it is the only
+  // one with feature attribution. This card read report.regime.shap_drivers,
+  // which is empty because no regime model is deployed - so it showed nothing
+  // while the EIA drivers sat computed and unused.
+  const shapDrivers = report?.eia.shap_drivers ?? [];
+  const maxShap = Math.max(...shapDrivers.map((d) => Math.abs(d.contribution_share)), 1e-9);
 
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
@@ -109,21 +113,23 @@ export default function ModelMonitorPage() {
         </Card>
 
         <Card>
-          <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">Feature Importance (SHAP)</div>
+          <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
+            Feature Importance (SHAP) — EIA Model
+          </div>
           {shapDrivers.length > 0 ? (
             shapDrivers.map((d) => (
               <SHAPBar
                 key={d.name}
                 name={d.name}
-                widthPct={(Math.abs(d.contribution) / maxShap) * 80}
-                displayValue={d.contribution.toFixed(2)}
+                widthPct={(Math.abs(d.contribution_share) / maxShap) * 80}
+                displayValue={`${(d.contribution_share * 100).toFixed(1)}%`}
                 color="accent"
               />
             ))
           ) : (
             <div className="text-[11px] text-text-muted">
               {report ? (
-                <NoDriversNotice status={report.regime.shap_status} />
+                <NoDriversNotice status={report.eia.shap_status} />
               ) : (
                 'No prediction yet — run the daily pipeline to populate feature importances.'
               )}
