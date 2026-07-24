@@ -26,7 +26,7 @@ export default function ResearcherView({
   const regime = report.regime;
   const regimeAvailable = report.regime_available;
   const eia = report.eia;
-  const maxAbs = Math.max(...regime.shap_drivers.map((d) => Math.abs(d.contribution)));
+  const maxShap = Math.max(...eia.shap_drivers.map((d) => Math.abs(d.contribution_share)), 1e-9);
 
   const regimeItems: RegimeGridItem[] = REGIME_IDS
     .map((id) => ({
@@ -47,19 +47,20 @@ export default function ResearcherView({
 
       <div className="grid grid-cols-2 gap-[10px] mb-3">
         <Card>
+          {/* EIA, not regime: regime is a frozen state descriptor with no model
+              to attribute, so this card only ever showed the empty notice. The
+              EIA model is the only one with feature importance. */}
           <div className="text-[11px] text-text-muted uppercase tracking-[0.5px] font-medium mb-[10px]">
-            SHAP Feature Importance (Regime)
+            SHAP Feature Importance (EIA)
           </div>
-          <NoDriversNotice status={regime.shap_status} />
-          {regime.shap_drivers.map((d) => (
+          <NoDriversNotice status={eia.shap_status} />
+          {eia.shap_drivers.map((d) => (
             <SHAPBar
               key={d.name}
               name={d.name}
-              widthPct={(Math.abs(d.contribution) / maxAbs) * 80}
-              displayValue={d.contribution.toFixed(2)}
-              color={d.direction === 'bullish' ? 'success' : 'danger'}
-              valueColor={d.direction === 'bullish' ? 'success' : 'danger'}
-              tag={<TagBadge kind={d.direction === 'bullish' ? 'green' : 'red'}>{d.direction === 'bullish' ? 'Bullish' : 'Bearish'}</TagBadge>}
+              widthPct={(Math.abs(d.contribution_share) / maxShap) * 80}
+              displayValue={`${(d.contribution_share * 100).toFixed(1)}%`}
+              color="accent"
             />
           ))}
         </Card>
