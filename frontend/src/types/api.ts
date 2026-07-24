@@ -176,6 +176,37 @@ export interface ModelStatus {
     last_updated: string;
   }[];
   /**
+   * Rolling out-of-sample performance of the EIA forecast, scored against the
+   * inventory change EIA later published (backend performance_monitor). Answers
+   * the question the frozen train-time metrics cannot: is the *deployed* model
+   * still right? Computed over weekly-distinct prints, not raw daily rows.
+   * `page_hinkley.alarm` flags a sustained rise in residual loss.
+   */
+  live_performance: {
+    n_prints: number;
+    rolling_mae: number | null;
+    directional_acc: number | null;
+    /** |realized−forecast| − |realized−consensus|. Negative = the model beats
+     *  the market consensus. Null when no consensus was recorded. */
+    model_vs_consensus: number | null;
+    series: {
+      date: string;
+      forecast: number;
+      realized: number;
+      consensus: number | null;
+      abs_error: number;
+      hit: boolean;
+    }[];
+    page_hinkley: { alarm: boolean; stat: number };
+  };
+  /**
+   * Joint (multi-feature) drift via adversarial validation - a classifier's
+   * cross-validated AUC separating the training window from recent production.
+   * 0.5 = indistinguishable; high = the features moved *together* in a way
+   * per-feature PSI cannot see. `{}` when it could not be computed.
+   */
+  joint_drift: { auc?: number; alert?: boolean; n_folds?: number };
+  /**
    * Freshness of the persisted feature Parquet matrix the models actually
    * train/score on, vs the live feeds. Answers "is the model's input current
    * and consistent with training" (data_sources above answers "are the feeds

@@ -68,8 +68,27 @@ export function beatsBaseline(m: Model): boolean | null {
  * more fundamental failure of the two: drift says the inputs moved, this says
  * the model never beat guessing.
  */
-export function isUnhealthy(m: Model): boolean {
-  return m.psi_alert || beatsBaseline(m) === false;
+export function isUnhealthy(m: Model, liveUnhealthy = false): boolean {
+  return m.psi_alert || beatsBaseline(m) === false || (m.is_forecast && liveUnhealthy);
+}
+
+/**
+ * Model-failure signals that live outside the per-model card - rolling
+ * out-of-sample performance and joint drift. These describe the deployed EIA
+ * forecast, so a caller ORs the result into isUnhealthy for the forecast model.
+ *
+ * Drift said "the inputs moved"; baseline said "never beat guessing at train
+ * time". This is the third and most direct failure: the live model has stopped
+ * getting the sign right, its loss is climbing, or the feature set has jointly
+ * shifted under it - none of which the frozen train-time metric can see.
+ */
+export function livePerformanceUnhealthy(status: ModelStatus): boolean {
+  const lp = status.live_performance;
+  const jd = status.joint_drift;
+  const dropped = lp?.directional_acc != null && lp.directional_acc < 0.5;
+  const phAlarm = Boolean(lp?.page_hinkley?.alarm);
+  const jointAlert = Boolean(jd?.alert);
+  return dropped || phAlarm || jointAlert;
 }
 
 /**

@@ -5,10 +5,19 @@ import PageHeader from '@/components/shared/PageHeader';
 import Card from '@/components/shared/Card';
 import SHAPBar from '@/components/shared/SHAPBar';
 import ScoreComparisonCard from './ScoreComparisonCard';
+import LivePerformanceCard from './LivePerformanceCard';
 import NoDriversNotice from '@/components/shared/NoDriversNotice';
 import { cn } from '@/lib/utils';
 import { IconCircleCheck, IconAlertTriangle } from '@tabler/icons-react';
-import { MODEL_KIND, MODEL_LABEL, fmt, isUnhealthy, metricText, recentText } from '@/lib/model-metrics';
+import {
+  MODEL_KIND,
+  MODEL_LABEL,
+  fmt,
+  isUnhealthy,
+  livePerformanceUnhealthy,
+  metricText,
+  recentText,
+} from '@/lib/model-metrics';
 
 export default function ModelMonitorPage() {
   const { role } = useRole();
@@ -33,20 +42,25 @@ export default function ModelMonitorPage() {
   const shapDrivers = report?.eia.shap_drivers ?? [];
   const maxShap = Math.max(...shapDrivers.map((d) => Math.abs(d.contribution_share)), 1e-9);
 
+  // Live model-failure signals (rolling performance decay, loss-trend alarm,
+  // joint drift) - ORed into the forecast model's health so a decaying live
+  // model reads amber even when its frozen train-time score still looks fine.
+  const liveUnhealthy = livePerformanceUnhealthy(modelStatus);
+
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
-      <PageHeader title="Model Monitor" sub="PSI Drift · Score vs Baseline · Feature Importance" />
+      <PageHeader title="Model Monitor" sub="Live Performance · PSI Drift · Score vs Baseline · Feature Importance" />
 
       <div className="grid grid-cols-3 gap-[10px] mb-3">
         {modelStatus.models.map((m) => (
           <div
             key={m.type}
-            className={cn('p-[12px_14px] rounded-default border', isUnhealthy(m) ? 'bg-warning-bg border-warning-border' : 'bg-surface-1 border-border')}
+            className={cn('p-[12px_14px] rounded-default border', isUnhealthy(m, liveUnhealthy) ? 'bg-warning-bg border-warning-border' : 'bg-surface-1 border-border')}
           >
             <div className="text-[10px] text-text-muted uppercase tracking-[0.5px] mb-[5px]">{MODEL_LABEL[m.type]}</div>
             <div className="text-[13px] font-medium">{m.version}</div>
-            <div className={cn('text-[11px] mt-[3px] flex items-center gap-1', isUnhealthy(m) ? 'text-warning' : 'text-success')}>
-              {isUnhealthy(m) ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
+            <div className={cn('text-[11px] mt-[3px] flex items-center gap-1', isUnhealthy(m, liveUnhealthy) ? 'text-warning' : 'text-success')}>
+              {isUnhealthy(m, liveUnhealthy) ? <IconAlertTriangle size={12} stroke={1.75} /> : <IconCircleCheck size={12} stroke={1.75} />}
               {metricText(m)}
             </div>
             {recentText(m) && (
@@ -63,6 +77,8 @@ export default function ModelMonitorPage() {
       </div>
 
       <ScoreComparisonCard models={modelStatus.models} />
+
+      <LivePerformanceCard status={modelStatus} />
 
       {/* Read-only: what a freshly trained model must clear to auto-deploy.
           Rules come from the backend (deployment_gate_criteria) so the panel
