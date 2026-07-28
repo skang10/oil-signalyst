@@ -119,14 +119,7 @@ export default function ComparePage() {
   return (
     <WorkbenchPage
       title="Compare"
-      lead={
-        <>
-          Only experiments under the <b className="text-text-primary font-semibold">same model</b> can duel —
-          different targets carry different metrics. Here that model is <b className="text-text-primary font-semibold">EIA</b>{' '}
-          (MAE, lower is better). Return Distribution is retired and regime has no score, so both appear only
-          as reference.
-        </>
-      }
+      lead="EIA-only duel (MAE, lower is better) — a candidate run against the live pointer. Regime shows as a reference row."
     >
       {/* Window selector */}
       <div className="flex items-center gap-[7px] flex-wrap mb-3">
@@ -146,10 +139,9 @@ export default function ComparePage() {
         ))}
       </div>
 
-      <div className="text-[11px] text-warning bg-warning-bg border border-warning-border rounded-default px-[11px] py-[8px] mb-3 leading-[1.5]">
-        {WINDOW_CAPTION[w]} True re-scoring of every experiment on one identical fold set isn’t exposed
-        server-side yet (TODO(api)) — each version below is on its own window, which is why skill is the
-        column to read across.
+      <div className="text-[11px] text-text-muted mb-3 leading-[1.5]">
+        {WINDOW_CAPTION[w]} Read <b className="text-text-secondary">skill</b> across rows, not raw MAE —
+        each version is on its own window. Re-scoring on one fold set: TODO(api).
       </div>
 
       {!live && <Card>No live EIA model to compare.</Card>}

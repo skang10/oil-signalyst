@@ -65,13 +65,7 @@ export default function EvaluatePage() {
   return (
     <WorkbenchPage
       title="Evaluate"
-      lead={
-        <>
-          Absolute diagnostics for one experiment — the live <b className="text-text-primary font-semibold">EIA</b>{' '}
-          forecast against what EIA actually published. This is the single-model view (how right is it,
-          on its own terms); head-to-head ranking lives in <b className="text-text-primary font-semibold">Compare</b>.
-        </>
-      }
+      lead="How right is the live EIA forecast on its own terms — against what EIA actually published. Head-to-head ranking is in Compare."
     >
       {/* Always-available diagnostics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] mb-4">
@@ -89,15 +83,14 @@ export default function EvaluatePage() {
       {!hasLive && (
         <Card accentTop="warning" className="mb-4">
           <div className="text-[12px] text-text-secondary leading-[1.6]">
-            <b className="text-text-primary">No scored live predictions yet.</b> The forecast-vs-actual,
-            residual and segment diagnostics below fill in once the daily pipeline has run and forecast
-            horizons have elapsed, so past predictions can be scored against the realized EIA print. The
-            train-time figures above are the frozen out-of-sample read in the meantime.
+            <b className="text-text-primary">No scored live predictions yet.</b> The diagnostics below fill
+            in once the pipeline has scored past predictions against realized EIA prints; the train-time
+            figures above stand in.
             {eia?.metrics.recent?.primary != null && (
               <>
                 {' '}Trailing-6mo rescore: <span className="font-mono">{fmt(eia.metrics.recent.primary, 2)} mb</span>
                 {eia.metrics.recent.baseline != null && <> vs baseline {fmt(eia.metrics.recent.baseline, 2)}</>} ·
-                n≈{eia.metrics.recent.effective_n ?? '—'} independent.
+                n≈{eia.metrics.recent.effective_n ?? '—'}.
               </>
             )}
           </div>
@@ -169,12 +162,11 @@ export default function EvaluatePage() {
           Interval coverage
         </h3>
         <div className="text-[12px] text-text-secondary leading-[1.6]">
-          The live forecast carries an 80% band
+          Live 80% band
           {report?.eia.interval_80_low != null && report?.eia.interval_80_high != null ? (
-            <> (currently <span className="font-mono">{report.eia.interval_80_low.toFixed(1)} … {report.eia.interval_80_high.toFixed(1)} mb</span>)</>
+            <>: <span className="font-mono">{report.eia.interval_80_low.toFixed(1)} … {report.eia.interval_80_high.toFixed(1)} mb</span></>
           ) : null}
-          , but per-print realized coverage (how often the actual fell inside the band) isn’t recorded
-          historically yet. <span className="text-text-muted">TODO(api): persist band-vs-realized per print to chart empirical coverage.</span>
+          . Empirical coverage per print isn’t recorded yet — <span className="text-text-muted">TODO(api)</span>.
         </div>
       </Card>
 

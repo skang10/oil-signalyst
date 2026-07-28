@@ -39,7 +39,7 @@ export default function LiveDetail({
             ) : (
               <>first version ever deployed for this type · </>
             )}
-            <span className="text-[#7C879E]">forks/children aren’t tracked server-side — TODO(api).</span>
+            <span className="text-[#7C879E]">lineage: TODO(api).</span>
           </>
         }
         decision={

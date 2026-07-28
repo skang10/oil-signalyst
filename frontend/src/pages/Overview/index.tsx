@@ -10,11 +10,13 @@ import {
 } from 'recharts';
 import WorkbenchPage, { SectionLabel, WorkbenchFooter } from '@/components/workbench/WorkbenchPage';
 import Card from '@/components/shared/Card';
+import LivePerformanceCard from '@/pages/ModelMonitor/LivePerformanceCard';
 import { useReport } from '@/hooks/useReport';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import { useRole } from '@/context/RoleContext';
 import { fmt, fmtSkill, skillOf, pillClass, RETIRED_RETURNS_NOTE } from '@/lib/workbench';
 import { cn } from '@/lib/utils';
+import type { ModelStatus } from '@/types/api';
 
 const FORECAST_COLOR = '#185FA5';
 const REALIZED_COLOR = '#3B6D11';
@@ -55,17 +57,8 @@ export default function OverviewPage() {
 
   return (
     <WorkbenchPage
-      title="One model live, one decision to make"
-      lead={
-        <>
-          The Workbench is organized around <b className="text-text-primary font-semibold">experiments</b>, not
-          runs — each pins a config and freezes its walk-forward score. Today exactly one model is
-          trainable and live: <b className="text-text-primary font-semibold">EIA Forecast</b>.{' '}
-          <b className="text-text-primary font-semibold">Regime</b> is a frozen reference (no observable
-          outcome to score), and the old <b className="text-text-primary font-semibold">Return Distribution</b>{' '}
-          model is retired.
-        </>
-      }
+      title="EIA Forecast · workbench"
+      lead="One trainable model — the weekly EIA crude-inventory forecast. Regime is a frozen reference; Return Distribution is retired."
     >
       {/* Next release — the live EIA forecast about to be published */}
       <Card className="!p-0 overflow-hidden mb-[14px]">
@@ -123,20 +116,17 @@ export default function OverviewPage() {
         </div>
       </Card>
 
-      {/* What you actually decide here */}
-      <Card className="mt-[14px]">
-        <h3 className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted mb-[6px]">
-          What you actually decide here
-        </h3>
-        <p className="text-[13px] text-text-secondary leading-[1.65] m-0">
-          There is exactly one human gate today:{' '}
-          <b className="text-text-primary">Promote to production</b> — deploy a trained run's model so
-          the daily pipeline serves it. Everything else — the weekly rolling refresh — is automation
-          that only refreshes the live model in place, never puts a new config live. A second{' '}
-          <span className="font-mono text-[12px]">idle → shadow</span> gate and an exclusive shadow
-          slot are part of the target lifecycle but aren't tracked server-side yet.
-        </p>
-      </Card>
+      {/* Health — the daily "is everything OK" check, folded in from the old
+          Data Monitor + Model Monitor. */}
+      <SectionLabel note="is the live model still trustworthy, and are its inputs current">health</SectionLabel>
+      {status && <DataHealthCard status={status} />}
+      {status && <div className="mt-[14px]"><LivePerformanceCard status={status} /></div>}
+
+      {/* One-line reminder of the single decision this surface owns. */}
+      <div className="mt-[14px] text-[12px] text-text-secondary">
+        One human gate: <b className="text-text-primary">promote a trained run to production</b>. The
+        weekly rolling refresh only updates the live model in place — it never puts a new config live.
+      </div>
 
       {/* Real forecast-vs-actual, last N scored prints */}
       {series.length > 1 && (
@@ -202,6 +192,60 @@ export default function OverviewPage() {
 
       <WorkbenchFooter />
     </WorkbenchPage>
+  );
+}
+
+/** Input-side health, folded in from the old Data Monitor: is the feature
+ *  matrix the model scores on current, and are the upstream feeds alive. */
+function DataHealthCard({ status }: { status: ModelStatus }) {
+  const f = status.model_input_freshness;
+  const sources = status.data_sources ?? [];
+  const ok = sources.filter((s) => s.status === 'ok').length;
+  const delayed = sources.filter((s) => s.status === 'delayed').length;
+  const error = sources.filter((s) => s.status === 'error').length;
+  const cov = status.feature_coverage_7d;
+
+  return (
+    <Card accentTop={f.pipeline_behind || error > 0 ? 'warning' : undefined}>
+      <div className="flex items-baseline justify-between mb-[10px]">
+        <h3 className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">
+          Data health — model inputs
+        </h3>
+        {f.pipeline_behind && (
+          <span className="text-[10.5px] font-mono px-[7px] py-[1px] rounded-[5px] bg-warning-bg text-warning">
+            pipeline behind
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px]">
+        <HStat label="Matrix as-of" value={f.matrix_as_of ? f.matrix_as_of.slice(0, 10) : '—'} tone={f.pipeline_behind ? 'bad' : undefined} />
+        <HStat label="Pipeline lag" value={f.pipeline_lag_days == null ? '—' : `${f.pipeline_lag_days}d`} tone={f.pipeline_behind ? 'bad' : undefined} />
+        <HStat
+          label="Feeds"
+          value={`${ok} ok${delayed ? ` · ${delayed} late` : ''}${error ? ` · ${error} err` : ''}`}
+          tone={error > 0 ? 'bad' : delayed > 0 ? 'warn' : 'good'}
+        />
+        <HStat label="7-day coverage" value={cov == null ? '—' : `${(cov * 100).toFixed(0)}%`} />
+      </div>
+    </Card>
+  );
+}
+
+function HStat({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' | 'warn' }) {
+  return (
+    <div>
+      <div
+        className={cn(
+          'text-[15px] font-medium tabular-nums',
+          tone === 'good' && 'text-success',
+          tone === 'bad' && 'text-danger',
+          tone === 'warn' && 'text-warning'
+        )}
+      >
+        {value}
+      </div>
+      <div className="text-[11px] text-text-muted mt-[2px]">{label}</div>
+    </div>
   );
 }
 

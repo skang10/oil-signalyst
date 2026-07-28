@@ -53,9 +53,7 @@ export default function RunDetail({
             {result?.versions?.eia ? (
               <>produced <b className="text-[#C6CCDA]">eia · {result.versions.eia}</b>. </>
             ) : null}
-            <span className="text-[#7C879E]">
-              Fork lineage (parent / children) isn’t tracked server-side yet — TODO(api).
-            </span>
+            <span className="text-[#7C879E]">lineage: TODO(api).</span>
           </>
         }
         decision={job ? <DeployDecision job={job} deployState={summary.deploy_state} blocked={verdict === false} onDeployed={() => mutate()} /> : undefined}

@@ -25,14 +25,7 @@ export default function PublishPage() {
   return (
     <WorkbenchPage
       title="Publish"
-      lead={
-        <>
-          The daily prediction the platform serves to every role. Publishing itself is driven by the{' '}
-          <b className="text-text-primary font-semibold">daily scheduler</b> (ingest → inference → publish),
-          not a manual button — this surface is where you review what’s about to go out and the trail of what
-          already has.
-        </>
-      }
+      lead="Review the prediction the platform serves, and the trail of past releases. Publishing runs on the daily scheduler, not a manual button."
     >
       {/* Next release */}
       <Card className="!p-0 overflow-hidden mb-4">
@@ -64,8 +57,7 @@ export default function PublishPage() {
             Publish now
           </button>
           <span className="text-[11px] text-text-muted font-mono leading-[1.5] flex-1 min-w-[220px]">
-            Scheduler-driven — the pipeline publishes on its cron (default Tue 22:00 UTC). TODO(api): a
-            manual publish / hold control isn’t exposed yet.
+            Scheduler-driven (cron, default Tue 22:00 UTC). Manual publish/hold: TODO(api).
           </span>
         </div>
       </Card>
