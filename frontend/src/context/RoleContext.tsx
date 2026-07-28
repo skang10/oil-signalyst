@@ -36,6 +36,13 @@ export const DEFAULT_CONFIG: UserConfig = {
 
 interface RoleContextValue {
   role: Role;
+  /**
+   * The user's real JWT-derived role, independent of the ds-only "view as"
+   * preview override. Route guards for the DS Workbench gate on THIS, so a ds
+   * user previewing another role's dashboards isn't bounced out of the
+   * workbench they're actually authorised for.
+   */
+  authenticatedRole: Role;
   setRole: (r: Role) => void;
   userConfig: UserConfig;
   setUserConfig: (c: UserConfig) => void;
@@ -93,7 +100,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <RoleContext.Provider value={{ role, setRole, userConfig, setUserConfig }}>
+    <RoleContext.Provider value={{ role, authenticatedRole, setRole, userConfig, setUserConfig }}>
       {children}
     </RoleContext.Provider>
   );

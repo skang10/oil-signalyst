@@ -3,9 +3,11 @@ import {
   IconLayoutDashboard,
   IconChartLine,
   IconRadar,
-  IconDatabase,
-  IconActivity,
-  IconPlayerPlay,
+  IconGauge,
+  IconFlask,
+  IconTargetArrow,
+  IconGitCompare,
+  IconSend,
   IconSettings,
   IconLogout,
 } from '@tabler/icons-react';
@@ -24,14 +26,16 @@ function initials(name: string): string {
 }
 
 interface NavItem {
-  page: SidebarPage;
+  page: string;
   to: string;
   label: string;
   icon: typeof IconLayoutDashboard;
   badge?: { text: string; kind: 'warn' | 'danger' };
 }
 
-const MAIN_NAV: NavItem[] = [
+// The original product navigation — restored untouched. These are role-gated the
+// same way they always were (researcher + ds), independent of the DS Workbench.
+const MAIN_NAV: (NavItem & { page: SidebarPage })[] = [
   { page: 'dashboard', to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
   { page: 'history', to: '/history', label: 'History', icon: IconChartLine },
   {
@@ -43,16 +47,23 @@ const MAIN_NAV: NavItem[] = [
   },
 ];
 
-const DS_NAV: NavItem[] = [
-  { page: 'data-monitor', to: '/data-monitor', label: 'Data Monitor', icon: IconDatabase },
+// The DS Workbench group, reorganized as the Stockcast top-tab flow. This is the
+// ONLY group that was refactored — it replaces the old Data Monitor / Model
+// Monitor / Training Control items with the model lifecycle: overview →
+// sandboxes → evaluate → compare → publish. The old operational pages stay
+// reachable by URL (/data-monitor, /model-monitor, /training).
+const WORKBENCH_NAV: NavItem[] = [
+  { page: 'overview', to: '/workbench', label: 'Overview', icon: IconGauge },
   {
-    page: 'model-monitor',
-    to: '/model-monitor',
-    label: 'Model Monitor',
-    icon: IconActivity,
-    badge: { text: '!', kind: 'danger' },
+    page: 'sandboxes',
+    to: '/sandboxes',
+    label: 'Training sandboxes',
+    icon: IconFlask,
+    badge: { text: '1', kind: 'warn' }, // waiting on your decision
   },
-  { page: 'training', to: '/training', label: 'Training Control', icon: IconPlayerPlay },
+  { page: 'evaluate', to: '/evaluate', label: 'Evaluate', icon: IconTargetArrow },
+  { page: 'compare', to: '/compare', label: 'Compare', icon: IconGitCompare },
+  { page: 'publish', to: '/publish', label: 'Publish', icon: IconSend },
 ];
 
 function NavRow({ item }: { item: NavItem }) {
@@ -86,12 +97,25 @@ function NavRow({ item }: { item: NavItem }) {
   );
 }
 
+function GroupLabel({ children }: { children: string }) {
+  return (
+    <div className="text-[10px] text-text-muted tracking-[0.7px] uppercase px-[14px] pt-3 pb-1 font-medium">
+      {children}
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const { user, logout } = useAuth();
-  const { role } = useRole();
-  const visibleMain = MAIN_NAV.filter((item) => ROLE_PERMISSIONS.pages[item.page].includes(role));
-  const showDsGroup = ROLE_PERMISSIONS.pages['data-monitor'].includes(role);
+  const { role, authenticatedRole } = useRole();
   const name = user?.name ?? '';
+
+  const visibleMain = MAIN_NAV.filter((item) => ROLE_PERMISSIONS.pages[item.page].includes(role));
+  // The DS Workbench is gated on the real authenticated role (not the ds-only
+  // "view as" preview), so a ds user previewing another role's dashboards still
+  // sees — and can reach — the workbench they're authorised for. Matches
+  // WorkbenchGuard in App.tsx.
+  const showWorkbench = authenticatedRole === 'ds';
 
   return (
     <div className="w-[192px] shrink-0 bg-surface-2 border-r border-border flex flex-col">
@@ -100,25 +124,21 @@ export default function Sidebar() {
         <div className="text-[11px] text-text-muted mt-[1px] font-mono">v0.1 · local</div>
       </div>
       <div className="flex-1 overflow-y-auto pt-1">
-        <div className="text-[10px] text-text-muted tracking-[0.7px] uppercase px-[14px] pt-3 pb-1 font-medium">
-          Navigation
-        </div>
+        <GroupLabel>Navigation</GroupLabel>
         {visibleMain.map((item) => (
           <NavRow key={item.page} item={item} />
         ))}
-        {showDsGroup && (
+
+        {showWorkbench && (
           <>
-            <div className="text-[10px] text-text-muted tracking-[0.7px] uppercase px-[14px] pt-[10px] pb-1 font-medium">
-              DS Workbench
-            </div>
-            {DS_NAV.map((item) => (
+            <GroupLabel>DS Workbench</GroupLabel>
+            {WORKBENCH_NAV.map((item) => (
               <NavRow key={item.page} item={item} />
             ))}
           </>
         )}
-        <div className="text-[10px] text-text-muted tracking-[0.7px] uppercase px-[14px] pt-3 pb-1 font-medium">
-          System
-        </div>
+
+        <GroupLabel>System</GroupLabel>
         <NavRow item={{ page: 'settings', to: '/settings', label: 'Settings', icon: IconSettings }} />
       </div>
       <div className="mt-auto p-[10px_6px] border-t border-border">

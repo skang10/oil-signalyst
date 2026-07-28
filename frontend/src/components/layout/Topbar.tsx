@@ -16,6 +16,13 @@ import LiveTick from '@/components/shared/LiveTick';
 import { cn, formatUsd } from '@/lib/utils';
 
 const PAGE_TITLES: { prefix: string; title: string }[] = [
+  // DS Workbench (Stockcast flow).
+  { prefix: '/workbench', title: 'DS Workbench · Overview' },
+  { prefix: '/sandboxes', title: 'Training sandboxes' },
+  { prefix: '/evaluate', title: 'Evaluate' },
+  { prefix: '/compare', title: 'Compare' },
+  { prefix: '/publish', title: 'Publish' },
+  // Original product pages.
   { prefix: '/history', title: 'History' },
   { prefix: '/signals', title: 'Signals' },
   { prefix: '/data-monitor', title: 'Data Monitor' },
