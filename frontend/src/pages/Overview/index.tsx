@@ -1,39 +1,29 @@
 import { Link } from 'react-router-dom';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import WorkbenchPage, { SectionLabel, WorkbenchFooter } from '@/components/workbench/WorkbenchPage';
+import WorkbenchPage from '@/components/workbench/WorkbenchPage';
 import Card from '@/components/shared/Card';
-import LivePerformanceCard from '@/pages/ModelMonitor/LivePerformanceCard';
 import { useReport } from '@/hooks/useReport';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import { useRole } from '@/context/RoleContext';
-import { fmt, fmtSkill, skillOf, pillClass, RETIRED_RETURNS_NOTE } from '@/lib/workbench';
 import { cn } from '@/lib/utils';
-import type { ModelStatus } from '@/types/api';
 
-const FORECAST_COLOR = '#185FA5';
-const REALIZED_COLOR = '#3B6D11';
-
-function Pill({ kind, children }: { kind: Parameters<typeof pillClass>[0]; children: React.ReactNode }) {
-  return (
-    <span
-      className={cn(
-        'inline-block font-mono text-[10.5px] uppercase tracking-[0.04em] rounded-[5px] px-[7px] py-[2px] font-medium',
-        pillClass(kind)
-      )}
-    >
-      {children}
-    </span>
-  );
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function shortDate(d: string): string {
+  const [, m, day] = d.split('-');
+  return `${MON[Number(m) - 1] ?? '?'} ${Number(day)}`;
 }
 
+/**
+ * Overview — a faithful reproduction of the Stockcast "Overview" tab
+ * (stockcast-sandbox.html), wired to this repo's real data. Exactly three
+ * blocks, nothing else:
+ *   1. the forecast hero (.fcast) — the number about to publish, with a
+ *      build↔draw range bar placing our forecast against consensus;
+ *   2. the provenance foot (.fc-foot) — which production sandbox it came from;
+ *   3. "Last 5 releases" — forecast-vs-actual paired bars around a zero line,
+ *      direction misses highlighted.
+ * Input-side health and live-model diagnostics live on the standalone Data
+ * Monitor / Model Monitor pages, not here — Overview is the at-a-glance surface.
+ */
 export default function OverviewPage() {
   const { role } = useRole();
   const { data: report } = useReport(role);
@@ -45,26 +35,43 @@ export default function OverviewPage() {
   const forecast = report?.eia.forecast_mb ?? null;
   const consensus = report?.eia.consensus_mb ?? null;
   const direction = forecast == null ? '' : forecast < 0 ? 'crude draw' : 'crude build';
-  const skill = skillOf(eia?.metrics.primary ?? null, eia?.metrics.baseline ?? null);
+  const version = eia?.version ?? '—';
 
-  // Real forecast-vs-actual history: the deployed model rescored against the
-  // inventory change EIA later published (backend performance_monitor).
-  const series = (lp?.series ?? []).map((r) => ({
-    date: r.date.slice(5),
-    forecast: r.forecast,
-    realized: r.realized,
-  }));
+  // Build (+) sits left, draw (−) right, 0 in the centre. Domain expands to hold
+  // whichever of the two points is largest so both dots stay on the bar.
+  const domain = Math.max(4, Math.abs(forecast ?? 0), Math.abs(consensus ?? 0)) * 1.25;
+  const pos = (v: number) => Math.min(96, Math.max(4, 50 - (v / domain) * 50));
+
+  // The interpretive line: do we and consensus agree on direction, and by how much.
+  let interp: { k: string; v: string } | null = null;
+  if (forecast != null && consensus != null) {
+    const sameSign = forecast < 0 === consensus < 0;
+    if (sameSign) {
+      const dir = forecast < 0 ? 'draw' : 'build';
+      const diff = Math.abs(forecast - consensus);
+      const bigger = Math.abs(forecast) > Math.abs(consensus);
+      const word = forecast < 0 ? (bigger ? 'deeper' : 'shallower') : bigger ? 'bigger' : 'smaller';
+      interp =
+        diff < 0.05
+          ? { k: `both call a ${dir}`, v: 'in line with consensus' }
+          : { k: `both call a ${dir}`, v: `we see it ${diff.toFixed(1)} ${word}` };
+    } else {
+      interp = {
+        k: 'we disagree on direction',
+        v: `we ${forecast < 0 ? 'draw' : 'build'}, cons ${consensus < 0 ? 'draw' : 'build'}`,
+      };
+    }
+  }
+
+  const prints = (lp?.series ?? []).slice(-5);
 
   return (
-    <WorkbenchPage
-      title="EIA Forecast · workbench"
-      lead="One trainable model — the weekly EIA crude-inventory forecast. Regime is a frozen reference; Return Distribution is retired."
-    >
-      {/* Next release — the live EIA forecast about to be published */}
+    <WorkbenchPage title="Overview">
+      {/* 1 · forecast hero */}
       <Card className="!p-0 overflow-hidden mb-[14px]">
         <div className="flex flex-wrap">
           <div className="flex-1 min-w-[230px] p-[22px_26px] bg-[var(--text-primary)] text-[#EDEFF4]">
-            <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#8792AB]">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7C879E]">
               next EIA release · from the daily pipeline
             </div>
             <div className="font-mono text-[44px] font-semibold tracking-[-0.03em] leading-[1.05] mt-[6px] text-[#F0C878]">
@@ -73,187 +80,172 @@ export default function OverviewPage() {
             </div>
             <div className="text-[13px] text-[#C6CCDA] mt-[1px]">{direction || '—'}</div>
           </div>
-          <div className="flex-1 min-w-[240px] p-[22px_26px] border-l border-[rgba(255,255,255,0.08)] bg-[#1B2338] text-[#EDEFF4]">
-            <Row k="our forecast" v={forecast == null ? '—' : `${forecast.toFixed(1)} Mb`} accent />
-            <Row k="consensus" v={consensus == null ? '—' : `${consensus.toFixed(1)} Mb`} />
-            {report?.eia.interval_80_low != null && report?.eia.interval_80_high != null && (
-              <Row
-                k="80% band"
-                v={`${report.eia.interval_80_low.toFixed(1)} … ${report.eia.interval_80_high.toFixed(1)}`}
-                muted
-              />
-            )}
+          <div className="flex-1 min-w-[240px] p-[22px_26px] border-l border-[#2A3550] bg-[#1B2338] text-[#EDEFF4]">
+            {/* range bar — our forecast vs consensus on a build↔draw scale */}
+            <div className="mb-[14px]">
+              <div className="relative h-[6px] bg-[#2A3550] rounded-[3px] mb-[6px]">
+                <span className="absolute left-1/2 top-[-3px] w-px h-[12px] bg-[#4A5678]" />
+                {consensus != null && (
+                  <span
+                    className="absolute top-1/2 w-[11px] h-[11px] rounded-full -translate-x-1/2 -translate-y-1/2 bg-[#8792AB]"
+                    style={{ left: `${pos(consensus)}%` }}
+                  />
+                )}
+                {forecast != null && (
+                  <span
+                    className="absolute top-1/2 w-[11px] h-[11px] rounded-full -translate-x-1/2 -translate-y-1/2 bg-[#F0C878]"
+                    style={{ left: `${pos(forecast)}%` }}
+                  />
+                )}
+              </div>
+              <div className="flex justify-between font-mono text-[8.5px] text-[#5C6784]">
+                <span>build</span>
+                <span>0</span>
+                <span>draw</span>
+              </div>
+            </div>
+            <Row k="our forecast" v={forecast == null ? '—' : `${forecast.toFixed(1)} Mb`} dot="#F0C878" />
+            <Row k="consensus" v={consensus == null ? '—' : `${consensus.toFixed(1)} Mb`} dot="#8792AB" />
+            {interp && <Row k={interp.k} v={interp.v} muted />}
           </div>
         </div>
         <div className="flex items-center gap-[11px] flex-wrap bg-[#141A29] text-[#8792AB] px-[26px] py-[11px] font-mono text-[11px]">
           <span>
-            from <span className="text-[#8FA8F0]">eia · {eia?.version ?? '—'}</span> · production
+            from <span className="text-[#8FA8F0]">eia · {version}</span> · production
           </span>
           <span className="text-[#3D4763]">·</span>
           <span>no challenger in shadow — deploys go straight to production</span>
         </div>
       </Card>
 
-      {/* Live pointer diagnostics */}
+      {/* 2 · last 5 releases */}
       <Card>
-        <h3 className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted mb-[10px]">
-          EIA Forecast · live pointer
-        </h3>
-        <div className="flex items-baseline gap-[10px] flex-wrap">
-          <div className="font-mono text-[26px] font-semibold tracking-[-0.02em]">
-            {fmt(eia?.metrics.primary, 2)}
-          </div>
-          <div className="font-mono text-[12px] text-text-secondary">
-            MAE, mb · baseline train-mean {fmt(eia?.metrics.baseline, 2)} · skill{' '}
-            <span className={cn(skill != null && skill < 0 ? 'text-danger' : 'text-success')}>
-              {fmtSkill(skill)}
-            </span>
-          </div>
+        <div className="flex justify-between items-baseline">
+          <h3 className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">
+            {prints.length ? `Last ${prints.length} releases` : 'Recent releases'}
+          </h3>
+          <Link
+            to="/history"
+            className="font-mono text-[11px] text-accent-text underline underline-offset-2"
+          >
+            {lp?.n_prints ? `all ${lp.n_prints} releases →` : 'all releases →'}
+          </Link>
         </div>
-        <div className="font-mono text-[11px] text-text-muted mt-[8px]">
-          points to <Link className="text-accent-text underline underline-offset-2" to="/sandboxes">eia · {eia?.version ?? '—'}</Link>
-          {eia?.deployed_at ? ` · deployed ${eia.deployed_at.slice(0, 10)}` : ''} · PSI {fmt(eia?.metrics.psi, 2)}
-        </div>
+        {prints.length > 0 ? (
+          <ReleasesChart prints={prints} />
+        ) : (
+          <p className="font-mono text-[12px] text-text-muted mt-[13px]">
+            no scored releases yet — the live model has not been graded against a published print.
+          </p>
+        )}
       </Card>
-
-      {/* Health — the daily "is everything OK" check, folded in from the old
-          Data Monitor + Model Monitor. */}
-      <SectionLabel note="is the live model still trustworthy, and are its inputs current">health</SectionLabel>
-      {status && <DataHealthCard status={status} />}
-      {status && <div className="mt-[14px]"><LivePerformanceCard status={status} /></div>}
-
-      {/* One-line reminder of the single decision this surface owns. */}
-      <div className="mt-[14px] text-[12px] text-text-secondary">
-        One human gate: <b className="text-text-primary">promote a trained run to production</b>. The
-        weekly rolling refresh only updates the live model in place — it never puts a new config live.
-      </div>
-
-      {/* Real forecast-vs-actual, last N scored prints */}
-      {series.length > 1 && (
-        <Card className="mt-[14px]">
-          <div className="flex items-baseline justify-between mb-[10px]">
-            <h3 className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">
-              Recent releases · forecast vs realized
-            </h3>
-            <span className="text-[11px] text-text-muted">last {series.length} weekly prints</span>
-          </div>
-          <div style={{ height: 180 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -14 }}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="2 3" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
-                  interval="preserveStartEnd"
-                  stroke="var(--border)"
-                />
-                <YAxis tick={{ fontSize: 9, fill: 'var(--text-muted)' }} width={40} stroke="var(--border)" />
-                <Tooltip
-                  contentStyle={{
-                    fontSize: 11,
-                    borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-2)',
-                  }}
-                  labelStyle={{ color: 'var(--text-muted)' }}
-                />
-                <Line type="monotone" dataKey="realized" name="Realized" stroke={REALIZED_COLOR} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="forecast" name="Forecast" stroke={FORECAST_COLOR} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      )}
-
-      {/* Frozen reference + retired */}
-      <SectionLabel note="never deployed, never scored — the pass-bars">frozen reference &amp; retired</SectionLabel>
-      <Card className="mb-[9px]" style={{ borderLeft: '4px solid var(--text-pro)', background: 'var(--bg-pro)' }}>
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="font-mono text-[13px] font-semibold">regime · frozen artifact</div>
-            <div className="text-[12px] text-text-secondary mt-[2px]">
-              market-state classifier · no observable outcome to score, so it is not trained or promoted
-            </div>
-          </div>
-          <Pill kind="ref">reference</Pill>
-        </div>
-      </Card>
-      <Card style={{ borderLeft: '4px solid var(--border-strong)', background: 'var(--surface-1)' }}>
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="font-mono text-[13px] font-semibold text-text-secondary">
-              Return Distribution · retired
-            </div>
-            <div className="text-[12px] text-text-muted mt-[2px]">{RETIRED_RETURNS_NOTE}</div>
-          </div>
-          <Pill kind="arch">retired</Pill>
-        </div>
-      </Card>
-
-      <WorkbenchFooter />
     </WorkbenchPage>
   );
 }
 
-/** Input-side health, folded in from the old Data Monitor: is the feature
- *  matrix the model scores on current, and are the upstream feeds alive. */
-function DataHealthCard({ status }: { status: ModelStatus }) {
-  const f = status.model_input_freshness;
-  const sources = status.data_sources ?? [];
-  const ok = sources.filter((s) => s.status === 'ok').length;
-  const delayed = sources.filter((s) => s.status === 'delayed').length;
-  const error = sources.filter((s) => s.status === 'error').length;
-  const cov = status.feature_coverage_7d;
+/** Forecast-vs-actual paired bars around a zero baseline: forecast is the
+ *  outlined bar, the published actual is filled. Above the line = build,
+ *  below = draw. Weeks where the two land on opposite sides (a direction miss,
+ *  `hit === false`) get a red backdrop. */
+function ReleasesChart({
+  prints,
+}: {
+  prints: { date: string; forecast: number; realized: number; hit: boolean }[];
+}) {
+  const n = prints.length;
+  const maxAbs = Math.max(1, ...prints.flatMap((p) => [Math.abs(p.forecast), Math.abs(p.realized)]));
+  const domain = maxAbs * 1.15;
+  const MAXBAR = 68;
+  const BASE = 100;
+  const GROUP = 122;
+  const BARW = 22;
+  const vbW = 84 + (n - 1) * GROUP + 48;
+  const center = (i: number) => 84 + i * GROUP;
+  const h = (v: number) => (Math.abs(v) / domain) * MAXBAR;
+
+  const hits = prints.filter((p) => p.hit).length;
+  const misses = prints.filter((p) => !p.hit);
+  const caption =
+    `${hits} of ${n} direction${n === 1 ? '' : 's'} right` +
+    (misses.length === 0
+      ? ' · every week landed on the right side'
+      : ` · ${misses.map((m) => shortDate(m.date)).join(', ')} landed on opposite sides`);
+
+  const A = 'var(--text-accent)'; // forecast (outline)
+  const B = 'var(--text-primary)'; // actual (filled)
 
   return (
-    <Card accentTop={f.pipeline_behind || error > 0 ? 'warning' : undefined}>
-      <div className="flex items-baseline justify-between mb-[10px]">
-        <h3 className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">
-          Data health — model inputs
-        </h3>
-        {f.pipeline_behind && (
-          <span className="text-[10.5px] font-mono px-[7px] py-[1px] rounded-[5px] bg-warning-bg text-warning">
-            pipeline behind
-          </span>
-        )}
+    <>
+      <div className="flex gap-[15px] flex-wrap font-mono text-[10px] text-text-muted mt-[13px]">
+        <span className="flex items-center gap-[5px]">
+          <i className="inline-block w-[10px] h-[10px] rounded-[2px]" style={{ border: `1.6px solid ${A}` }} />
+          forecast
+        </span>
+        <span className="flex items-center gap-[5px]">
+          <i className="inline-block w-[10px] h-[10px] rounded-[2px]" style={{ background: B }} />
+          actual
+        </span>
+        <span>above the line = build · below = draw</span>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px]">
-        <HStat label="Matrix as-of" value={f.matrix_as_of ? f.matrix_as_of.slice(0, 10) : '—'} tone={f.pipeline_behind ? 'bad' : undefined} />
-        <HStat label="Pipeline lag" value={f.pipeline_lag_days == null ? '—' : `${f.pipeline_lag_days}d`} tone={f.pipeline_behind ? 'bad' : undefined} />
-        <HStat
-          label="Feeds"
-          value={`${ok} ok${delayed ? ` · ${delayed} late` : ''}${error ? ` · ${error} err` : ''}`}
-          tone={error > 0 ? 'bad' : delayed > 0 ? 'warn' : 'good'}
-        />
-        <HStat label="7-day coverage" value={cov == null ? '—' : `${(cov * 100).toFixed(0)}%`} />
-      </div>
-    </Card>
+      <svg viewBox={`0 0 ${vbW} 215`} width="100%" role="img" aria-label="Forecast versus actual, last releases">
+        <line x1={30} y1={BASE} x2={vbW - 24} y2={BASE} stroke="var(--text-primary)" strokeWidth={1.2} />
+        <text x={24} y={BASE + 4} fontSize={10} fill="var(--text-muted)" textAnchor="end">
+          0
+        </text>
+        {prints.map((p, i) => {
+          const c = center(i);
+          const miss = !p.hit;
+          const fh = h(p.forecast);
+          const rh = h(p.realized);
+          const barY = (v: number, bh: number) => (v >= 0 ? BASE - bh : BASE);
+          const lblY = (v: number, bh: number) => (v >= 0 ? BASE - bh - 7 : BASE + bh + 13);
+          return (
+            <g key={p.date}>
+              {miss && <rect x={c - 33} y={20} width={66} height={150} rx={5} fill="var(--bg-danger)" />}
+              {/* forecast — outline */}
+              <rect
+                x={c - 24}
+                y={barY(p.forecast, fh)}
+                width={BARW}
+                height={fh}
+                rx={2}
+                fill="none"
+                stroke={A}
+                strokeWidth={1.6}
+              />
+              <text x={c - 13} y={lblY(p.forecast, fh)} fontSize={9.5} fill={miss ? 'var(--text-danger)' : A} textAnchor="middle">
+                {p.forecast > 0 ? '+' : ''}
+                {p.forecast.toFixed(1)}
+              </text>
+              {/* actual — filled */}
+              <rect x={c + 2} y={barY(p.realized, rh)} width={BARW} height={rh} rx={2} fill={miss ? 'var(--text-danger)' : B} />
+              <text x={c + 13} y={lblY(p.realized, rh)} fontSize={9.5} fill={miss ? 'var(--text-danger)' : B} textAnchor="middle">
+                {p.realized > 0 ? '+' : ''}
+                {p.realized.toFixed(1)}
+              </text>
+              <text x={c} y={192} fontSize={11} fill={miss ? 'var(--text-danger)' : 'var(--text-secondary)'} textAnchor="middle">
+                {shortDate(p.date)}
+                {miss ? ' · miss' : ''}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p className="font-mono text-[11px] text-text-muted mt-[6px]">{caption}</p>
+    </>
   );
 }
 
-function HStat({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' | 'warn' }) {
+function Row({ k, v, dot, muted }: { k: string; v: string; dot?: string; muted?: boolean }) {
   return (
-    <div>
-      <div
-        className={cn(
-          'text-[15px] font-medium tabular-nums',
-          tone === 'good' && 'text-success',
-          tone === 'bad' && 'text-danger',
-          tone === 'warn' && 'text-warning'
-        )}
-      >
-        {value}
-      </div>
-      <div className="text-[11px] text-text-muted mt-[2px]">{label}</div>
-    </div>
-  );
-}
-
-function Row({ k, v, accent, muted }: { k: string; v: string; accent?: boolean; muted?: boolean }) {
-  return (
-    <div className={cn('flex justify-between items-center text-[13px] py-[4px]', muted && 'border-t border-[rgba(255,255,255,0.08)] mt-[5px] pt-[9px]')}>
+    <div
+      className={cn(
+        'flex justify-between items-center text-[12.5px] py-[4px]',
+        muted && 'border-t border-[#2A3550] mt-[5px] pt-[9px]'
+      )}
+    >
       <span className={cn('flex items-center gap-[7px]', muted ? 'text-[#7C879E]' : 'text-[#B4BCCC]')}>
-        {accent && <i className="w-[9px] h-[9px] rounded-full inline-block" style={{ background: '#F0C878' }} />}
+        {dot && <i className="w-[9px] h-[9px] rounded-full inline-block" style={{ background: dot }} />}
         {k}
       </span>
       <span className={cn('font-mono', muted ? 'text-[#7C879E] text-[12px]' : 'text-[#EDEFF4] text-[13px]')}>{v}</span>
