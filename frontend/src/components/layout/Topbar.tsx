@@ -17,7 +17,7 @@ import { cn, formatUsd } from '@/lib/utils';
 
 const PAGE_TITLES: { prefix: string; title: string }[] = [
   // DS Workbench (Stockcast flow).
-  { prefix: '/workbench', title: 'DS Workbench · Overview' },
+  { prefix: '/workbench', title: 'DS Workbench · This week' },
   { prefix: '/sandboxes', title: 'Training sandboxes' },
   { prefix: '/evaluate', title: 'Evaluate' },
   { prefix: '/compare', title: 'Compare' },

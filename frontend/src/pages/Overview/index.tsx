@@ -66,7 +66,7 @@ export default function OverviewPage() {
   const prints = (lp?.series ?? []).slice(-5);
 
   return (
-    <WorkbenchPage title="Overview">
+    <WorkbenchPage title="This week">
       {/* 1 · forecast hero */}
       <Card className="!p-0 overflow-hidden mb-[14px]">
         <div className="flex flex-wrap">

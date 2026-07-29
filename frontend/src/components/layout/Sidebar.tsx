@@ -53,7 +53,7 @@ const MAIN_NAV: (NavItem & { page: SidebarPage })[] = [
 // sandboxes → evaluate → compare → publish. The old operational pages stay
 // reachable by URL (/data-monitor, /model-monitor, /training).
 const WORKBENCH_NAV: NavItem[] = [
-  { page: 'overview', to: '/workbench', label: 'Overview', icon: IconGauge },
+  { page: 'overview', to: '/workbench', label: 'This week', icon: IconGauge },
   {
     page: 'sandboxes',
     to: '/sandboxes',
