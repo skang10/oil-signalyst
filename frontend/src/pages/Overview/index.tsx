@@ -4,7 +4,6 @@ import Card from '@/components/shared/Card';
 import { useReport } from '@/hooks/useReport';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import { useRole } from '@/context/RoleContext';
-import { cn } from '@/lib/utils';
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function shortDate(d: string): string {
@@ -67,53 +66,78 @@ export default function OverviewPage() {
 
   return (
     <WorkbenchPage title="This week">
-      {/* 1 · forecast hero */}
-      <Card className="!p-0 overflow-hidden mb-[14px]">
-        <div className="flex flex-wrap">
-          <div className="flex-1 min-w-[230px] p-[22px_26px] bg-[var(--text-primary)] text-[#EDEFF4]">
-            <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7C879E]">
-              next EIA release · from the daily pipeline
-            </div>
-            <div className="font-mono text-[44px] font-semibold tracking-[-0.03em] leading-[1.05] mt-[6px] text-[#F0C878]">
-              {forecast == null ? '—' : `${forecast > 0 ? '+' : ''}${forecast.toFixed(1)}`}
-              <span className="text-[18px] text-[#B8935A] ml-[6px]">Mb</span>
-            </div>
-            <div className="text-[13px] text-[#C6CCDA] mt-[1px]">{direction || '—'}</div>
-          </div>
-          <div className="flex-1 min-w-[240px] p-[22px_26px] border-l border-[#2A3550] bg-[#1B2338] text-[#EDEFF4]">
-            {/* range bar — our forecast vs consensus on a build↔draw scale */}
-            <div className="mb-[14px]">
-              <div className="relative h-[6px] bg-[#2A3550] rounded-[3px] mb-[6px]">
-                <span className="absolute left-1/2 top-[-3px] w-px h-[12px] bg-[#4A5678]" />
-                {consensus != null && (
-                  <span
-                    className="absolute top-1/2 w-[11px] h-[11px] rounded-full -translate-x-1/2 -translate-y-1/2 bg-[#8792AB]"
-                    style={{ left: `${pos(consensus)}%` }}
-                  />
-                )}
-                {forecast != null && (
-                  <span
-                    className="absolute top-1/2 w-[11px] h-[11px] rounded-full -translate-x-1/2 -translate-y-1/2 bg-[#F0C878]"
-                    style={{ left: `${pos(forecast)}%` }}
-                  />
-                )}
-              </div>
-              <div className="flex justify-between font-mono text-[8.5px] text-[#5C6784]">
-                <span>build</span>
-                <span>0</span>
-                <span>draw</span>
-              </div>
-            </div>
-            <Row k="our forecast" v={forecast == null ? '—' : `${forecast.toFixed(1)} Mb`} dot="#F0C878" />
-            <Row k="consensus" v={consensus == null ? '—' : `${consensus.toFixed(1)} Mb`} dot="#8792AB" />
-            {interp && <Row k={interp.k} v={interp.v} muted />}
-          </div>
+      {/* 1 · this week's forecast — the number, and where it lands between build
+          and draw against the market. The build↔draw axis is the signature. */}
+      <Card className="mb-[14px] p-[20px_22px]">
+        <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-muted">
+          next EIA release · from the daily pipeline
         </div>
-        <div className="flex items-center gap-[11px] flex-wrap bg-[#141A29] text-[#8792AB] px-[26px] py-[11px] font-mono text-[11px]">
+
+        <div className="font-mono text-[46px] font-semibold tracking-[-0.03em] leading-none tabular-nums text-text-primary mt-[9px]">
+          {forecast == null ? '—' : `${forecast > 0 ? '+' : ''}${forecast.toFixed(1)}`}
+          <span className="text-[17px] font-normal text-text-muted ml-[5px]">Mb</span>
+        </div>
+        <div className="text-[12.5px] text-text-secondary mt-[6px]">our forecast{direction ? ` · ${direction}` : ''}</div>
+
+        {forecast != null && (
+          <div className="mt-[24px]">
+            <div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.09em] text-text-muted mb-[12px]">
+              <span>build</span>
+              <span>draw</span>
+            </div>
+            <div className="relative h-[2px] bg-border-strong rounded-full mx-[8px]">
+              {/* zero */}
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-px h-[15px] bg-border-strong" />
+              {/* the gap between the market and us, drawn */}
+              {consensus != null && (
+                <span
+                  className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
+                  style={{
+                    left: `${Math.min(pos(forecast), pos(consensus))}%`,
+                    width: `${Math.abs(pos(forecast) - pos(consensus))}%`,
+                    background: 'var(--border-accent)',
+                  }}
+                />
+              )}
+              {/* consensus — hollow */}
+              {consensus != null && (
+                <span
+                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-[12px] h-[12px] rounded-full bg-surface-2 border-2 border-text-muted"
+                  style={{ left: `${pos(consensus)}%` }}
+                />
+              )}
+              {/* our forecast — filled */}
+              <span
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-[15px] h-[15px] rounded-full border-2 border-surface-2"
+                style={{ left: `${pos(forecast)}%`, background: 'var(--fill-accent)', boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1 mt-[15px] text-[12px]">
+              <span className="flex items-center gap-[6px] text-text-secondary">
+                <i className="w-[11px] h-[11px] rounded-full inline-block" style={{ background: 'var(--fill-accent)' }} />
+                our <b className="font-mono font-semibold text-text-primary">{forecast.toFixed(1)} Mb</b>
+              </span>
+              {consensus != null && (
+                <span className="flex items-center gap-[6px] text-text-secondary">
+                  <i className="w-[11px] h-[11px] rounded-full inline-block bg-surface-2 border-2 border-text-muted" />
+                  consensus <b className="font-mono font-semibold text-text-secondary">{consensus.toFixed(1)} Mb</b>
+                </span>
+              )}
+            </div>
+            {interp && (
+              <div className="text-[12px] text-text-muted mt-[7px]">
+                {interp.k} · {interp.v}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-[18px] pt-[12px] border-t border-border font-mono text-[11px] text-text-muted flex flex-wrap items-center gap-x-[9px] gap-y-1">
           <span>
-            from <span className="text-[#8FA8F0]">eia · {version}</span> · production
+            from <span className="text-accent-text">eia · {version}</span> · production
           </span>
-          <span className="text-[#3D4763]">·</span>
+          <span className="text-border-strong">·</span>
           <span>no challenger in shadow — deploys go straight to production</span>
         </div>
       </Card>
@@ -233,22 +257,5 @@ function ReleasesChart({
       </svg>
       <p className="font-mono text-[11px] text-text-muted mt-[6px]">{caption}</p>
     </>
-  );
-}
-
-function Row({ k, v, dot, muted }: { k: string; v: string; dot?: string; muted?: boolean }) {
-  return (
-    <div
-      className={cn(
-        'flex justify-between items-center text-[12.5px] py-[4px]',
-        muted && 'border-t border-[#2A3550] mt-[5px] pt-[9px]'
-      )}
-    >
-      <span className={cn('flex items-center gap-[7px]', muted ? 'text-[#7C879E]' : 'text-[#B4BCCC]')}>
-        {dot && <i className="w-[9px] h-[9px] rounded-full inline-block" style={{ background: dot }} />}
-        {k}
-      </span>
-      <span className={cn('font-mono', muted ? 'text-[#7C879E] text-[12px]' : 'text-[#EDEFF4] text-[13px]')}>{v}</span>
-    </div>
   );
 }
