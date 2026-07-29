@@ -36,10 +36,11 @@ export default function OverviewPage() {
   const direction = forecast == null ? '' : forecast < 0 ? 'crude draw' : 'crude build';
   const version = eia?.version ?? '—';
 
-  // Build (+) sits left, draw (−) right, 0 in the centre. Domain expands to hold
-  // whichever of the two points is largest so both dots stay on the bar.
+  // Conventional number line: draw (−) left, build (+) right, 0 in the centre.
+  // Domain expands to hold whichever of the two points is largest so both dots
+  // stay on the bar.
   const domain = Math.max(4, Math.abs(forecast ?? 0), Math.abs(consensus ?? 0)) * 1.25;
-  const pos = (v: number) => Math.min(96, Math.max(4, 50 - (v / domain) * 50));
+  const pos = (v: number) => Math.min(96, Math.max(4, 50 + (v / domain) * 50));
 
   // The interpretive line: do we and consensus agree on direction, and by how much.
   let interp: { k: string; v: string } | null = null;
@@ -82,8 +83,8 @@ export default function OverviewPage() {
         {forecast != null && (
           <div className="mt-[24px]">
             <div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.09em] text-text-muted mb-[12px]">
-              <span>build</span>
               <span>draw</span>
+              <span>build</span>
             </div>
             <div className="relative h-[2px] bg-border-strong rounded-full mx-[8px]">
               {/* zero */}
