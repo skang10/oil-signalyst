@@ -48,6 +48,26 @@ def get_eia_release_date(reference_date: date) -> date:
     return release_day
 
 
+def get_next_eia_release_date(reference_date: date) -> date:
+    """The upcoming weekly EIA petroleum-status release (Wednesday, shifted to
+    Thursday when the Wednesday is a federal holiday) on or after
+    `reference_date` — i.e. the print the current forecast is for. Same calendar
+    as `get_eia_release_date`; walks forward a few weeks so a holiday week never
+    lands before the reference."""
+    monday = reference_date - timedelta(days=reference_date.weekday())
+    for _ in range(4):
+        wednesday = monday + timedelta(days=2)
+        release_day = (
+            wednesday + timedelta(days=1)
+            if not _US_CAL.is_working_day(wednesday)
+            else wednesday
+        )
+        if release_day >= reference_date:
+            return release_day
+        monday += timedelta(weeks=1)
+    return release_day
+
+
 class EIASource(BaseSource):
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=4, max=60))
     def fetch(self, cfg: dict, start: str, end: str) -> pd.Series:

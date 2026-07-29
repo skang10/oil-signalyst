@@ -35,6 +35,9 @@ export interface DailyReport {
     interval_80_high: number | null;
     consensus_mb: number;
     surprise_mb: number;
+    /** The upcoming EIA weekly release this forecast is for (ISO date, Wed →
+     *  Thu on a federal holiday), from the pipeline's own release calendar. */
+    next_eia_release: string;
     /** Only crude is forecast. There is no model and no labels for the other
      *  three products, so they are permanently null - the one place in this
      *  report where a number genuinely cannot be computed. */

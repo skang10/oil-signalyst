@@ -1,8 +1,9 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pandas as pd
 
 from core.data.registry import DataRegistry
+from core.data.sources.eia import get_next_eia_release_date
 from core.logging import get_logger
 from core.models.regime import dominant_regime
 from core.models.trainer import load_features
@@ -125,6 +126,12 @@ def nest_daily_report(raw: dict, role: str) -> dict:
             ),
             "consensus_mb": eia_forecast.get("market_consensus", 0.0),
             "surprise_mb": eia_forecast.get("surprise", 0.0),
+            # The upcoming EIA weekly petroleum-status release this forecast is
+            # for (Wednesday, shifted to Thursday on a federal holiday), from the
+            # same release calendar the ingestion pipeline uses.
+            "next_eia_release": get_next_eia_release_date(
+                date.fromisoformat(raw["date"][:10])
+            ).isoformat(),
             # Only crude is forecast. There is no gasoline/distillate/Cushing
             # model and no labels for them, so unlike every other field here
             # these genuinely cannot be computed - null, and the UI says so,

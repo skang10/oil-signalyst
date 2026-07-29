@@ -6,9 +6,19 @@ import { useModelStatus } from '@/hooks/useModelStatus';
 import { useRole } from '@/context/RoleContext';
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 function shortDate(d: string): string {
   const [, m, day] = d.split('-');
   return `${MON[Number(m) - 1] ?? '?'} ${Number(day)}`;
+}
+
+/** "Wed Jul 30" from an ISO date-only string, built from local components so the
+ *  weekday never shifts across the UTC-midnight boundary. */
+function fmtReleaseDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return '—';
+  const dt = new Date(y, m - 1, d);
+  return `${WD[dt.getDay()]} ${MON[m - 1]} ${d}`;
 }
 
 /**
@@ -42,27 +52,6 @@ export default function OverviewPage() {
   const domain = Math.max(4, Math.abs(forecast ?? 0), Math.abs(consensus ?? 0)) * 1.25;
   const pos = (v: number) => Math.min(96, Math.max(4, 50 + (v / domain) * 50));
 
-  // The interpretive line: do we and consensus agree on direction, and by how much.
-  let interp: { k: string; v: string } | null = null;
-  if (forecast != null && consensus != null) {
-    const sameSign = forecast < 0 === consensus < 0;
-    if (sameSign) {
-      const dir = forecast < 0 ? 'draw' : 'build';
-      const diff = Math.abs(forecast - consensus);
-      const bigger = Math.abs(forecast) > Math.abs(consensus);
-      const word = forecast < 0 ? (bigger ? 'deeper' : 'shallower') : bigger ? 'bigger' : 'smaller';
-      interp =
-        diff < 0.05
-          ? { k: `both call a ${dir}`, v: 'in line with consensus' }
-          : { k: `both call a ${dir}`, v: `we see it ${diff.toFixed(1)} ${word}` };
-    } else {
-      interp = {
-        k: 'we disagree on direction',
-        v: `we ${forecast < 0 ? 'draw' : 'build'}, cons ${consensus < 0 ? 'draw' : 'build'}`,
-      };
-    }
-  }
-
   const prints = (lp?.series ?? []).slice(-5);
 
   return (
@@ -70,11 +59,14 @@ export default function OverviewPage() {
       {/* 1 · this week's forecast — the number, and where it lands between build
           and draw against the market. The build↔draw axis is the signature. */}
       <Card className="mb-[14px] p-[20px_22px]">
-        <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-muted">
-          next EIA release · from the daily pipeline
-        </div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.11em] text-text-muted">next EIA release</div>
+        {report?.eia.next_eia_release && (
+          <div className="font-mono text-[13px] text-text-primary mt-[3px]">
+            {fmtReleaseDate(report.eia.next_eia_release)} · 10:30 ET
+          </div>
+        )}
 
-        <div className="font-mono text-[46px] font-semibold tracking-[-0.03em] leading-none tabular-nums text-text-primary mt-[9px]">
+        <div className="font-mono text-[46px] font-semibold tracking-[-0.03em] leading-none tabular-nums text-text-primary mt-[12px]">
           {forecast == null ? '—' : `${forecast > 0 ? '+' : ''}${forecast.toFixed(1)}`}
           <span className="text-[17px] font-normal text-text-muted ml-[5px]">Mb</span>
         </div>
@@ -126,20 +118,11 @@ export default function OverviewPage() {
                 </span>
               )}
             </div>
-            {interp && (
-              <div className="text-[12px] text-text-muted mt-[7px]">
-                {interp.k} · {interp.v}
-              </div>
-            )}
           </div>
         )}
 
-        <div className="mt-[18px] pt-[12px] border-t border-border font-mono text-[11px] text-text-muted flex flex-wrap items-center gap-x-[9px] gap-y-1">
-          <span>
-            from <span className="text-accent-text">eia · {version}</span> · production
-          </span>
-          <span className="text-border-strong">·</span>
-          <span>no challenger in shadow — deploys go straight to production</span>
+        <div className="mt-[18px] pt-[12px] border-t border-border font-mono text-[11px] text-text-muted">
+          from <span className="text-accent-text">eia · {version}</span>
         </div>
       </Card>
 
