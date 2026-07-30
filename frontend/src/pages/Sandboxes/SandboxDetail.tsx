@@ -76,17 +76,28 @@ export default function SandboxDetail({
             </div>
           )}
         </div>
-        <Decision sandbox={s} onToast={onToast} />
-        <div className="flex gap-2 flex-wrap mt-3">
-          <HeadBtn primary onClick={onCompare}>
-            Compare with production
-          </HeadBtn>
-          <HeadBtn onClick={onFork}>Fork this</HeadBtn>
-          {s.life === 'shadow' && <HeadBtn onClick={() => onToast(`stopped shadow for ${s.id}`)}>Stop shadow</HeadBtn>}
-          {(s.life === 'idle' || s.life === 'ready') && (
-            <HeadBtn onClick={() => onToast(`archived ${s.id}`)}>Archive</HeadBtn>
+        <div className="flex gap-2 flex-wrap items-center mt-[15px]">
+          {s.life === 'ready' && (
+            <ActBtn tone="green" onClick={() => onToast(`${s.id} promoted to production · pointer moved`)}>
+              Promote to production
+            </ActBtn>
           )}
+          {s.life === 'shadow' && <ActBtn disabled>Promote to production</ActBtn>}
+          {s.life === 'idle' && (
+            <ActBtn tone="blue" onClick={() => onToast(`${s.id} promoted to shadow · takes the exclusive slot · 8-week clock starts`)}>
+              Promote to shadow
+            </ActBtn>
+          )}
+          <ActBtn tone="outline" onClick={onCompare}>
+            Compare with production
+          </ActBtn>
+          <ActBtn onClick={onFork}>Fork this</ActBtn>
+          {s.life === 'shadow' && <ActBtn onClick={() => onToast(`stopped shadow for ${s.id}`)}>Stop shadow</ActBtn>}
+          {(s.life === 'idle' || s.life === 'ready') && <ActBtn onClick={() => onToast(`archived ${s.id}`)}>Archive</ActBtn>}
         </div>
+        {decisionNote(s) && (
+          <p className="mt-[11px] font-mono text-[11px] text-text-secondary leading-[1.5] max-w-[74ch]">{decisionNote(s)}</p>
+        )}
       </div>
 
       {/* Data + Training */}
@@ -216,88 +227,56 @@ export default function SandboxDetail({
   );
 }
 
-function Decision({ sandbox: s, onToast }: { sandbox: WorkbenchSandbox; onToast: (m: string) => void }) {
-  let node: React.ReactNode = null;
-  if (s.life === 'production') {
-    node = (
-      <span className="font-mono text-[11px] text-text-secondary leading-[1.5]">
-        This is the live pointer. The weekly rolling refresh keeps it current in place — a new config only goes live when
-        you promote a challenger.
-      </span>
-    );
-  } else if (s.life === 'ready') {
-    node = (
-      <>
-        <DBtn go tone="success" onClick={() => onToast(`${s.id} promoted to production · pointer moved`)}>
-          Promote to production
-        </DBtn>
-        <span className="font-mono text-[11px] text-text-secondary">passed 8 shadow weeks · beats prod {skillPct(s.mae, s.baseline)}</span>
-      </>
-    );
-  } else if (s.life === 'shadow') {
-    const left = 8 - (s.shadowWeek ?? 0);
-    node = (
-      <>
-        <DBtn disabled>Promote to production</DBtn>
-        <span className="font-mono text-[11px] text-text-secondary">🔒 unlocks after {left} more shadow week{left === 1 ? '' : 's'}</span>
-      </>
-    );
-  } else if (s.life === 'idle') {
-    node = (
-      <>
-        <DBtn go onClick={() => onToast(`${s.id} promoted to shadow · takes the exclusive slot · 8-week clock starts`)}>
-          Promote to shadow
-        </DBtn>
-        <span className="font-mono text-[11px] text-text-secondary">takes the one validation slot · replaces the current challenger</span>
-      </>
-    );
-  } else {
-    return null;
+/** The one-line note under the action row, per lifecycle. */
+function decisionNote(s: WorkbenchSandbox): string | null {
+  switch (s.life) {
+    case 'production':
+      return 'This is the live pointer. The weekly rolling refresh keeps it current in place — a new config only goes live when you promote a challenger.';
+    case 'ready':
+      return `passed 8 shadow weeks · beats prod ${skillPct(s.mae, s.baseline)}`;
+    case 'shadow': {
+      const left = 8 - (s.shadowWeek ?? 0);
+      return `🔒 promotion unlocks after ${left} more shadow week${left === 1 ? '' : 's'}`;
+    }
+    case 'idle':
+      return 'promoting takes the one validation slot · replaces the current challenger';
+    default:
+      return null;
   }
-  return <div className="flex items-center gap-3 flex-wrap mt-[15px]">{node}</div>;
 }
 
-function DBtn({
+/** One button style for the whole header row so promote / compare / fork sit
+ *  level. Only the primary decision is filled; compare is an accent outline and
+ *  the rest are neutral outlines. */
+function ActBtn({
   children,
-  go,
-  tone = 'accent',
+  tone = 'ghost',
   disabled,
   onClick,
 }: {
   children: React.ReactNode;
-  go?: boolean;
-  tone?: 'accent' | 'success';
+  tone?: 'green' | 'blue' | 'outline' | 'ghost';
   disabled?: boolean;
   onClick?: () => void;
 }) {
-  const base = 'font-semibold text-[13px] rounded-[8px] px-[18px] py-[9px] ';
+  const base = 'font-mono text-[12px] font-semibold rounded-[7px] px-[14px] py-[7px] border ';
   if (disabled) {
-    return <button disabled className={base + 'bg-surface-1 text-text-muted border border-border cursor-not-allowed'}>{children}</button>;
+    return <button disabled className={base + 'bg-surface-1 text-text-muted border-border cursor-not-allowed'}>{children}</button>;
   }
-  if (go && tone === 'success') {
+  if (tone === 'green') {
     return (
-      <button onClick={onClick} className={base + 'text-white cursor-pointer'} style={{ background: 'var(--text-success)' }}>
+      <button onClick={onClick} className={base + 'text-white border-transparent cursor-pointer'} style={{ background: 'var(--text-success)' }}>
         {children}
       </button>
     );
   }
-  return <button onClick={onClick} className={base + 'bg-accent-fill text-on-accent cursor-pointer'}>{children}</button>;
-}
-
-function HeadBtn({ children, primary, onClick }: { children: React.ReactNode; primary?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        'font-mono text-[11px] rounded-[6px] px-[12px] py-[6px] border cursor-pointer ' +
-        (primary
-          ? 'bg-accent-fill text-on-accent border-accent-fill font-semibold'
-          : 'bg-transparent text-text-secondary border-border-strong hover:bg-surface-1')
-      }
-    >
-      {children}
-    </button>
-  );
+  const cls =
+    tone === 'blue'
+      ? 'bg-accent-fill text-on-accent border-accent-fill'
+      : tone === 'outline'
+        ? 'bg-transparent text-accent-text border-accent-border hover:bg-accent-bg'
+        : 'bg-transparent text-text-secondary border-border-strong hover:bg-surface-1';
+  return <button onClick={onClick} className={base + cls + ' cursor-pointer'}>{children}</button>;
 }
 
 function H3({ children }: { children: React.ReactNode }) {
