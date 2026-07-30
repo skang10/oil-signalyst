@@ -4,6 +4,7 @@ import json
 import yfinance as yf
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from core.config import settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -52,6 +53,15 @@ async def price_ticker(ws: WebSocket) -> None:
     "spread": brent-wti|null}. brent/spread are null when the Brent quote is
     briefly unavailable; the frontend falls back to WTI-only in that case."""
     await ws.accept()
+    if not settings.price_ticker_enabled:
+        # Disabled (typically local dev): hold the socket open but never poll
+        # yfinance, so the frontend keeps its daily-report price fallback and the
+        # thread pool is never touched. Close cleanly if the client goes away.
+        try:
+            await ws.receive_text()
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        return
     try:
         while True:
             # yfinance is blocking network I/O - run it in a thread so one

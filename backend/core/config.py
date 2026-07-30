@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     env: str = "local"
     log_level: str = "INFO"
     scheduler_enabled: bool = True
+    # The /ws/price WebSocket polls yfinance every 30s. yfinance can hang (e.g.
+    # a delisted ticker), and each hung poll holds a shared thread-pool worker;
+    # enough of them starve the pool and block every to_thread endpoint. Turn it
+    # off in local dev (the Topbar falls back to the daily report's price).
+    price_ticker_enabled: bool = True
     pipeline_cron_hour: int = 22
     pipeline_cron_minute: int = 0
     # Local single-user dev defaults - override both via .env for anything
