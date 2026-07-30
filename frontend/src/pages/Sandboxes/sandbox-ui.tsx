@@ -4,20 +4,19 @@ import type { SandboxLife, WorkbenchSandbox } from '@/lib/sandboxModel';
 
 export type PillTone = 'prod' | 'shadow' | 'ready' | 'idle' | 'run' | 'arch';
 
-export function lifePill(s: WorkbenchSandbox): { label: string; tone: PillTone } {
+/** Only production and shadow carry a tag. Shadow turns green once it clears its
+ *  8th week (the 'ready' state). idle / training / archived get no pill — the
+ *  group header + the metric column already say what they are. */
+export function lifePill(s: WorkbenchSandbox): { label: string; tone: PillTone } | null {
   switch (s.life) {
     case 'production':
       return { label: 'production', tone: 'prod' };
     case 'shadow':
-      return { label: s.shadowWeek ? `shadow · ${s.shadowWeek} / 8` : 'in shadow', tone: 'shadow' };
+      return { label: s.shadowWeek ? `shadow · ${s.shadowWeek} / 8` : 'shadow', tone: 'shadow' };
     case 'ready':
-      return { label: `shadow done · ${s.shadowWeek ?? 8} / 8`, tone: 'ready' };
-    case 'training':
-      return { label: s.trainingPct != null ? `training · ${s.trainingPct}%` : 'training', tone: 'run' };
-    case 'archived':
-      return { label: s.retiredAt ? 'retired' : 'archived', tone: 'arch' };
+      return { label: `shadow · ${s.shadowWeek ?? 8} / 8`, tone: 'ready' };
     default:
-      return { label: 'done', tone: 'idle' };
+      return null;
   }
 }
 

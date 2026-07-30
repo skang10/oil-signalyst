@@ -130,7 +130,7 @@ export default function SandboxesPage() {
         </div>
       )}
 
-      <GroupLabel>running the forecast · refits itself every week</GroupLabel>
+      <GroupLabel>running the forecast</GroupLabel>
       {running.length ? (
         <div className="flex flex-col gap-[10px]">{running.map(card)}</div>
       ) : (
@@ -219,7 +219,7 @@ function SandboxCard({
       <div className="flex-1 min-w-[230px]">
         <div className="font-mono text-[13px] font-semibold flex items-center gap-2 flex-wrap">
           {s.id} · {s.version || <NA short />}
-          <Pill tone={pill.tone}>{pill.label}</Pill>
+          {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
         </div>
         {meta.length > 0 && (
           <div className="font-mono text-[11px] text-text-muted mt-[4px]">

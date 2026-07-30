@@ -51,7 +51,7 @@ export default function SandboxDetail({
         </button>
         <h2 className="font-mono text-[16px] font-semibold flex items-center gap-[9px] flex-wrap">
           {s.id} · {s.version || <NA short />}
-          <Pill tone={pill.tone}>{pill.label}</Pill>
+          {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
         </h2>
         <div className="font-mono text-[11.5px] text-[#A7B0C4] mt-[7px] leading-[1.6]">
           {s.forkParent ? (
