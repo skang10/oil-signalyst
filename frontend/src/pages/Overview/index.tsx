@@ -163,8 +163,8 @@ function ReleasesChart({
   const n = prints.length;
   const maxAbs = Math.max(1, ...prints.flatMap((p) => [Math.abs(p.forecast), Math.abs(p.realized)]));
   const domain = maxAbs * 1.15;
-  const MAXBAR = 68;
-  const BASE = 100;
+  const MAXBAR = 54;
+  const BASE = 86;
   const GROUP = 122;
   const BARW = 22;
   const vbW = 84 + (n - 1) * GROUP + 48;
@@ -195,7 +195,19 @@ function ReleasesChart({
         </span>
         <span>above the line = build · below = draw</span>
       </div>
-      <svg viewBox={`0 0 ${vbW} 215`} width="100%" role="img" aria-label="Forecast versus actual, last releases">
+      <svg
+        viewBox={`0 0 ${vbW} 186`}
+        width="100%"
+        style={{ maxWidth: vbW, display: 'block' }}
+        role="img"
+        aria-label="Forecast versus actual, last releases"
+      >
+        {/* miss backdrops first, so the zero line and bars stay visible on top */}
+        {prints.map((p, i) =>
+          p.hit ? null : (
+            <rect key={`miss-${p.date}`} x={center(i) - 33} y={12} width={66} height={150} rx={5} fill="var(--bg-danger)" />
+          )
+        )}
         <line x1={30} y1={BASE} x2={vbW - 24} y2={BASE} stroke="var(--text-primary)" strokeWidth={1.2} />
         <text x={24} y={BASE + 4} fontSize={10} fill="var(--text-muted)" textAnchor="end">
           0
@@ -209,7 +221,6 @@ function ReleasesChart({
           const lblY = (v: number, bh: number) => (v >= 0 ? BASE - bh - 7 : BASE + bh + 13);
           return (
             <g key={p.date}>
-              {miss && <rect x={c - 33} y={20} width={66} height={150} rx={5} fill="var(--bg-danger)" />}
               {/* forecast — outline */}
               <rect
                 x={c - 24}
@@ -231,7 +242,7 @@ function ReleasesChart({
                 {p.realized > 0 ? '+' : ''}
                 {p.realized.toFixed(1)}
               </text>
-              <text x={c} y={192} fontSize={11} fill={miss ? 'var(--text-danger)' : 'var(--text-secondary)'} textAnchor="middle">
+              <text x={c} y={176} fontSize={11} fill={miss ? 'var(--text-danger)' : 'var(--text-secondary)'} textAnchor="middle">
                 {shortDate(p.date)}
                 {miss ? ' · miss' : ''}
               </text>
