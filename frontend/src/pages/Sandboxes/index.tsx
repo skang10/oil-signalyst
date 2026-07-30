@@ -73,7 +73,8 @@ export default function SandboxesPage() {
   const running = sandboxes
     .filter((s) => s.life === 'production' || s.life === 'shadow')
     .sort((a, b) => (a.life === 'production' ? -1 : 1));
-  const idle = sandboxes.filter((s) => s.life === 'idle' || s.life === 'training');
+  const training = sandboxes.filter((s) => s.life === 'training');
+  const idle = sandboxes.filter((s) => s.life === 'idle');
   const archived = sandboxes.filter((s) => s.life === 'archived');
 
   function toggle(id: string) {
@@ -135,6 +136,13 @@ export default function SandboxesPage() {
         <div className="flex flex-col gap-[10px]">{running.map(card)}</div>
       ) : (
         <div className="text-[12px] text-text-muted">No production model deployed.</div>
+      )}
+
+      {training.length > 0 && (
+        <>
+          <GroupLabel>training now</GroupLabel>
+          <div className="flex flex-col gap-[10px]">{training.map(card)}</div>
+        </>
       )}
 
       <GroupLabel>idle</GroupLabel>
