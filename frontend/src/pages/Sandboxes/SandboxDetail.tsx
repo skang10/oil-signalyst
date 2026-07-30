@@ -103,14 +103,11 @@ export default function SandboxDetail({
       {/* Data + Training */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
         <Card>
-          <H3>Data · pinned</H3>
+          <H3>Data</H3>
           <KV k="Vintage range" v={s.data.vintageRange} />
           <KV k="Backtest folds" v={s.data.folds} />
           {s.data.gap && <KV k="Gap" v={s.data.gap} danger />}
           <KV k="Revisions" v={s.data.revisions} />
-          <p className="font-mono text-[10.5px] text-text-muted mt-[9px] leading-[1.5]">
-            reads a frozen slice of the vintage store — later revisions cannot reach it
-          </p>
         </Card>
         <Card>
           <H3>Training</H3>
@@ -118,11 +115,6 @@ export default function SandboxDetail({
           <KV k="Train window" v={s.training.trainWindow} />
           <KV k="Scheme" v={s.training.scheme} />
           <KV k="Config" v={s.training.configHash} mono />
-          {s.training.lastRun && (
-            <p className="font-mono text-[10.5px] text-text-muted mt-[9px] leading-[1.5]">
-              last run {s.training.lastRun} · reproducible from this sandbox alone
-            </p>
-          )}
         </Card>
       </div>
 
@@ -163,7 +155,7 @@ export default function SandboxDetail({
 
       {/* Results */}
       <Card className="mt-[14px]">
-        <H3>Results · walk-forward</H3>
+        <H3>Results</H3>
         {s.results.length === 0 || s.results[0].evidence === 'running' ? (
           <p className="font-mono text-[12px] text-text-muted">
             {s.life === 'training' ? 'still training — no scores yet.' : <NA />}
