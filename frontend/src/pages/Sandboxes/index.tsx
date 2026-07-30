@@ -99,10 +99,7 @@ export default function SandboxesPage() {
   }
 
   return (
-    <WorkbenchPage
-      title="Training sandboxes"
-      lead="A training sandbox pins its own data range, feature set and config. Nothing is shared — that is what makes two of them comparable."
-    >
+    <WorkbenchPage title="Training sandboxes">
       {/* action row */}
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <Btn onClick={() => setView('new')} icon={<IconPlus size={14} stroke={2} />}>New training sandbox</Btn>
