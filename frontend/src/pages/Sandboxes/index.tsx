@@ -185,11 +185,14 @@ function SandboxCard({
 }) {
   const pill = lifePill(s);
   const decide = s.life === 'ready';
-  const specs = [
-    s.specFolds != null ? `${s.specFolds} folds` : null,
+  // Overview shows just "N features | model family" — folds and the ensemble/
+  // window detail (e12-w150) live on the detail page.
+  const specText = [
     s.specFeatures != null ? `${s.specFeatures} features` : null,
-    s.model,
-  ].filter(Boolean) as string[];
+    s.model ? s.model.split(' · ')[0] : null,
+  ]
+    .filter(Boolean)
+    .join('  |  ');
   // Lineage + status only — the "what changed" explanation lives on the detail page.
   const meta: React.ReactNode[] = [];
   if (s.forkParent) meta.push(<>forked from <b className="text-text-secondary">{s.forkParent}</b></>);
@@ -228,13 +231,7 @@ function SandboxCard({
             ))}
           </div>
         )}
-        {specs.length > 0 && (
-          <div className="flex gap-[14px] flex-wrap mt-[7px] font-mono text-[11px] text-text-muted">
-            {specs.map((sp, i) => (
-              <span key={i}>{sp}</span>
-            ))}
-          </div>
-        )}
+        {specText && <div className="mt-[7px] font-mono text-[11px] text-text-muted">{specText}</div>}
       </div>
       <div className="text-right min-w-[100px] ml-auto">
         {s.life === 'training' ? (
