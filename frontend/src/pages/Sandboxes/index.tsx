@@ -34,7 +34,15 @@ export default function SandboxesPage() {
   if (view === 'new') {
     return (
       <WorkbenchPage title="Training sandboxes">
-        <NewSandbox live={live} onBack={() => setView('list')} />
+        <NewSandbox
+          parents={sandboxes}
+          onBack={() => setView('list')}
+          onCreated={(id, ran) => {
+            fireToast(`${id} created${ran ? ' · training now' : ' · saved as draft'}`);
+            setView('list');
+          }}
+        />
+        {toast && <Toast>{toast}</Toast>}
         <WorkbenchFooter />
       </WorkbenchPage>
     );
