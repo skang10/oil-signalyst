@@ -2,17 +2,14 @@ import Card from '@/components/shared/Card';
 import NA from '@/components/workbench/NA';
 import { fmt } from '@/lib/workbench';
 import type { WorkbenchSandbox } from '@/lib/sandboxModel';
-import { Pill, lifePill, skillPct, dirPct } from './sandbox-ui';
+import { Pill, lifePill, lifeAccent, skillPct, dirPct } from './sandbox-ui';
 
-const headGrad: Record<string, string> = {
-  production: 'linear-gradient(90deg,#1B2540,#161D2E 55%)',
-  shadow: 'linear-gradient(90deg,#2A2312,#161D2E 55%)',
-  ready: 'linear-gradient(90deg,#12261B,#161D2E 55%)',
-};
-const headBorder: Record<string, string> = {
-  production: '#6C8CEA',
-  shadow: '#E0A83E',
-  ready: '#5BC98B',
+// Light tint for the decision strip, keyed to lifecycle.
+const decisionTint: Record<string, string> = {
+  ready: 'bg-success-bg border-success-border',
+  shadow: 'bg-warning-bg border-warning-border',
+  idle: 'bg-accent-bg border-accent-border',
+  production: 'bg-surface-1 border-border',
 };
 
 export default function SandboxDetail({
@@ -39,40 +36,36 @@ export default function SandboxDetail({
   return (
     <>
       {/* header */}
-      <div
-        className="rounded-[12px] p-[19px_22px] mb-4 text-[#EDEFF4]"
-        style={{
-          background: headGrad[s.life] ?? '#161D2E',
-          borderLeft: `5px solid ${headBorder[s.life] ?? '#7A8398'}`,
-        }}
-      >
-        <button onClick={onBack} className="font-mono text-[11px] text-[#8792AB] hover:text-[#EDEFF4] mb-[10px]">
-          ← all training sandboxes
+      <div className="bg-surface-2 border border-border rounded-[12px] p-[20px_22px] mb-4" style={lifeAccent(s.life)}>
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-[6px] font-mono text-[12px] text-text-secondary border border-border-strong rounded-[7px] px-[11px] py-[5px] mb-[13px] hover:bg-surface-1 hover:text-text-primary"
+        >
+          <span className="text-[15px] leading-none">←</span> all training sandboxes
         </button>
-        <h2 className="font-mono text-[16px] font-semibold flex items-center gap-[9px] flex-wrap">
+        <h2 className="font-mono text-[16px] font-semibold flex items-center gap-[9px] flex-wrap text-text-primary">
           {s.id} · {s.version || <NA short />}
           {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
         </h2>
-        <div className="font-mono text-[11.5px] text-[#A7B0C4] mt-[7px] leading-[1.6]">
+        <div className="font-mono text-[11.5px] text-text-secondary mt-[7px] leading-[1.6]">
           {s.forkParent ? (
             <>
               forked from{' '}
-              <button className="text-[#8FA8F0] underline underline-offset-2" onClick={() => onOpen(s.forkParent!)}>
+              <button className="text-accent-text underline underline-offset-2" onClick={() => onOpen(s.forkParent!)}>
                 {s.forkParent}
               </button>
               {s.forkParentLife ? ` (${s.forkParentLife})` : ''}
-              {s.createdOn ? ` on ${s.createdOn}` : ''} · one change: <b className="text-[#C6CCDA]">{s.change}</b>
             </>
           ) : (
             <>{s.change}</>
           )}
           {kids.length > 0 && (
-            <div className="mt-[5px] text-[#8792AB]">
+            <div className="mt-[5px] text-text-muted">
               forked into{' '}
               {kids.map((k, i) => (
                 <span key={k.id}>
                   {i > 0 && ' · '}
-                  <button className="text-[#8FA8F0] underline underline-offset-2" onClick={() => onOpen(k.id)}>
+                  <button className="text-accent-text underline underline-offset-2" onClick={() => onOpen(k.id)}>
                     {k.id}
                   </button>
                 </span>
@@ -224,7 +217,7 @@ function Decision({ sandbox: s, onToast }: { sandbox: WorkbenchSandbox; onToast:
   let node: React.ReactNode = null;
   if (s.life === 'production') {
     node = (
-      <span className="font-mono text-[11px] text-[#A7B0C4] leading-[1.5]">
+      <span className="font-mono text-[11px] text-text-secondary leading-[1.5]">
         This is the live pointer. The weekly rolling refresh keeps it current in place — a new config only goes live when
         you promote a challenger.
       </span>
@@ -232,10 +225,10 @@ function Decision({ sandbox: s, onToast }: { sandbox: WorkbenchSandbox; onToast:
   } else if (s.life === 'ready') {
     node = (
       <>
-        <DBtn go onClick={() => onToast(`${s.id} promoted to production · pointer moved`)}>
+        <DBtn go tone="success" onClick={() => onToast(`${s.id} promoted to production · pointer moved`)}>
           Promote to production
         </DBtn>
-        <span className="font-mono text-[11px] text-[#A7B0C4]">passed 8 shadow weeks · beats prod {skillPct(s.mae, s.baseline)}</span>
+        <span className="font-mono text-[11px] text-text-secondary">passed 8 shadow weeks · beats prod {skillPct(s.mae, s.baseline)}</span>
       </>
     );
   } else if (s.life === 'shadow') {
@@ -243,7 +236,7 @@ function Decision({ sandbox: s, onToast }: { sandbox: WorkbenchSandbox; onToast:
     node = (
       <>
         <DBtn disabled>Promote to production</DBtn>
-        <span className="font-mono text-[11px] text-[#A7B0C4]">🔒 unlocks after {left} more shadow week{left === 1 ? '' : 's'}</span>
+        <span className="font-mono text-[11px] text-text-secondary">🔒 unlocks after {left} more shadow week{left === 1 ? '' : 's'}</span>
       </>
     );
   } else if (s.life === 'idle') {
@@ -252,32 +245,49 @@ function Decision({ sandbox: s, onToast }: { sandbox: WorkbenchSandbox; onToast:
         <DBtn go onClick={() => onToast(`${s.id} promoted to shadow · takes the exclusive slot · 8-week clock starts`)}>
           Promote to shadow
         </DBtn>
-        <span className="font-mono text-[11px] text-[#A7B0C4]">takes the one validation slot · replaces the current challenger</span>
+        <span className="font-mono text-[11px] text-text-secondary">takes the one validation slot · replaces the current challenger</span>
       </>
     );
   } else {
     return null;
   }
-  return <div className="flex items-center gap-3 flex-wrap mt-[14px] p-[12px_14px] bg-[#20293F] border border-[#333E5C] rounded-[9px]">{node}</div>;
-}
-
-function DBtn({ children, go, disabled, onClick }: { children: React.ReactNode; go?: boolean; disabled?: boolean; onClick?: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
+    <div
       className={
-        'font-semibold text-[13px] rounded-[8px] px-[18px] py-[9px] ' +
-        (disabled
-          ? 'bg-[#333E5C] text-[#8792AB] cursor-not-allowed'
-          : go
-            ? 'bg-[#5BC98B] text-[#0C2A19] cursor-pointer'
-            : 'bg-[#8FA8F0] text-[#161D2E] cursor-pointer')
+        'flex items-center gap-3 flex-wrap mt-[14px] p-[12px_14px] rounded-[9px] border ' +
+        (decisionTint[s.life] ?? 'bg-surface-1 border-border')
       }
     >
-      {children}
-    </button>
+      {node}
+    </div>
   );
+}
+
+function DBtn({
+  children,
+  go,
+  tone = 'accent',
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  go?: boolean;
+  tone?: 'accent' | 'success';
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  const base = 'font-semibold text-[13px] rounded-[8px] px-[18px] py-[9px] ';
+  if (disabled) {
+    return <button disabled className={base + 'bg-surface-1 text-text-muted border border-border cursor-not-allowed'}>{children}</button>;
+  }
+  if (go && tone === 'success') {
+    return (
+      <button onClick={onClick} className={base + 'text-white cursor-pointer'} style={{ background: 'var(--text-success)' }}>
+        {children}
+      </button>
+    );
+  }
+  return <button onClick={onClick} className={base + 'bg-accent-fill text-on-accent cursor-pointer'}>{children}</button>;
 }
 
 function HeadBtn({ children, primary, onClick }: { children: React.ReactNode; primary?: boolean; onClick?: () => void }) {
@@ -287,8 +297,8 @@ function HeadBtn({ children, primary, onClick }: { children: React.ReactNode; pr
       className={
         'font-mono text-[11px] rounded-[6px] px-[12px] py-[6px] border cursor-pointer ' +
         (primary
-          ? 'bg-[#8FA8F0] text-[#161D2E] border-[#8FA8F0] font-semibold'
-          : 'bg-[#232C43] text-[#C6CCDA] border-[#333E5C] hover:border-[#5C6784]')
+          ? 'bg-accent-fill text-on-accent border-accent-fill font-semibold'
+          : 'bg-transparent text-text-secondary border-border-strong hover:bg-surface-1')
       }
     >
       {children}
