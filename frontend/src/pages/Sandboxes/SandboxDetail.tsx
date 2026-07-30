@@ -118,6 +118,15 @@ export default function SandboxDetail({
         </Card>
       </div>
 
+      {/* Which weeks are used for what */}
+      <Card className="mt-[14px]">
+        <H3>Which weeks are used for what</H3>
+        <WeeksUsage s={s} />
+        <p className="font-mono text-[10.5px] text-text-muted mt-[2px] leading-[1.5]">
+          the predicting model is fit on the same window as training — it sees every backtest week
+        </p>
+      </Card>
+
       {/* Features */}
       <Card className="mt-[14px]">
         <H3>
@@ -286,4 +295,86 @@ function KV({ k, v, mono, danger }: { k: string; v: React.ReactNode; mono?: bool
 
 function cnMono(added?: boolean): string {
   return 'font-mono text-[12px]' + (added ? ' text-pro font-medium' : '');
+}
+
+function rangeWeeks(vr: string | null): number {
+  const m = vr?.match(/(\d{4})-W(\d+).*?(\d{4})-W(\d+)/)?.map(Number);
+  if (!m) return 350;
+  return Math.max(60, (m[3] - m[1]) * 52 + (m[4] - m[2]));
+}
+function endWeek(vr: string | null): [number, number] {
+  const m = vr?.match(/(\d{4})-W(\d+)\s*(?:→|->)\s*(\d{4})-W(\d+)/);
+  return m ? [Number(m[3]), Number(m[4])] : [2026, 30];
+}
+
+/** The Stockcast "which weeks are used for what" strip: one row each for the
+ *  full vintage store, the rolling train window (green), the backtest folds
+ *  (blue, a nested tail), and the live prediction (amber) at today. */
+function WeeksUsage({ s }: { s: WorkbenchSandbox }) {
+  const tot = rangeWeeks(s.data.vintageRange);
+  const twRaw = s.training.trainWindow ?? '150';
+  const tw = twRaw.startsWith('expanding') ? tot : Math.min(Number(twRaw.match(/(\d+)/)?.[1] ?? 150), tot);
+  const scW = Math.min((s.specFolds ?? 34) * 4, tot);
+  const [bY, bW] = endWeek(s.data.vintageRange);
+  const X0 = 150;
+  const X1 = 590;
+  const W = X1 - X0;
+  const px = (w: number) => (W * w) / tot;
+  const trainX = X1 - px(tw);
+  const scX = X1 - px(scW);
+  const wl = (n: number) => {
+    let w = bW - n;
+    let y = bY;
+    while (w < 1) {
+      w += 52;
+      y -= 1;
+    }
+    return `${y}-W${String(w).padStart(2, '0')}`;
+  };
+  const shadowWk = s.shadowWeek ?? 0;
+  const swW = Math.max(px(shadowWk), 16);
+  const predBox = X1 + 22;
+  const SUB = 'var(--text-secondary)';
+  const GREEN = 'var(--text-success)';
+  const BLUE = 'var(--text-accent)';
+  const AMBER = 'var(--text-warning)';
+  return (
+    <svg viewBox="0 0 700 172" width="100%" role="img" aria-label="Which weeks each step uses" className="mt-[2px]">
+      <line x1={X1} y1={38} x2={X1} y2={128} stroke="var(--text-primary)" strokeWidth={1} />
+      <text x={X1} y={30} fontSize={9.5} fill="var(--text-primary)" textAnchor="end">
+        today · W{bW}
+      </text>
+      {/* data */}
+      <text x={X0 - 12} y={53} fontSize={10.5} fill={SUB} textAnchor="end">data</text>
+      <rect x={X0} y={44} width={W} height={15} rx={3.5} fill="var(--surface-1)" />
+      <text x={X0 + 7} y={54.5} fontSize={9} fill="var(--text-muted)">{tot} weekly vintages</text>
+      {/* train */}
+      <text x={X0 - 12} y={83} fontSize={10.5} fill={SUB} textAnchor="end">trains on</text>
+      <text x={trainX} y={72} fontSize={9} fill={GREEN} textAnchor="start">{wl(tw - 1)}</text>
+      <rect x={trainX} y={76} width={X1 - trainX} height={15} rx={3.5} fill={GREEN} />
+      <text x={(trainX + X1) / 2} y={86.5} fontSize={9} fill="#fff" textAnchor="middle">last {tw} weeks</text>
+      {/* backtest */}
+      <text x={X0 - 12} y={111} fontSize={10.5} fill={SUB} textAnchor="end">scored</text>
+      <text x={scX} y={100} fontSize={9} fill={BLUE} textAnchor="start">{wl(scW - 1)}</text>
+      <rect x={scX} y={104} width={X1 - scX} height={15} rx={3.5} fill={BLUE} />
+      <text x={(scX + X1) / 2} y={114.5} fontSize={9} fill="#fff" textAnchor="middle">{Math.round(scW / 4)} folds · every 4 wk</text>
+      {/* predict */}
+      <text x={X0 - 12} y={139} fontSize={10.5} fill={SUB} textAnchor="end">predicts</text>
+      {shadowWk > 0 && (
+        <>
+          <rect x={X1 - swW} y={131} width={swW} height={8} rx={2} fill={AMBER} />
+          <text x={X1 - swW - 4} y={138} fontSize={8.5} fill={AMBER} textAnchor="end">{shadowWk} wk live</text>
+        </>
+      )}
+      <path d={`M${X1} 135 L${predBox - 4} 135`} stroke={AMBER} strokeWidth={1.4} strokeDasharray="3 3" />
+      <path d={`M${predBox - 9} 131 L${predBox - 3} 135 L${predBox - 9} 139`} fill="none" stroke={AMBER} strokeWidth={1.4} />
+      <rect x={predBox} y={128} width={34} height={15} rx={3.5} fill={AMBER} />
+      <text x={predBox + 17} y={138.5} fontSize={8.5} fill="#fff" textAnchor="middle">W{bW + 1}</text>
+      <text x={X0} y={164} fontSize={9} fill="var(--text-muted)">
+        {shadowWk > 0
+          ? `the ${shadowWk} weeks before today were predicted live but not published — the only selection-free evidence`
+          : `backtest grades one week in four · the model trains on the last ${tw} weeks`}
+      </text>
+    </svg>
+  );
 }

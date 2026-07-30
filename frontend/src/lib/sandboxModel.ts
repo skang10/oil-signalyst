@@ -125,7 +125,7 @@ export const MOCK_SANDBOXES: WorkbenchSandbox[] = [
     trainingPct: null,
     baseline: BASELINE,
     data: {
-      vintageRange: '2023-W18 → 2026-W30',
+      vintageRange: '2019-W40 → 2026-W30',
       folds: '34 · every 4 wk',
       gap: null,
       revisions: 'as-published only',
@@ -167,7 +167,7 @@ export const MOCK_SANDBOXES: WorkbenchSandbox[] = [
     trainingPct: null,
     baseline: BASELINE,
     data: {
-      vintageRange: '2023-W18 → 2026-W30',
+      vintageRange: '2019-W40 → 2026-W30',
       folds: '34 · every 4 wk',
       gap: 'W28 never captured',
       revisions: 'as-published only',
@@ -215,7 +215,7 @@ export const MOCK_SANDBOXES: WorkbenchSandbox[] = [
     trainingPct: null,
     baseline: BASELINE,
     data: {
-      vintageRange: '2023-W18 → 2026-W30',
+      vintageRange: '2019-W40 → 2026-W30',
       folds: '34 · every 4 wk',
       gap: null,
       revisions: 'as-published only',
@@ -256,7 +256,7 @@ export const MOCK_SANDBOXES: WorkbenchSandbox[] = [
     retiredAt: null,
     trainingPct: null,
     baseline: BASELINE,
-    data: { vintageRange: '2023-W18 → 2026-W30', folds: '34 · every 4 wk', gap: null, revisions: 'as-published only' },
+    data: { vintageRange: '2019-W40 → 2026-W30', folds: '34 · every 4 wk', gap: null, revisions: 'as-published only' },
     training: {
       model: 'LightGBM · lr 0.05 · 63 leaves',
       trainWindow: '150 weeks, rolling',
@@ -292,7 +292,7 @@ export const MOCK_SANDBOXES: WorkbenchSandbox[] = [
     retiredAt: null,
     trainingPct: 62,
     baseline: BASELINE,
-    data: { vintageRange: '2023-W18 → 2026-W30', folds: '34 · every 4 wk', gap: null, revisions: 'as-published only' },
+    data: { vintageRange: '2019-W40 → 2026-W30', folds: '34 · every 4 wk', gap: null, revisions: 'as-published only' },
     training: {
       model: 'TabPFN v2 · ensemble 12',
       trainWindow: '260 weeks, rolling',
