@@ -9,7 +9,7 @@ export function lifePill(s: WorkbenchSandbox): { label: string; tone: PillTone }
     case 'production':
       return { label: 'production', tone: 'prod' };
     case 'shadow':
-      return { label: s.shadowWeek ? `shadow · wk ${s.shadowWeek} / 8` : 'in shadow', tone: 'shadow' };
+      return { label: s.shadowWeek ? `shadow · ${s.shadowWeek} / 8` : 'in shadow', tone: 'shadow' };
     case 'ready':
       return { label: `shadow done · ${s.shadowWeek ?? 8} / 8`, tone: 'ready' };
     case 'training':

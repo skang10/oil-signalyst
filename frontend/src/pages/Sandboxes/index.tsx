@@ -190,6 +190,11 @@ function SandboxCard({
     s.specFeatures != null ? `${s.specFeatures} features` : null,
     s.model,
   ].filter(Boolean) as string[];
+  // Lineage + status only — the "what changed" explanation lives on the detail page.
+  const meta: React.ReactNode[] = [];
+  if (s.forkParent) meta.push(<>forked from <b className="text-text-secondary">{s.forkParent}</b></>);
+  if (s.liveSince && s.life === 'production') meta.push(<>live since {s.liveSince}</>);
+  if (s.retiredAt) meta.push(<>{s.retiredAt}</>);
 
   return (
     <button
@@ -213,17 +218,16 @@ function SandboxCard({
           {s.id} · {s.version || <NA short />}
           <Pill tone={pill.tone}>{pill.label}</Pill>
         </div>
-        <div className="font-mono text-[11px] text-text-muted mt-[4px]">
-          {s.forkParent ? (
-            <>
-              forked from <b className="text-text-secondary">{s.forkParent}</b> · {s.change}
-            </>
-          ) : (
-            <>{s.change}</>
-          )}
-          {s.liveSince && s.life === 'production' && <> · live since {s.liveSince}</>}
-          {s.retiredAt && <> · {s.retiredAt}</>}
-        </div>
+        {meta.length > 0 && (
+          <div className="font-mono text-[11px] text-text-muted mt-[4px]">
+            {meta.map((m, i) => (
+              <span key={i}>
+                {i > 0 && ' · '}
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
         {specs.length > 0 && (
           <div className="flex gap-[14px] flex-wrap mt-[7px] font-mono text-[11px] text-text-muted">
             {specs.map((sp, i) => (
