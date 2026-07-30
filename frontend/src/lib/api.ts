@@ -1,3 +1,6 @@
+import { isMockMode } from './mockMode';
+import { mockResponseFor } from './mockData';
+
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 // Access token lives in memory only (not localStorage) - an XSS payload
@@ -40,6 +43,13 @@ async function tryRefresh(): Promise<boolean> {
 }
 
 async function request<T>(path: string, init?: RequestInit, _retried = false): Promise<T> {
+  // Dev mock mode: serve fixtures for workbench GETs, never for mutations.
+  const method = init?.method ?? 'GET';
+  if (method === 'GET' && isMockMode()) {
+    const mock = mockResponseFor(path);
+    if (mock !== undefined) return structuredClone(mock) as T;
+  }
+
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 

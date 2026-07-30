@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import MockDataBanner from './MockDataBanner';
 
 /**
  * Shared shell for every workbench tab. Deliberately matches the rest of the
@@ -19,6 +20,7 @@ export default function WorkbenchPage({
 }) {
   return (
     <div className="p-[18px] overflow-y-auto flex-1">
+      <MockDataBanner />
       <div className="mb-3">
         <div className="text-[15px] font-medium">{title}</div>
         {lead && (
