@@ -2,7 +2,7 @@ import Card from '@/components/shared/Card';
 import NA from '@/components/workbench/NA';
 import { fmt } from '@/lib/workbench';
 import type { WorkbenchSandbox } from '@/lib/sandboxModel';
-import { Pill, lifePill, skillPct, dirPct } from './sandbox-ui';
+import { Pill, lifePill, dirPct } from './sandbox-ui';
 
 // A single thin left-accent colour for the header card, keyed to lifecycle —
 // no ring halo, so the green (etc.) lives only on the pill + primary button.
@@ -232,8 +232,6 @@ function decisionNote(s: WorkbenchSandbox): string | null {
   switch (s.life) {
     case 'production':
       return 'This is the live pointer. The weekly rolling refresh keeps it current in place — a new config only goes live when you promote a challenger.';
-    case 'ready':
-      return `passed 8 shadow weeks · beats prod ${skillPct(s.mae, s.baseline)}`;
     case 'shadow': {
       const left = 8 - (s.shadowWeek ?? 0);
       return `🔒 promotion unlocks after ${left} more shadow week${left === 1 ? '' : 's'}`;
