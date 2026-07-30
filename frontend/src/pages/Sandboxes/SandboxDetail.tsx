@@ -2,14 +2,14 @@ import Card from '@/components/shared/Card';
 import NA from '@/components/workbench/NA';
 import { fmt } from '@/lib/workbench';
 import type { WorkbenchSandbox } from '@/lib/sandboxModel';
-import { Pill, lifePill, lifeAccent, skillPct, dirPct } from './sandbox-ui';
+import { Pill, lifePill, skillPct, dirPct } from './sandbox-ui';
 
-// Light tint for the decision strip, keyed to lifecycle.
-const decisionTint: Record<string, string> = {
-  ready: 'bg-success-bg border-success-border',
-  shadow: 'bg-warning-bg border-warning-border',
-  idle: 'bg-accent-bg border-accent-border',
-  production: 'bg-surface-1 border-border',
+// A single thin left-accent colour for the header card, keyed to lifecycle —
+// no ring halo, so the green (etc.) lives only on the pill + primary button.
+const accentColor: Record<string, string> = {
+  production: 'var(--fill-accent)',
+  shadow: 'var(--border-warning)',
+  ready: 'var(--border-success)',
 };
 
 export default function SandboxDetail({
@@ -36,7 +36,10 @@ export default function SandboxDetail({
   return (
     <>
       {/* header */}
-      <div className="bg-surface-2 border border-border rounded-[12px] p-[20px_22px] mb-4" style={lifeAccent(s.life)}>
+      <div
+        className="bg-surface-2 border border-border rounded-[12px] p-[20px_22px] mb-4"
+        style={{ borderLeft: `4px solid ${accentColor[s.life] ?? 'var(--border-strong)'}` }}
+      >
         <button
           onClick={onBack}
           className="inline-flex items-center gap-[6px] font-mono text-[12px] text-text-secondary border border-border-strong rounded-[7px] px-[11px] py-[5px] mb-[13px] hover:bg-surface-1 hover:text-text-primary"
@@ -251,16 +254,7 @@ function Decision({ sandbox: s, onToast }: { sandbox: WorkbenchSandbox; onToast:
   } else {
     return null;
   }
-  return (
-    <div
-      className={
-        'flex items-center gap-3 flex-wrap mt-[14px] p-[12px_14px] rounded-[9px] border ' +
-        (decisionTint[s.life] ?? 'bg-surface-1 border-border')
-      }
-    >
-      {node}
-    </div>
-  );
+  return <div className="flex items-center gap-3 flex-wrap mt-[15px]">{node}</div>;
 }
 
 function DBtn({
