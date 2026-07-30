@@ -16,6 +16,7 @@ Re-runnable: it wipes the three tables first, so running twice is idempotent.
 
 import asyncio
 import statistics
+import sys
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -231,12 +232,20 @@ async def main() -> None:
             "This script only mocks a local dev database."
         )
 
+    clear_only = "--clear" in sys.argv
+
     async with AsyncSessionLocal() as session:
         # child rows first (predictions FK -> model_versions)
         await session.execute(delete(Prediction))
         await session.execute(delete(ModelVersion))
         await session.execute(delete(TrainJob))
         await session.flush()
+
+        if clear_only:
+            await session.commit()
+            print("Cleared: model_versions, predictions, train_jobs (no reseed). "
+                  "The backend now serves the real — currently empty — state.")
+            return
 
         active = ModelVersion(
             model_type="eia", version=ACTIVE_VERSION,
