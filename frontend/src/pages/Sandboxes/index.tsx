@@ -3,132 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { IconPlus, IconGitFork, IconChecklist, IconSettings2 } from '@tabler/icons-react';
 import WorkbenchPage, { WorkbenchFooter } from '@/components/workbench/WorkbenchPage';
 import NA from '@/components/workbench/NA';
+import { useSandboxes } from '@/hooks/useSandboxes';
 import { useExperiments } from '@/hooks/useExperiments';
-import { useReport } from '@/hooks/useReport';
-import { useRole } from '@/context/RoleContext';
-import { fmt, fmtSkill, skillOf, runLifecycle, fmtStarted, fmtDuration, type Lifecycle, type LifecyclePill } from '@/lib/workbench';
+import { fmt } from '@/lib/workbench';
 import { cn } from '@/lib/utils';
-import type { TrainJobSummary } from '@/types/api';
-import RunDetail from './RunDetail';
-import LiveDetail from './LiveDetail';
+import type { WorkbenchSandbox } from '@/lib/sandboxModel';
+import { Pill, lifePill, lifeAccent, skillPct, dirPct } from './sandbox-ui';
+import SandboxDetail from './SandboxDetail';
 import NewSandbox from './NewSandbox';
 import Automation from './Automation';
 
-type View = 'list' | { kind: 'live' } | { kind: 'run'; summary: TrainJobSummary } | 'new' | 'automation';
-
-/** A Stockcast-style sandbox card row. Backend has no fork lineage / vintage /
- *  shadow, so those render as NA; name, status, trigger, and (for production)
- *  the live MAE are real. */
-function SandboxRow({
-  name,
-  status,
-  pill,
-  life,
-  forkLine,
-  specs,
-  mae,
-  maeSub,
-  maeColor,
-  selectMode,
-  selected,
-  onToggle,
-  onOpen,
-}: {
-  name: string;
-  status: string;
-  pill: LifecyclePill;
-  life: Lifecycle;
-  forkLine: React.ReactNode;
-  specs: React.ReactNode[];
-  mae: React.ReactNode;
-  maeSub: React.ReactNode;
-  maeColor?: string;
-  selectMode: boolean;
-  selected: boolean;
-  onToggle: () => void;
-  onOpen: () => void;
-}) {
-  const accent =
-    life === 'production'
-      ? { borderLeftColor: 'var(--fill-accent)', boxShadow: '0 0 0 3px var(--bg-accent)' }
-      : life === 'shadow'
-        ? { borderLeftColor: 'var(--border-warning)', boxShadow: '0 0 0 3px var(--bg-warning)' }
-        : life === 'archived' || life === 'retired'
-          ? { borderLeftColor: 'var(--border-strong)', background: 'var(--surface-1)' }
-          : { borderLeftColor: 'var(--border-strong)' };
-  return (
-    <button
-      type="button"
-      onClick={selectMode ? onToggle : onOpen}
-      className="w-full text-left bg-surface-2 border border-border rounded-[10px] p-[14px_17px] flex items-center gap-4 flex-wrap cursor-pointer hover:border-border-strong"
-      style={{ borderLeftWidth: 4, ...accent }}
-    >
-      {selectMode && (
-        <span
-          className={cn(
-            'w-[19px] h-[19px] rounded-[5px] border shrink-0 grid place-items-center text-[11px]',
-            selected ? 'bg-accent-fill border-accent-fill text-on-accent' : 'bg-surface-2 border-border-strong'
-          )}
-        >
-          {selected ? '✓' : ''}
-        </span>
-      )}
-      <div className="flex-1 min-w-[230px]">
-        <div className="font-mono text-[13px] font-semibold flex items-center gap-2 flex-wrap">
-          {name}
-          <span className={cn('font-mono text-[10px] uppercase rounded-[4px] px-[6px] py-[1px]', pillTone(pill.kind))}>
-            {status}
-          </span>
-        </div>
-        <div className="font-mono text-[11px] text-text-muted mt-[4px]">{forkLine}</div>
-        <div className="flex gap-[14px] flex-wrap mt-[7px] font-mono text-[11px] text-text-muted">
-          {specs.map((s, i) => (
-            <span key={i}>{s}</span>
-          ))}
-        </div>
-      </div>
-      <div className="text-right min-w-[96px] ml-auto">
-        <div className="font-mono text-[18px] font-semibold tracking-[-0.02em]" style={maeColor ? { color: maeColor } : undefined}>
-          {mae}
-        </div>
-        <div className="font-mono text-[11px] text-text-muted">{maeSub}</div>
-      </div>
-      {!selectMode && <div className="font-mono text-[11px] text-accent-text">open →</div>}
-    </button>
-  );
-}
-
-function pillTone(kind: LifecyclePill['kind']): string {
-  const map: Record<string, string> = {
-    prod: 'bg-accent-bg text-accent-text',
-    shadow: 'bg-warning-bg text-warning',
-    ok: 'bg-success-bg text-success',
-    run: 'bg-surface-1 text-text-secondary border border-border',
-    ref: 'bg-pro-bg text-pro',
-    arch: 'bg-surface-1 text-text-muted border border-border',
-    bad: 'bg-danger-bg text-danger',
-  };
-  return map[kind] ?? map.run;
-}
-
-function GroupLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="font-mono text-[11px] uppercase tracking-[0.1em] text-text-muted mt-5 mb-[9px] first:mt-0">
-      {children}
-    </div>
-  );
-}
+type View = 'list' | { kind: 'detail'; id: string } | 'new' | 'automation';
 
 export default function SandboxesPage() {
   const navigate = useNavigate();
-  const { role } = useRole();
-  const { live, runs, gate, isLoading } = useExperiments();
-  const { data: report } = useReport(role);
+  const { sandboxes, isLoading } = useSandboxes();
+  const { live, gate } = useExperiments();
   const [view, setView] = useState<View>('list');
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // ---- detail / new / automation views ----
+  const [toast, setToast] = useState<string | null>(null);
+  function fireToast(msg: string) {
+    setToast(msg);
+    window.clearTimeout((fireToast as unknown as { _t?: number })._t);
+    (fireToast as unknown as { _t?: number })._t = window.setTimeout(() => setToast(null), 2400);
+  }
+
+  // ---- sub-views ----
   if (view === 'new') {
     return (
       <WorkbenchPage title="Training sandboxes">
@@ -145,32 +47,34 @@ export default function SandboxesPage() {
       </WorkbenchPage>
     );
   }
-  if (typeof view === 'object' && view.kind === 'live' && live) {
-    return (
-      <WorkbenchPage title="Training sandboxes">
-        <LiveDetail live={live} gate={gate} onBack={() => setView('list')} onCompare={() => navigate('/compare')} />
-        <WorkbenchFooter />
-      </WorkbenchPage>
-    );
-  }
-  if (typeof view === 'object' && view.kind === 'run') {
-    return (
-      <WorkbenchPage title="Training sandboxes">
-        <RunDetail summary={view.summary} gate={gate} onBack={() => setView('list')} onCompare={() => navigate('/compare')} />
-        <WorkbenchFooter />
-      </WorkbenchPage>
-    );
+  if (typeof view === 'object' && view.kind === 'detail') {
+    const sb = sandboxes.find((s) => s.id === view.id);
+    if (sb) {
+      return (
+        <WorkbenchPage title="Training sandboxes">
+          <SandboxDetail
+            sandbox={sb}
+            all={sandboxes}
+            onBack={() => setView('list')}
+            onOpen={(id) => setView({ kind: 'detail', id })}
+            onCompare={() => navigate('/compare')}
+            onFork={() => setView('new')}
+            onToast={fireToast}
+          />
+          {toast && <Toast>{toast}</Toast>}
+          <WorkbenchFooter />
+        </WorkbenchPage>
+      );
+    }
   }
 
   // ---- list ----
-  // The run that produced the live model is represented by the production card,
-  // so exclude live/partial from the other groups.
-  const idle = runs.filter(
-    (r) => (r.status === 'complete' && r.deploy_state === 'none') || r.status === 'running' || r.status === 'queued'
-  );
-  const archived = runs.filter(
-    (r) => r.deploy_state === 'superseded' || r.status === 'failed' || r.status === 'cancelled'
-  );
+  const waiting = sandboxes.filter((s) => s.life === 'ready');
+  const running = sandboxes
+    .filter((s) => s.life === 'production' || s.life === 'shadow')
+    .sort((a, b) => (a.life === 'production' ? -1 : 1));
+  const idle = sandboxes.filter((s) => s.life === 'idle' || s.life === 'training');
+  const archived = sandboxes.filter((s) => s.life === 'archived');
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -181,29 +85,15 @@ export default function SandboxesPage() {
     });
   }
 
-  function runRow(job: TrainJobSummary) {
-    const { life, pill } = runLifecycle(job);
+  function card(s: WorkbenchSandbox) {
     return (
-      <SandboxRow
-        key={job.job_id}
-        name={job.job_id}
-        status={pill.label}
-        pill={pill}
-        life={life}
-        forkLine={<>forked from <NA short /> · one change: <NA short /></>}
-        specs={[
-          <><NA short /> features</>,
-          job.model_types.join(', '),
-          job.triggered_by_name ?? job.trigger_source,
-          fmtStarted(job.started_at),
-          fmtDuration(job.duration_seconds),
-        ]}
-        mae={<NA short />}
-        maeSub={<>open to score</>}
+      <SandboxCard
+        key={s.id}
+        s={s}
         selectMode={selectMode}
-        selected={selected.has(job.job_id)}
-        onToggle={() => toggle(job.job_id)}
-        onOpen={() => setView({ kind: 'run', summary: job })}
+        selected={selected.has(s.id)}
+        onToggle={() => toggle(s.id)}
+        onOpen={() => setView({ kind: 'detail', id: s.id })}
       />
     );
   }
@@ -234,89 +124,157 @@ export default function SandboxesPage() {
 
       {isLoading && <div className="text-[12px] text-text-muted">Loading sandboxes…</div>}
 
-      {/* waiting on your decision — no shadow slot server-side */}
       <GroupLabel>waiting on your decision</GroupLabel>
-      <div className="rounded-[10px] border border-dashed border-border p-[13px_16px] text-[12px] text-text-secondary">
-        Nothing waiting. A shadow slot and the shadow→production decision aren’t tracked server-side — <NA />.
-      </div>
+      {waiting.length ? (
+        <div className="flex flex-col gap-[10px]">{waiting.map(card)}</div>
+      ) : (
+        <div className="rounded-[10px] border border-dashed border-border p-[13px_16px] text-[12px] text-text-secondary">
+          Nothing waiting. A challenger that clears its 8 shadow weeks shows up here — <NA />.
+        </div>
+      )}
 
-      {/* running the forecast */}
       <GroupLabel>running the forecast · refits itself every week</GroupLabel>
-      {live ? (
-        <SandboxRow
-          name={`eia · ${live.version}`}
-          status="production"
-          pill={{ label: 'production', kind: 'prod' }}
-          life="production"
-          forkLine={
-            live.previous ? (
-              <>displaced <span className="text-text-secondary">eia · {live.previous.version}</span></>
-            ) : (
-              <>first version deployed · lineage <NA short /></>
-            )
-          }
-          specs={[
-            <><NA short /> folds</>,
-            <><NA short /> features</>,
-            (live.metric_key ?? 'mae').toUpperCase(),
-            live.deployed_at ? `live since ${live.deployed_at.slice(0, 10)}` : '',
-          ]}
-          mae={fmt(live.metrics.primary, 2)}
-          maeSub={<>skill {fmtSkill(live.metrics.skill ?? skillOf(live.metrics.primary, live.metrics.baseline))}</>}
-          selectMode={selectMode}
-          selected={selected.has('live')}
-          onToggle={() => toggle('live')}
-          onOpen={() => setView({ kind: 'live' })}
-        />
+      {running.length ? (
+        <div className="flex flex-col gap-[10px]">{running.map(card)}</div>
       ) : (
         <div className="text-[12px] text-text-muted">No production model deployed.</div>
       )}
 
-      {/* idle */}
       <GroupLabel>idle</GroupLabel>
-      {idle.length === 0 ? (
-        <div className="text-[12px] text-text-muted">No idle runs.</div>
-      ) : (
-        <div className="flex flex-col gap-[10px]">{idle.map(runRow)}</div>
-      )}
+      {idle.length ? <div className="flex flex-col gap-[10px]">{idle.map(card)}</div> : <div className="text-[12px] text-text-muted">No idle runs.</div>}
 
-      {/* archived */}
       <GroupLabel>archived</GroupLabel>
-      {archived.length === 0 ? (
-        <div className="text-[12px] text-text-muted">No archived runs.</div>
+      {archived.length ? (
+        <div className="flex flex-col gap-[10px]">{archived.map(card)}</div>
       ) : (
-        <div className="flex flex-col gap-[10px]">{archived.map(runRow)}</div>
+        <div className="text-[12px] text-text-muted">No archived runs.</div>
       )}
 
-      {/* references */}
       <p className="font-mono text-[11px] text-text-muted mt-5 leading-[1.6]">
-        references — consensus{' '}
-        {report?.eia.consensus_mb != null ? `${report.eia.consensus_mb.toFixed(1)} mb` : <NA short />} and Δ=0
-        floor (train-mean) {fmt(live?.metrics.baseline, 2)} — sit outside the sandbox model and are pinned into
-        every comparison.
+        references — consensus and the Δ=0 floor (train-mean {fmt(live?.metrics.baseline ?? sandboxes[0]?.baseline, 2)}) sit
+        outside the sandbox model and are pinned into every comparison.
       </p>
 
-      {/* select bar */}
       {selectMode && (
         <div className="sticky bottom-3 mt-4 flex items-center justify-between gap-4 flex-wrap bg-surface-2 border border-border rounded-[11px] p-[12px_18px] shadow-sm">
           <span className="font-mono text-[13px] text-text-secondary">
             <b className="text-accent-text text-[15px]">{selected.size}</b> selected
           </span>
           <div className="flex gap-2">
-            <Btn
-              onClick={() => {
-                navigate('/compare', { state: { selected: [...selected] } });
-              }}
-            >
-              Compare selected
-            </Btn>
+            <Btn onClick={() => navigate('/compare', { state: { selected: [...selected] } })}>Compare selected</Btn>
             <Btn hold onClick={() => setSelected(new Set())}>Clear</Btn>
           </div>
         </div>
       )}
 
+      {toast && <Toast>{toast}</Toast>}
       <WorkbenchFooter />
     </WorkbenchPage>
+  );
+}
+
+function SandboxCard({
+  s,
+  selectMode,
+  selected,
+  onToggle,
+  onOpen,
+}: {
+  s: WorkbenchSandbox;
+  selectMode: boolean;
+  selected: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
+  const pill = lifePill(s);
+  const decide = s.life === 'ready';
+  const specs = [
+    s.specFolds != null ? `${s.specFolds} folds` : null,
+    s.specFeatures != null ? `${s.specFeatures} features` : null,
+    s.model,
+  ].filter(Boolean) as string[];
+
+  return (
+    <button
+      type="button"
+      onClick={selectMode ? onToggle : onOpen}
+      className="w-full text-left bg-surface-2 border border-border rounded-[10px] p-[14px_17px] flex items-center gap-4 flex-wrap cursor-pointer hover:border-border-strong"
+      style={lifeAccent(s.life)}
+    >
+      {selectMode && (
+        <span
+          className={cn(
+            'w-[19px] h-[19px] rounded-[5px] border shrink-0 grid place-items-center text-[11px]',
+            selected ? 'bg-accent-fill border-accent-fill text-on-accent' : 'bg-surface-2 border-border-strong'
+          )}
+        >
+          {selected ? '✓' : ''}
+        </span>
+      )}
+      <div className="flex-1 min-w-[230px]">
+        <div className="font-mono text-[13px] font-semibold flex items-center gap-2 flex-wrap">
+          {s.id} · {s.version || <NA short />}
+          <Pill tone={pill.tone}>{pill.label}</Pill>
+        </div>
+        <div className="font-mono text-[11px] text-text-muted mt-[4px]">
+          {s.forkParent ? (
+            <>
+              forked from <b className="text-text-secondary">{s.forkParent}</b> · {s.change}
+            </>
+          ) : (
+            <>{s.change}</>
+          )}
+          {s.liveSince && s.life === 'production' && <> · live since {s.liveSince}</>}
+          {s.retiredAt && <> · {s.retiredAt}</>}
+        </div>
+        {specs.length > 0 && (
+          <div className="flex gap-[14px] flex-wrap mt-[7px] font-mono text-[11px] text-text-muted">
+            {specs.map((sp, i) => (
+              <span key={i}>{sp}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="text-right min-w-[100px] ml-auto">
+        {s.life === 'training' ? (
+          <>
+            <div className="font-mono text-[18px] font-semibold text-text-muted">—</div>
+            <div className="font-mono text-[11px] text-text-muted">running · {s.trainingPct ?? 0}%</div>
+          </>
+        ) : (
+          <>
+            <div
+              className="font-mono text-[18px] font-semibold tracking-[-0.02em]"
+              style={s.life === 'ready' ? { color: 'var(--text-success)' } : undefined}
+            >
+              {fmt(s.mae, 2)}
+            </div>
+            <div className="font-mono text-[11px] text-text-muted">
+              {s.life === 'ready' && s.vsProd != null
+                ? `beats prod ${skillPct(s.mae, s.baseline)}`
+                : s.spread != null
+                  ? `±${s.spread.toFixed(1)} · dir ${dirPct(s.dirPct)}`
+                  : `skill ${skillPct(s.mae, s.baseline)}`}
+            </div>
+          </>
+        )}
+      </div>
+      {!selectMode && <div className="font-mono text-[11px] text-accent-text">{decide ? 'decide →' : 'open →'}</div>}
+    </button>
+  );
+}
+
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="font-mono text-[11px] uppercase tracking-[0.1em] text-text-muted mt-5 mb-[9px] first:mt-0">{children}</div>
+  );
+}
+
+function Toast({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed bottom-7 left-1/2 -translate-x-1/2 z-[90] bg-text-primary text-[#EDEFF4] font-mono text-[12px] px-[18px] py-[11px] rounded-[8px] shadow-lg">
+      {children}
+    </div>
   );
 }
 
