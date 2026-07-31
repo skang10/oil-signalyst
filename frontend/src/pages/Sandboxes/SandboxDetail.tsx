@@ -339,7 +339,14 @@ function WeeksUsage({ s }: { s: WorkbenchSandbox }) {
   const BLUE = 'var(--text-accent)';
   const AMBER = 'var(--text-warning)';
   return (
-    <svg viewBox="0 0 700 172" width="100%" role="img" aria-label="Which weeks each step uses" className="mt-[2px]">
+    <svg
+      viewBox="0 0 700 172"
+      width="100%"
+      style={{ maxWidth: 680, display: 'block' }}
+      role="img"
+      aria-label="Which weeks each step uses"
+      className="mt-[2px]"
+    >
       <line x1={X1} y1={38} x2={X1} y2={128} stroke="var(--text-primary)" strokeWidth={1} />
       <text x={X1} y={30} fontSize={9.5} fill="var(--text-primary)" textAnchor="end">
         today · W{bW}
